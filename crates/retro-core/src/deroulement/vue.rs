@@ -11,10 +11,15 @@ pub enum EtatTest {
     Pret,
     /// Un passage joue. `duel` (indice dans le plan) et `passage` (0 à 5) partent de 0,
     /// comme dans le journal.
-    EnEcoute { duel: u32, passage: u32 },
+    EnEcoute {
+        duel: u32,
+        passage: u32,
+    },
     /// Les 6 passages sont finis, la référence est remise, on attend A, Pareil ou B.
     AttenteReponse,
-    EnPause { raison: RaisonPause },
+    EnPause {
+        raison: RaisonPause,
+    },
     /// Fini, résultat rendu.
     Termine,
     /// Abandonné, sans résultat.
@@ -76,10 +81,7 @@ impl Deroulement {
         let courant = self.indice_courant();
         let total = self.plan.len();
         let duel = self.duel_courant();
-        let en_jeu = !matches!(
-            self.phase,
-            Phase::Pret | Phase::Termine | Phase::Abandonne
-        );
+        let en_jeu = !matches!(self.phase, Phase::Pret | Phase::Termine | Phase::Abandonne);
 
         let etat = match self.phase {
             Phase::Pret => EtatTest::Pret,

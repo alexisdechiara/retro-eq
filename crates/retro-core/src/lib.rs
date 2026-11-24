@@ -9,6 +9,7 @@
 
 pub mod confiance;
 pub mod depot;
+pub mod deroulement;
 pub mod egaliseur;
 pub mod formats;
 pub mod hasard;
@@ -22,6 +23,10 @@ pub mod zone;
 
 pub use confiance::{risque_hasard, Confiance};
 pub use depot::{Depot, ErreurDepot, EtatMoteurSauve, FichierIgnore, ProfilsListes};
+pub use deroulement::{
+    ContexteReprise, Deroulement, DuelFini, Effet, ErreurReprise, EtatTest, Evenement,
+    ParametresTest, VueTest,
+};
 pub use egaliseur::{courbe_10_bandes, FadersEtSupplementaires, BANDES_HZ, Q_BANDES};
 pub use hasard::{Hasard, HasardGraine, HasardReel};
 pub use journal::{Entree, Journal, LectureJournal, RaisonPause};

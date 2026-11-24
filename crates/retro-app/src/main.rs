@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(chemin) = argument(&arguments, "--capture") {
         let hauteur = argument(&arguments, "--hauteur")
             .and_then(|h| h.parse().ok())
-            .unwrap_or(900);
+            .unwrap_or(800);
         return capturer(&fenetre, chemin, hauteur);
     }
     fenetre::brancher(&fenetre);
@@ -64,7 +64,7 @@ fn capturer(
 ) -> Result<(), Box<dyn std::error::Error>> {
     fenetre
         .window()
-        .set_size(slint::PhysicalSize::new(1440, hauteur));
+        .set_size(slint::PhysicalSize::new(1280, hauteur));
     fenetre.show()?;
     let faible = fenetre.as_weak();
     slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {

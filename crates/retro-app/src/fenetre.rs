@@ -1,8 +1,7 @@
-//! La fenêtre n'a pas de bordure Windows : c'est à nous de la déplacer, la redimensionner,
-//! la réduire et l'agrandir quand l'interface le demande.
+//! La fenêtre n'a pas de bordure Windows : c'est à nous de la déplacer, la réduire
+//! et l'agrandir quand l'interface le demande. Elle n'a que deux tailles : 1280 × 800, ou agrandie.
 
 use crate::{Appli, FenetrePrincipale};
-use i_slint_backend_winit::winit::window::ResizeDirection;
 use i_slint_backend_winit::WinitWindowAccessor;
 use slint::ComponentHandle;
 
@@ -16,25 +15,6 @@ pub fn brancher(fenetre: &FenetrePrincipale) {
             // Windows prend la main sur le déplacement : c'est ce qui donne l'ancrage aux bords de l'écran.
             fenetre.window().with_winit_window(|w| {
                 let _ = w.drag_window();
-            });
-        }
-    });
-
-    let faible = fenetre.as_weak();
-    appli.on_redimensionner(move |bord| {
-        let direction = match bord {
-            0 => ResizeDirection::North,
-            1 => ResizeDirection::East,
-            2 => ResizeDirection::South,
-            3 => ResizeDirection::West,
-            4 => ResizeDirection::NorthWest,
-            5 => ResizeDirection::NorthEast,
-            6 => ResizeDirection::SouthEast,
-            _ => ResizeDirection::SouthWest,
-        };
-        if let Some(fenetre) = faible.upgrade() {
-            fenetre.window().with_winit_window(|w| {
-                let _ = w.drag_resize_window(direction);
             });
         }
     });
