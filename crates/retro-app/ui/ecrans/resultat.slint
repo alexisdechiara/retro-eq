@@ -1,8 +1,167 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { Appli, Ecran, Resultat } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Confiance, EcranCourbe, Separateur } from "../composants.slint";
+
+// Un bouton qui prend la largeur de son texte quand il est dans une rangée alignée à gauche.
+component BoutonT inherits Bouton {
+    min-width: self.texte.character-count * 9px + (self.prefixe != "" ? 26px : 0px) + (self.genre == GenreBouton.principal ? self.texte.character-count * 3px : 0px) + 52px;
+    preferred-width: self.min-width;
+}
+
+component LigneZoneResultat inherits VerticalLayout {
+    in property <string> nom;
+    in property <string> plage;
+    in property <float> gain;
+    in property <bool> change;
+    in property <int> confiance;
+    in property <string> detail;
+    spacing: 10px;
+    Separateur { }
+    HorizontalLayout {
+        spacing: 14px;
+        VerticalLayout {
+            spacing: 2px;
+            Text { text: nom; font-family: Theme.courant; font-weight: 700; font-size: 17px; color: Theme.texte; wrap: word-wrap; }
+            Chiffres { text: plage; font-size: 14px; color: Theme.discret; }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            min-width: 96px;
+            Chiffres {
+                text: change ? @tr("{} dB", (gain > 0 ? "+" : gain < 0 ? "−" : "") + abs(round(gain * 10) / 10)) : @tr("inchangé");
+                font-size: change ? 20px : 15px;
+                color: change ? Theme.texte : Theme.discret;
+                horizontal-alignment: right;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Confiance { niveau: confiance; width: 124px; }
+        }
+    }
+    if detail != "": Paragraphe { text: detail; font-size: 14px; }
+}
+
+component Legende inherits HorizontalLayout {
+    in property <string> texte;
+    in property <color> couleur;
+    in property <bool> tirets: false;
+    spacing: 8px;
+    horizontal-stretch: 0;
+    VerticalLayout {
+        alignment: center;
+        Rectangle { width: 26px; height: 3px; background: couleur; opacity: tirets ? 0.7 : 1; }
+    }
+    Text { text: texte; font-family: Theme.courant; font-size: 14px; color: Theme.discret; vertical-alignment: center; }
+}
 
 export component EcranResultat inherits VerticalLayout {
     alignment: start;
     spacing: 24px;
-    Titre { contenu: @tr("Ton égaliseur"); }
+
+    VerticalLayout {
+        spacing: 10px;
+        Titre { contenu: Resultat.disponible ? @tr("Ton résultat") : @tr("Résultat"); }
+        if Resultat.disponible: Paragraphe { font-size: 18px; text: Resultat.resume; }
+    }
+
+    if !Resultat.disponible: Carte {
+        remplissage: 30px;
+        TitreSection { contenu: @tr("Pas encore de résultat"); }
+        Paragraphe { text: @tr("Le résultat apparaît à la fin d’un test : la courbe avant et après, ce que tes oreilles ont choisi, zone par zone, et le degré de confiance."); }
+        HorizontalLayout {
+            alignment: start;
+            BoutonT { texte: @tr("Lancer un test"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.tester); } }
+        }
+    }
+
+    if Resultat.disponible: HorizontalLayout {
+        spacing: 24px;
+        // Colonne de gauche : la courbe puis le détail par zone.
+        VerticalLayout {
+            horizontal-stretch: 3;
+            spacing: 24px;
+            Carte {
+                HorizontalLayout {
+                    spacing: 14px;
+                    Text { text: Resultat.titre.to-uppercase(); font-family: Theme.titres; font-weight: 700; font-size: 30px; color: Theme.texte; wrap: word-wrap; vertical-alignment: center; }
+                    VerticalLayout { alignment: center; horizontal-stretch: 0; Confiance { niveau: Resultat.confiance; width: 124px; } }
+                }
+                EcranCourbe { courbe: Resultat.courbe-nouvelle; courbe-fond: Resultat.courbe-reference; min-height: 200px; }
+                HorizontalLayout {
+                    spacing: 24px;
+                    alignment: start;
+                    Legende { texte: @tr("Référence"); couleur: Theme.discret; tirets: true; }
+                    Legende { texte: @tr("Nouvelle version"); couleur: Theme.a; }
+                }
+                Paragraphe { text: @tr("Préampli automatique : {} dB", round(Resultat.preampli-db * 10) / 10); font-size: 14px; }
+            }
+            Carte {
+                TitreSection { contenu: @tr("Ce que tes oreilles ont choisi"); }
+                Paragraphe {
+                    font-size: 14px;
+                    text: @tr("Indice : avis partagés. Probable : une chance sur 4 au plus que ce soit le hasard. Sûr : moins de 6 % de hasard.");
+                }
+                if Resultat.zones.length == 0: Paragraphe { text: @tr("Aucune zone n’a encore été testée."); }
+                for z in Resultat.zones: LigneZoneResultat {
+                    nom: z.nom; plage: z.plage; gain: z.gain-db; change: z.change; confiance: z.confiance; detail: z.detail;
+                }
+                Separateur { }
+                if Resultat.controles != "": Paragraphe { text: Resultat.controles; font-size: 15px; }
+                if Resultat.verification != "": Paragraphe { text: Resultat.verification; font-size: 15px; }
+                if Resultat.applis.length > 0: VerticalLayout {
+                    spacing: 6px;
+                    Etiquette { contenu: @tr("Selon l’appli"); }
+                    for a in Resultat.applis: HorizontalLayout {
+                        spacing: 12px;
+                        Text { text: a.nom; width: 140px; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; vertical-alignment: center; }
+                        Paragraphe { text: @tr("{} duels · {}", a.duels, a.preference); font-size: 14px; vertical-alignment: center; horizontal-alignment: left; }
+                    }
+                }
+            }
+        }
+        // Colonne de droite : garder ce profil.
+        VerticalLayout {
+            horizontal-stretch: 2;
+            min-width: 300px;
+            alignment: start;
+            Carte {
+                TitreSection { contenu: @tr("Garder ce profil"); }
+                if !Resultat.active: BoutonT {
+                    texte: @tr("Activer ce profil");
+                    prefixe: "✓";
+                    genre: GenreBouton.principal;
+                    active => { Resultat.activer(); }
+                }
+                if Resultat.active: VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout { alignment: start; Pastille { texte: @tr("✓ Profil activé"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 15px; } }
+                    HorizontalLayout {
+                        alignment: start;
+                        BoutonT { texte: @tr("Revenir à la référence"); genre: GenreBouton.lien; active => { Resultat.revenir-reference(); } }
+                    }
+                }
+                Separateur { }
+                Etiquette { contenu: @tr("Exporter pour un autre logiciel"); }
+                GridLayout {
+                    spacing: 10px;
+                    Row {
+                        BoutonT { texte: "Peace"; active => { Resultat.exporter("peace"); } }
+                        BoutonT { texte: "Equalizer APO"; active => { Resultat.exporter("apo"); } }
+                    }
+                    Row {
+                        BoutonT { texte: "AutoEQ"; active => { Resultat.exporter("autoeq"); } }
+                        BoutonT { texte: "Wavelet"; active => { Resultat.exporter("wavelet"); } }
+                    }
+                }
+                Separateur { }
+                HorizontalLayout {
+                    alignment: start;
+                    BoutonT { texte: @tr("Nouveau test"); active => { Resultat.nouveau-test(); } }
+                }
+            }
+        }
+    }
 }

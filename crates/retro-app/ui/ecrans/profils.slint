@@ -1,8 +1,177 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { Appli, Ecran, Profils, LigneProfil } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Separateur } from "../composants.slint";
+
+// Un bouton qui prend la largeur de son texte quand il est dans une rangée alignée à gauche.
+component BoutonT inherits Bouton {
+    min-width: self.texte.character-count * 9px + (self.prefixe != "" ? 26px : 0px) + (self.genre == GenreBouton.principal ? self.texte.character-count * 3px : 0px) + 52px;
+    preferred-width: self.min-width;
+}
+
+// Une cassette : un profil. Cliquable et activable au clavier.
+component Cassette inherits Rectangle {
+    in property <LigneProfil> p;
+    in property <bool> choisie;
+    callback choisit();
+    min-height: 250px;
+    background: choisie ? Theme.selection : Theme.surface;
+    border-radius: 18px;
+    border-width: choisie ? 3px : 1.5px;
+    border-color: choisie ? Theme.ambre : Theme.trait;
+    accessible-role: button;
+    accessible-label: p.actif ? @tr("{}, profil actif", p.nom) : p.nom;
+    accessible-action-default => { root.choisit(); }
+    VerticalLayout {
+        padding: 14px;
+        spacing: 8px;
+        Rectangle {
+            background: Theme.texte;
+            border-radius: 8px;
+            clip: true;
+            VerticalLayout {
+                Rectangle { height: 22px; background: Theme.a; }
+                VerticalLayout {
+                    padding: 10px;
+                    padding-top: 6px;
+                    spacing: 6px;
+                    Text { text: p.nom.to-uppercase(); font-family: Theme.titres; font-weight: 700; font-size: 22px; color: Theme.fond; wrap: word-wrap; }
+                    Chiffres { text: @tr("{n} version" | "{n} versions" % p.versions) + " · " + p.date; font-size: 13px; color: Theme.fond; }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            if p.actif: Pastille { texte: @tr("✓ Actif"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 14px; }
+            if choisie: Pastille { texte: @tr("Ouvert"); couleur: Theme.doux; taille: 14px; }
+        }
+        Paragraphe { text: p.resume; font-size: 14px; }
+        Rectangle {
+            height: 54px;
+            border-radius: 8px;
+            background: Theme.ecran;
+            clip: true;
+            Rectangle { y: parent.height / 2; height: 1px; background: Theme.grille; }
+            Path { viewbox-width: 1000; viewbox-height: 240; commands: p.courbe; stroke: Theme.a; stroke-width: 2px; fill: transparent; }
+        }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.choisit(); } }
+    portee := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) { root.choisit(); return accept; }
+            return reject;
+        }
+    }
+    if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 18px; }
+}
+
+component Detail inherits Carte {
+    in property <LigneProfil> p;
+    HorizontalLayout {
+        spacing: 12px;
+        TitreSection { contenu: @tr("Versions de « {} »", p.nom); vertical-alignment: center; }
+        if p.actif: VerticalLayout { alignment: center; horizontal-stretch: 0; HorizontalLayout { alignment: end; Pastille { texte: @tr("✓ Actif"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 14px; } } }
+    }
+    Paragraphe { text: @tr("Rien n’est jamais supprimé : chaque test ajoute une version, et tu peux revenir à n’importe laquelle."); font-size: 15px; }
+    if Profils.versions.length == 0: Paragraphe { text: @tr("Ce profil n’a pas encore de version."); }
+    for v in Profils.versions: VerticalLayout {
+        spacing: 8px;
+        Separateur { }
+        HorizontalLayout {
+            spacing: 14px;
+            VerticalLayout {
+                spacing: 2px;
+                Text { text: @tr("Version {} · {}", v.numero, v.date); font-family: Theme.courant; font-weight: 700; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+                Paragraphe { text: v.origine; font-size: 14px; }
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    alignment: end;
+                    if v.active: Pastille { texte: @tr("✓ Actuelle"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 14px; }
+                    if !v.active: BoutonT { texte: @tr("Activer cette version"); active => { Profils.activer-version(Profils.choisi, v.numero); } }
+                }
+            }
+        }
+    }
+    Separateur { }
+    HorizontalLayout {
+        spacing: 10px;
+        alignment: start;
+        if !p.actif: BoutonT { texte: @tr("Activer"); genre: GenreBouton.principal; active => { Profils.activer(p.id); } }
+        BoutonT { texte: @tr("Tester ce profil"); active => { Profils.tester(p.id); } }
+        BoutonT { texte: @tr("Dupliquer"); active => { Profils.dupliquer(p.id); } }
+    }
+    Etiquette { contenu: @tr("Exporter"); }
+    HorizontalLayout {
+        spacing: 10px;
+        alignment: start;
+        BoutonT { texte: "Peace"; active => { Profils.exporter(p.id, "peace"); } }
+        BoutonT { texte: "Equalizer APO"; active => { Profils.exporter(p.id, "apo"); } }
+        BoutonT { texte: "AutoEQ"; active => { Profils.exporter(p.id, "autoeq"); } }
+        BoutonT { texte: "Wavelet"; active => { Profils.exporter(p.id, "wavelet"); } }
+    }
+}
 
 export component EcranProfils inherits VerticalLayout {
     alignment: start;
     spacing: 24px;
-    Titre { contenu: @tr("Mes profils"); }
+    property <int> colonnes: 3;
+    property <int> lignes: ceil(Profils.liste.length / colonnes);
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 10px;
+            Titre { contenu: @tr("Mes profils"); }
+            Paragraphe { font-size: 18px; text: @tr("Tes réglages rangés comme des cassettes. Choisis-en une pour voir ses versions ; rien n’est jamais supprimé."); }
+        }
+        VerticalLayout {
+            alignment: start;
+            horizontal-stretch: 0;
+            BoutonT { texte: @tr("Importer un fichier…"); prefixe: "⇧"; active => { Profils.importer(); } }
+        }
+    }
+
+    if Profils.liste.length == 0: Carte {
+        TitreSection { contenu: @tr("Aucun profil pour l’instant"); }
+        Paragraphe { text: @tr("Fais un test pour créer ton premier profil, importe un fichier, ou pars d’un preset ci-dessous."); }
+        HorizontalLayout {
+            alignment: start;
+            BoutonT { texte: @tr("Lancer un test"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.tester); } }
+        }
+    }
+
+    for r in lignes: HorizontalLayout {
+        spacing: 20px;
+        for c in colonnes: VerticalLayout {
+            horizontal-stretch: 1;
+            preferred-width: 100px;
+            min-width: 100px;
+            if r * colonnes + c < Profils.liste.length: Cassette {
+                p: Profils.liste[r * colonnes + c];
+                choisie: Profils.liste[r * colonnes + c].id == Profils.choisi;
+                choisit => { Profils.choisir(Profils.liste[r * colonnes + c].id); }
+            }
+        }
+    }
+
+    VerticalLayout {
+        for p in Profils.liste: VerticalLayout {
+            if p.id == Profils.choisi: Detail { p: p; }
+        }
+    }
+    if Profils.liste.length > 0 && Profils.choisi == "": Paragraphe { text: @tr("Choisis une cassette pour voir ses versions et ses actions."); }
+
+    Carte {
+        TitreSection { contenu: @tr("Nouveau profil depuis un preset"); }
+        Paragraphe { text: @tr("Un preset est un point de départ : il crée un profil à toi, que tu peux ensuite tester."); font-size: 15px; }
+        if Profils.presets.length == 0: Paragraphe { text: @tr("Aucun preset disponible."); }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            for nom in Profils.presets: BoutonT { texte: nom; active => { Profils.creer-depuis-preset(nom); } }
+        }
+    }
 }

@@ -1,8 +1,162 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { Appli, Ecran, Test, Egaliseur } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Interrupteur, EcranCourbe, Vumetre } from "../composants.slint";
+
+// Un bouton qui prend la largeur de son texte quand il est dans une rangée alignée à gauche.
+component BoutonT inherits Bouton {
+    min-width: self.texte.character-count * 9px + (self.prefixe != "" ? 26px : 0px) + (self.genre == GenreBouton.principal ? self.texte.character-count * 3px : 0px) + 52px;
+    preferred-width: self.min-width;
+}
 
 export component Accueil inherits VerticalLayout {
     alignment: start;
-    spacing: 24px;
-    Titre { contenu: @tr("Vue d’ensemble"); }
+    spacing: 28px;
+
+    VerticalLayout {
+        spacing: 10px;
+        Titre { contenu: @tr("Vue d’ensemble"); }
+        Paragraphe {
+            font-size: 18px;
+            text: Appli.etat-moteur == 0 ? @tr("Le moteur audio est introuvable : rien n’est égalisé pour l’instant.")
+                : Appli.egaliseur-actif ? @tr("Ton égaliseur est actif. Envie de l’affiner encore ?")
+                : @tr("Ton égaliseur est coupé : le son passe sans correction.");
+        }
+    }
+
+    // Erreur franche quand le moteur est absent.
+    if Appli.etat-moteur == 0: Rectangle {
+        background: Theme.fond-erreur;
+        border-radius: Theme.rayon-carte;
+        border-width: 1.5px;
+        border-color: Theme.erreur;
+        accessible-role: groupbox;
+        accessible-label: @tr("Moteur audio absent");
+        VerticalLayout {
+            padding: 24px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "!"; font-family: Theme.chiffres; font-weight: 700; font-size: 24px; color: Theme.erreur; vertical-alignment: center; horizontal-stretch: 0; }
+                TitreSection { contenu: @tr("Moteur audio absent"); vertical-alignment: center; }
+            }
+            Paragraphe { text: @tr("Retro EQ n’a pas trouvé le moteur qui applique l’égaliseur au son. Le diagnostic dit ce qui manque et comment le réparer."); color: Theme.texte; }
+            HorizontalLayout {
+                alignment: start;
+                BoutonT { texte: @tr("Ouvrir le diagnostic"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.diagnostic); } }
+            }
+        }
+    }
+
+    // Le test : l'entrée principale.
+    Carte {
+        choisie: Appli.test-en-cours;
+        remplissage: 30px;
+        Etiquette { contenu: Appli.test-en-cours ? @tr("Un test t’attend") : @tr("Prêt pour un test ?"); }
+        Titre {
+            font-size: 40px;
+            contenu: Appli.test-en-cours ? @tr("Reprendre le test") : @tr("Trouve ta courbe");
+        }
+        Paragraphe {
+            text: Appli.test-en-cours
+                ? @tr("Duel {} sur {}. Ta référence est gardée : tu reprends là où tu t’es arrêté.", Test.duel, Test.total)
+                : @tr("Des duels A contre B pendant que tu joues ou écoutes : le son bascule tout seul, tu réponds, et Retro EQ garde ce que tes oreilles préfèrent.");
+        }
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            if Appli.test-en-cours: BoutonT { texte: @tr("Reprendre le test"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.duels); } }
+            BoutonT {
+                texte: @tr("Lancer un test");
+                prefixe: Appli.test-en-cours ? "" : "▶";
+                genre: Appli.test-en-cours ? GenreBouton.secondaire : GenreBouton.principal;
+                active => { Appli.aller(Ecran.tester); }
+            }
+            BoutonT { texte: @tr("Mes profils"); active => { Appli.aller(Ecran.profils); } }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 24px;
+        // Le profil actif et sa courbe.
+        Carte {
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 12px;
+                Etiquette { contenu: @tr("Profil actif"); vertical-alignment: center; }
+                Rectangle { }
+                Pastille {
+                    texte: Appli.egaliseur-actif ? @tr("✓ Actif") : @tr("Coupé");
+                    couleur: Appli.egaliseur-actif ? Theme.fond-ok : Theme.doux;
+                    encre: Appli.egaliseur-actif ? Theme.ok : Theme.texte;
+                    taille: 15px;
+                }
+            }
+            if Appli.profil-actif != "": Titre { font-size: 34px; contenu: Appli.profil-actif; }
+            if Appli.profil-actif == "": Paragraphe { text: @tr("Aucun profil actif pour l’instant. Fais un test ou choisis un profil."); }
+            EcranCourbe { courbe: Egaliseur.courbe; min-height: 120px; }
+            Interrupteur {
+                texte: @tr("Égaliseur actif");
+                aide: @tr("Coupe-le pour réentendre ton son d’origine.");
+                coche: Appli.egaliseur-actif;
+                bascule(v) => { Appli.basculer-egaliseur(); }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                BoutonT { texte: @tr("Changer de profil"); active => { Appli.aller(Ecran.profils); } }
+                BoutonT { texte: @tr("Égaliseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.egaliseur); } }
+            }
+        }
+        // Le niveau en direct.
+        Carte {
+            horizontal-stretch: 1;
+            Etiquette { contenu: @tr("Niveau en direct"); }
+            Vumetre { niveau-db: Appli.niveau-db; }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+                Chiffres { text: round(Appli.niveau-db * 10) / 10; font-size: 28px; vertical-alignment: center; }
+                Chiffres { text: "dB"; color: Theme.discret; vertical-alignment: bottom; }
+            }
+            HorizontalLayout {
+                alignment: center;
+                BoutonT { texte: @tr("Visualiseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.visualiseur); } }
+            }
+        }
+    }
+
+    // État du moteur et de la sortie.
+    Carte {
+        remplissage: 20px;
+        HorizontalLayout {
+            spacing: 16px;
+            VerticalLayout {
+                spacing: 4px;
+                Etiquette { contenu: @tr("Sortie audio"); }
+                Text {
+                    text: Appli.sortie-audio != "" ? Appli.sortie-audio : @tr("Aucune sortie détectée");
+                    font-family: Theme.courant;
+                    font-weight: 600;
+                    font-size: 18px;
+                    color: Theme.texte;
+                    wrap: word-wrap;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                HorizontalLayout { alignment: end; Pastille {
+                    texte: Appli.etat-moteur == 2 ? @tr("✓ Moteur actif") : Appli.etat-moteur == 1 ? @tr("Moteur inactif") : @tr("! Moteur absent");
+                    couleur: Appli.etat-moteur == 2 ? Theme.fond-ok : Appli.etat-moteur == 0 ? Theme.fond-erreur : Theme.doux;
+                    encre: Appli.etat-moteur == 2 ? Theme.ok : Appli.etat-moteur == 0 ? Theme.erreur : Theme.texte;
+                    taille: 15px;
+                } }
+            }
+            if Appli.etat-moteur != 2: VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                BoutonT { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
+            }
+        }
+    }
 }
