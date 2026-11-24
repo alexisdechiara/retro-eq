@@ -1,0 +1,37 @@
+import { Theme } from "../theme.slint";
+
+// Les quatre étapes d'un test ; l'étape courante est cerclée d'ambre et marquée d'un point,
+// pour ne pas reposer sur la couleur seule. Partagé avec l'écran des duels.
+export component EtapePastille inherits Rectangle {
+    in property <string> texte;
+    in property <bool> courante: false;
+    height: 38px;
+    min-width: libelle.preferred-width + 34px;
+    horizontal-stretch: 0;
+    border-radius: 19px;
+    background: courante ? Theme.surface : transparent;
+    border-width: 1.5px;
+    border-color: courante ? Theme.ambre : Theme.trait;
+    accessible-role: text;
+    accessible-label: courante ? @tr("{} (étape en cours)", texte) : texte;
+    libelle := Text {
+        text: (courante ? "● " : "") + texte.to-uppercase();
+        font-family: Theme.courant;
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 1.5px;
+        color: courante ? Theme.ambre : Theme.discret;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+export component EtapesTest inherits HorizontalLayout {
+    in property <int> courante: 1;
+    spacing: 10px;
+    alignment: start;
+    EtapePastille { texte: @tr("1 · Point de départ"); courante: root.courante == 1; }
+    EtapePastille { texte: @tr("2 · Écoute"); courante: root.courante == 2; }
+    EtapePastille { texte: @tr("3 · Duels"); courante: root.courante == 3; }
+    EtapePastille { texte: @tr("4 · Résultat"); courante: root.courante == 4; }
+}
