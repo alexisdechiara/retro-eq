@@ -126,6 +126,13 @@ pub struct ReglagesAppli {
     pub fermer_reduit: bool,
     /// Raccourci clavier global de chaque profil : identifiant du profil → touches (« Ctrl+Alt+1 »).
     pub raccourcis_profils: BTreeMap<String, String>,
+    /// L'utilisateur a accepté que Retro EQ écrive dans la configuration du moteur audio
+    /// (bouton « Continuer » du premier lancement). Tant que c'est faux, rien n'est écrit.
+    pub moteur_autorise: bool,
+    /// L'égaliseur est coupé (Ctrl+Alt+0) : le moteur reste en place, à plat.
+    pub egaliseur_coupe: bool,
+    /// Met le test en pause tout seul pendant un appel vocal.
+    pub pause_appels: bool,
 }
 
 impl Default for ReglagesAppli {
@@ -138,6 +145,9 @@ impl Default for ReglagesAppli {
             mini_fenetre: vrai(),
             fermer_reduit: vrai(),
             raccourcis_profils: BTreeMap::new(),
+            moteur_autorise: false,
+            egaliseur_coupe: false,
+            pause_appels: vrai(),
         }
     }
 }
