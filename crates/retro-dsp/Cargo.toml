@@ -1,0 +1,16 @@
+[package]
+name = "retro-dsp"
+description = "Filtres, courbes de réponse et analyse du signal de Retro EQ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+realfft = "3.5"
+
+[lints]
+workspace = true

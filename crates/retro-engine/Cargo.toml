@@ -1,0 +1,15 @@
+[package]
+name = "retro-engine"
+description = "Moteurs audio de Retro EQ : trait Moteur et Equalizer APO"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+retro-dsp.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

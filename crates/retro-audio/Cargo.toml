@@ -1,0 +1,15 @@
+[package]
+name = "retro-audio"
+description = "Capture audio et observation du système pour Retro EQ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+retro-dsp.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
