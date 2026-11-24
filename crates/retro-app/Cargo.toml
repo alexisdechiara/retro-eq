@@ -1,0 +1,26 @@
+[package]
+name = "retro-app"
+description = "Retro EQ : l'application de bureau"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "retro-eq"
+path = "src/main.rs"
+
+[dependencies]
+retro-dsp.workspace = true
+# retro-core.workspace = true  # remis quand le domaine est prêt
+retro-engine.workspace = true
+retro-audio.workspace = true
+slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "renderer-software"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+slint-build = "1.19"
+
+[lints]
+workspace = true

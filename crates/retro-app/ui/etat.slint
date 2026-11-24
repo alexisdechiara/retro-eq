@@ -1,0 +1,172 @@
+// Le contrat entre Rust et l'interface : Rust remplit ces propriétés, l'interface appelle ces fonctions.
+// Les écrans ne contiennent aucune logique métier.
+
+export enum Ecran { demarrage, accueil, tester, nouveau-test, duels, resultat, profils, egaliseur, visualiseur, reglages, diagnostic, a-propos }
+export enum EtatTest { pret, ecoute, attente-reponse, pause, pause-appel, termine }
+export enum EtatControle { ok, attention, erreur, en-cours }
+// 0 = Indice, 1 = Probable, 2 = Sûr
+export struct LigneJournal { titre: string, cote: int, detail: string }
+export struct LigneZone { nom: string, plage: string, gain-db: float, change: bool, confiance: int, detail: string }
+export struct LigneProfil { id: string, nom: string, actif: bool, versions: int, date: string, resume: string, courbe: string }
+export struct LigneVersion { numero: int, date: string, origine: string, active: bool, courbe: string }
+export struct LigneControle { titre: string, detail: string, etat: EtatControle, action: string }
+export struct LigneRaccourci { touches: string, action: string, conflit: bool }
+export struct LigneAppli { nom: string, duels: int, preference: string }
+export struct LigneMode { id: string, groupe: string, nom: string, description: string, source: string, duels: string, duree: string, disponible: bool }
+
+export global Appli {
+    in-out property <Ecran> ecran: Ecran.accueil;
+    in property <string> version: "0.1.0";
+    in property <string> profil-actif: "";
+    in property <bool> egaliseur-actif: true;
+    in property <float> niveau-db: -60;
+    in property <int> etat-moteur: 0;            // 0 absent, 1 inactif, 2 actif
+    in property <string> sortie-audio: "";
+    in property <bool> rail: false;
+    in property <string> langue: "fr";
+    in property <bool> test-en-cours: false;
+    in property <bool> agrandie: false;
+    in property <string> annonce: "";            // message court affiché en bas (confirmation, erreur)
+    in property <bool> annonce-erreur: false;
+    callback aller(Ecran);
+    callback deplacer-fenetre();
+    callback reduire();
+    callback agrandir();
+    callback fermer();
+    callback basculer-egaliseur();
+    callback ouvrir-lien(string);
+    aller(e) => { self.ecran = e; }
+}
+
+export global Test {
+    in property <EtatTest> etat: EtatTest.pret;
+    in property <int> duel: 1;
+    in property <int> total: 12;
+    in property <int> cote-actif: 0;             // 0 aucun, 1 A, 2 B
+    in property <int> passages-a: 0;
+    in property <int> passages-b: 0;
+    in property <float> avancement: 0;           // du passage en cours, de 0 à 1
+    in property <string> compte-a-rebours: "0:20";
+    in property <string> suite: "";              // « A joue son 3e passage, puis B »
+    in property <string> source: "";
+    in property <string> appli: "";
+    in property <string> mode: "";
+    in property <string> reference: "";
+    in property <string> duree: "";
+    in property <[LigneJournal]> journal;
+    in property <[LigneMode]> modes;
+    in-out property <string> mode-choisi: "duels-en-jeu";
+    in-out property <bool> precis: false;
+    in-out property <int> intervalle-s: 20;
+    in-out property <int> zone-choisie: 1;
+    in-out property <string> autre-profil: "";
+    in property <[string]> zones;
+    in property <[string]> profils;
+    in property <bool> pause-conseillee: false;
+    callback demarrer();
+    callback pause();
+    callback reprendre();
+    callback passer();
+    callback recommencer();
+    callback arreter();
+    callback repondre(int);                      // 1 A, 0 Pareil, 2 B
+    callback plus-tard();
+    callback annuler-reponse();
+}
+
+export global Resultat {
+    in property <bool> disponible: false;
+    in property <string> titre: "";
+    in property <int> confiance: 0;
+    in property <string> resume: "";
+    in property <string> controles: "";
+    in property <string> verification: "";
+    in property <[LigneZone]> zones;
+    in property <[LigneAppli]> applis;
+    in property <string> courbe-reference: "";
+    in property <string> courbe-nouvelle: "";
+    in property <bool> active: false;
+    in property <float> preampli-db: 0;
+    callback activer();
+    callback revenir-reference();
+    callback exporter(string);                   // « peace », « apo », « autoeq », « wavelet »
+    callback nouveau-test();
+}
+
+export global Profils {
+    in property <[LigneProfil]> liste;
+    in property <[LigneVersion]> versions;
+    in-out property <string> choisi: "";
+    in property <[string]> presets;
+    callback choisir(string);
+    callback activer(string);
+    callback activer-version(string, int);
+    callback renommer(string, string);
+    callback dupliquer(string);
+    callback creer-depuis-preset(string);
+    callback importer();
+    callback exporter(string, string);
+    callback tester(string);
+}
+
+export global Egaliseur {
+    in property <[float]> gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    in property <[string]> frequences: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+    in property <float> preampli-db: 0;
+    in property <bool> preampli-auto: true;
+    in property <string> courbe: "";
+    in property <int> filtres-supplementaires: 0;
+    in property <bool> modifie: false;
+    in property <string> profil: "";
+    callback regler(int, float);
+    callback regler-preampli(float);
+    callback basculer-preampli-auto();
+    callback remettre-a-plat();
+    callback annuler();
+    callback enregistrer();
+}
+
+export global Visualiseur {
+    in property <float> niveau-db: -60;
+    in property <float> crete-db: -60;
+    in property <float> volume-lufs: -60;
+    in property <[float]> bandes;                // de 0 à 1, des graves aux aigus
+    in property <string> source: "";
+    in property <bool> capture-active: false;
+    in property <string> courbe: "";
+}
+
+export global Diagnostic {
+    in property <[LigneControle]> controles;
+    in property <bool> en-cours: false;
+    in property <string> bilan: "";
+    in property <string> dossier-moteur: "";
+    in property <string> dossier-donnees: "";
+    callback relancer();
+    callback agir(int);
+    callback ouvrir-dossier(string);
+}
+
+export global Reglages {
+    in property <string> langue: "fr";
+    in property <bool> rail: false;
+    in property <bool> fermer-reduit: true;
+    in property <bool> mini-fenetre: true;
+    in property <bool> bip: true;
+    in property <bool> pause-appels: true;
+    in property <bool> lancer-au-demarrage: false;
+    in property <int> intervalle-s: 20;
+    in property <[LigneRaccourci]> raccourcis;
+    in property <[string]> sorties;
+    in property <string> sortie: "";
+    callback choisir-langue(string);
+    callback regler-rail(bool);
+    callback regler-fermer-reduit(bool);
+    callback regler-mini-fenetre(bool);
+    callback regler-bip(bool);
+    callback regler-pause-appels(bool);
+    callback regler-intervalle(int);
+    callback importer();
+    callback exporter(string);
+    callback rendre-son-origine();
+}

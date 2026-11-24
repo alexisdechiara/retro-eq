@@ -1,0 +1,737 @@
+// Les composants partagés par tous les écrans. Un écran ne redessine jamais un bouton ou une carte.
+import { Theme } from "theme.slint";
+
+// Anneau de focus ambre, commun à tout ce qui se pilote au clavier.
+component Anneau inherits Rectangle {
+    in property <bool> visible-anneau;
+    in property <length> rayon: 999px;
+    border-radius: rayon == 999px ? self.height / 2 : rayon;
+    border-width: visible-anneau ? 3px : 0px;
+    border-color: Theme.ambre;
+}
+
+export component Titre inherits Text {
+    in property <string> contenu;
+    text: contenu.to-uppercase();
+    font-family: Theme.titres;
+    font-weight: 700;
+    font-size: 52px;
+    letter-spacing: 1px;
+    color: Theme.texte;
+    wrap: word-wrap;
+}
+
+export component TitreSection inherits Text {
+    in property <string> contenu;
+    text: contenu.to-uppercase();
+    font-family: Theme.courant;
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: Theme.texte;
+    wrap: word-wrap;
+}
+
+export component Etiquette inherits Text {
+    in property <string> contenu;
+    text: contenu.to-uppercase();
+    font-family: Theme.courant;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    color: Theme.discret;
+}
+
+export component Paragraphe inherits Text {
+    font-family: Theme.courant;
+    font-size: 16px;
+    color: Theme.discret;
+    wrap: word-wrap;
+}
+
+export component Chiffres inherits Text {
+    font-family: Theme.chiffres;
+    font-weight: 500;
+    font-size: 18px;
+    color: Theme.texte;
+}
+
+export enum GenreBouton { principal, secondaire, lien, choisi }
+
+export component Bouton {
+    in property <string> texte;
+    in property <GenreBouton> genre: GenreBouton.secondaire;
+    in property <bool> actif: true;
+    in property <string> prefixe: "";          // petit signe avant le texte : « ▶ », « ⏸ »
+    callback active();
+    min-height: Theme.cible;
+    min-width: Theme.cible;
+    preferred-height: Theme.cible;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    accessible-role: button;
+    accessible-label: texte;
+    accessible-enabled: actif;
+    accessible-action-default => { if (actif) { root.active(); } }
+
+    // L'ombre dure sous le bouton principal, comme une touche en relief.
+    if genre == GenreBouton.principal: Rectangle {
+        y: 4px;
+        border-radius: self.height / 2;
+        background: Theme.ombre-bouton;
+    }
+    fond := Rectangle {
+        y: genre == GenreBouton.principal && zone.pressed ? 3px : 0px;
+        border-radius: self.height / 2;
+        background: genre == GenreBouton.principal ? Theme.texte : genre == GenreBouton.choisi ? Theme.selection : genre == GenreBouton.lien ? transparent : zone.has-hover ? Theme.doux : Theme.fond;
+        border-width: genre == GenreBouton.lien ? 0px : 1.5px;
+        border-color: genre == GenreBouton.principal ? white : genre == GenreBouton.choisi ? Theme.ambre : Theme.trait;
+        opacity: actif ? 1 : 0.45;
+        animate y { duration: 60ms; }
+        HorizontalLayout {
+            padding-left: genre == GenreBouton.lien ? 6px : 18px;
+            padding-right: genre == GenreBouton.lien ? 6px : 18px;
+            spacing: 10px;
+            alignment: center;
+            if prefixe != "": Text {
+                text: prefixe;
+                vertical-alignment: center;
+                font-size: 14px;
+                color: libelle.color;
+            }
+            libelle := Text {
+                text: genre == GenreBouton.principal ? texte.to-uppercase() : texte;
+                vertical-alignment: center;
+                font-family: Theme.courant;
+                font-weight: 700;
+                font-size: 15px;
+                letter-spacing: genre == GenreBouton.principal ? 2px : 0px;
+                color: genre == GenreBouton.principal ? Theme.fond : genre == GenreBouton.lien ? Theme.ambre : Theme.texte;
+            }
+        }
+        if genre == GenreBouton.lien: Rectangle {
+            x: 6px;
+            y: parent.height / 2 + 11px;
+            width: parent.width - 12px;
+            height: 1.5px;
+            background: Theme.ambre;
+        }
+    }
+    Anneau { visible-anneau: portee.has-focus; }
+    zone := TouchArea {
+        enabled: actif;
+        mouse-cursor: pointer;
+        clicked => { root.active(); }
+    }
+    portee := FocusScope {
+        enabled: actif;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) {
+                root.active();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component Carte inherits Rectangle {
+    in property <bool> choisie: false;
+    in property <length> remplissage: 24px;
+    background: Theme.surface;
+    border-radius: Theme.rayon-carte;
+    border-width: 1.5px;
+    border-color: choisie ? Theme.ambre : Theme.trait;
+    drop-shadow-blur: 30px;
+    drop-shadow-offset-y: 18px;
+    drop-shadow-color: #000000b0;
+    VerticalLayout {
+        padding: remplissage;
+        spacing: 16px;
+        @children
+    }
+}
+
+export component Pastille inherits Rectangle {
+    in property <string> texte;
+    in property <color> couleur: Theme.doux;
+    in property <color> encre: Theme.texte;
+    in property <length> taille: 18px;
+    height: 28px;
+    min-width: contenu.preferred-width + 22px;
+    horizontal-stretch: 0;
+    border-radius: 14px;
+    background: couleur;
+    contenu := Text {
+        text: texte;
+        font-family: Theme.chiffres;
+        font-weight: 700;
+        font-size: taille;
+        color: encre;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Une touche de clavier en relief : F6, Ctrl, Entrée.
+export component Touche inherits Rectangle {
+    in property <string> texte;
+    height: 30px;
+    min-width: max(38px, contenu.preferred-width + 18px);
+    horizontal-stretch: 0;
+    Rectangle {
+        y: 3px;
+        border-radius: 6px;
+        background: Theme.ombre-bouton;
+    }
+    Rectangle {
+        height: parent.height - 3px;
+        y: 0px;
+        border-radius: 6px;
+        background: Theme.texte;
+        border-width: 1px;
+        border-color: white;
+        contenu := Text {
+            text: texte;
+            font-family: Theme.chiffres;
+            font-weight: 500;
+            font-size: 15px;
+            color: Theme.fond;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Pastille de confiance : 0 Indice, 1 Probable, 2 Sûr. Le mot accompagne toujours la couleur.
+export component Confiance inherits Rectangle {
+    in property <int> niveau;
+    height: 28px;
+    min-width: mot.preferred-width + 38px;
+    horizontal-stretch: 0;
+    border-radius: 14px;
+    background: niveau == 2 ? Theme.fond-ok : Theme.doux;
+    border-width: 1.5px;
+    border-color: niveau == 2 ? Theme.ok : niveau == 1 ? Theme.ambre : Theme.trait;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 3px;
+        alignment: center;
+        for i in 3: Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: 5px;
+            height: 6px + i * 4px;
+            border-radius: 1.5px;
+            background: i <= niveau ? (niveau == 2 ? Theme.ok : niveau == 1 ? Theme.ambre : Theme.discret) : Theme.trait;
+        }
+        Rectangle { width: 5px; }
+        mot := Text {
+            text: niveau == 2 ? @tr("Sûr") : niveau == 1 ? @tr("Probable") : @tr("Indice");
+            vertical-alignment: center;
+            font-family: Theme.courant;
+            font-weight: 700;
+            font-size: 14px;
+            color: Theme.texte;
+        }
+    }
+}
+
+// Barre de segments : avancement d'un test, passages d'un duel.
+export component Segments inherits Rectangle {
+    in property <int> total: 12;
+    in property <int> faits: 0;
+    in property <bool> en-cours: false;         // le segment suivant est en train de se remplir
+    in property <float> avancement: 0;
+    in property <color> couleur: Theme.ambre;
+    in property <length> epaisseur: 10px;
+    height: epaisseur;
+    HorizontalLayout {
+        spacing: 5px;
+        for i in total: Rectangle {
+            border-radius: 2px;
+            background: i < faits ? couleur : Theme.doux;
+            if i == faits && en-cours: Rectangle {
+                x: 0px;
+                width: parent.width * clamp(avancement, 0, 1);
+                border-radius: 2px;
+                background: Theme.texte;
+            }
+        }
+    }
+}
+
+// Interrupteur à deux positions, avec son libellé à gauche.
+export component Interrupteur {
+    in property <string> texte;
+    in property <string> aide: "";
+    in property <bool> coche;
+    callback bascule(bool);
+    min-height: Theme.cible;
+    accessible-role: checkbox;
+    accessible-label: texte;
+    accessible-checked: coche;
+    accessible-action-default => { root.bascule(!coche); }
+    HorizontalLayout {
+        spacing: 16px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: texte;
+                font-family: Theme.courant;
+                font-weight: 600;
+                font-size: 16px;
+                color: Theme.texte;
+                wrap: word-wrap;
+            }
+            if aide != "": Text {
+                text: aide;
+                font-family: Theme.courant;
+                font-size: 14px;
+                color: Theme.discret;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            rail := Rectangle {
+                width: 52px;
+                height: 28px;
+                border-radius: 14px;
+                background: coche ? Theme.ambre : Theme.creux;
+                border-width: 1.5px;
+                border-color: coche ? Theme.ambre : Theme.trait;
+                Rectangle {
+                    x: coche ? parent.width - self.width - 4px : 4px;
+                    y: 4px;
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 10px;
+                    background: coche ? Theme.sur-ambre : Theme.discret;
+                    animate x { duration: Theme.rapide; easing: ease-out; }
+                }
+                Anneau { visible-anneau: portee.has-focus; }
+            }
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.bascule(!coche); }
+    }
+    portee := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) {
+                root.bascule(!coche);
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+// Rangée de choix exclusifs : « 10 s · 20 s · 45 s · 2 min ».
+export component Choix {
+    in property <[string]> options;
+    in property <int> choisi;
+    callback choisit(int);
+    min-height: Theme.cible;
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        for option[i] in options: Bouton {
+            texte: option;
+            genre: i == choisi ? GenreBouton.choisi : GenreBouton.secondaire;
+            active => { root.choisit(i); }
+        }
+    }
+}
+
+// Une bobine de cassette. Elle tourne quand sa platine est en lecture.
+component Bobine inherits Rectangle {
+    in property <color> couleur;
+    in property <bool> tourne;
+    width: 46px;
+    height: 46px;
+    border-radius: 23px;
+    border-width: 3px;
+    border-color: couleur;
+    background: Theme.creux;
+    Rectangle {
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        border-width: 5px;
+        border-color: tourne ? Theme.texte : Theme.trait;
+    }
+    // Trois crans qui rendent la rotation visible.
+    for angle in [0, 120, 240]: Rectangle {
+        property <angle> a: angle * 1deg + (tourne ? animation-tick() / 6ms * 1deg : 0deg);
+        x: parent.width / 2 + cos(a) * 15px - 2px;
+        y: parent.height / 2 + sin(a) * 15px - 2px;
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: couleur;
+    }
+}
+
+// La platine cassette d'une version : A en turquoise, B en orange.
+export component Platine inherits Rectangle {
+    in property <bool> est-a: true;
+    in property <bool> lecture: false;
+    in property <int> passages: 0;
+    in property <float> avancement: 0;
+    in property <bool> compact: false;
+    property <color> couleur: est-a ? Theme.a : Theme.b;
+    background: Theme.surface;
+    border-radius: Theme.rayon-carte;
+    border-width: 1.5px;
+    border-color: lecture ? couleur : Theme.trait;
+    drop-shadow-blur: 30px;
+    drop-shadow-offset-y: 18px;
+    drop-shadow-color: #000000b0;
+    VerticalLayout {
+        padding: compact ? 14px : 22px;
+        spacing: compact ? 10px : 16px;
+        HorizontalLayout {
+            Text {
+                text: est-a ? @tr("VERSION A") : @tr("VERSION B");
+                font-family: Theme.titres;
+                font-weight: 700;
+                font-size: compact ? 20px : 28px;
+                letter-spacing: 2px;
+                color: couleur;
+                vertical-alignment: center;
+            }
+            Rectangle { }
+            Rectangle {
+                height: 26px;
+                width: etat.preferred-width + 34px;
+                border-radius: 13px;
+                background: lecture ? couleur : Theme.doux;
+                Rectangle {
+                    x: 12px;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: lecture ? (est-a ? Theme.sur-a : Theme.sur-b) : Theme.discret;
+                }
+                etat := Text {
+                    x: 26px;
+                    text: lecture ? @tr("LECTURE") : @tr("PAUSE");
+                    font-family: Theme.courant;
+                    font-weight: 600;
+                    font-size: 12px;
+                    letter-spacing: 1px;
+                    color: lecture ? (est-a ? Theme.sur-a : Theme.sur-b) : Theme.discret;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        if !compact: Rectangle {
+            height: 70px;
+            border-radius: 14px;
+            background: Theme.creux;
+            border-width: 1px;
+            border-color: Theme.trait;
+            Bobine { x: parent.width * 0.18 - 23px; couleur: lecture ? root.couleur : Theme.trait; tourne: lecture; }
+            Rectangle { width: 64px; height: 18px; border-radius: 5px; background: Theme.doux; }
+            Bobine { x: parent.width * 0.82 - 23px; couleur: lecture ? root.couleur : Theme.trait; tourne: lecture; }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            for i in 3: Rectangle {
+                height: compact ? 14px : 24px;
+                border-radius: 6px;
+                background: i < passages ? couleur : Theme.texte;
+                opacity: i < passages || (i == passages && lecture) ? 1 : 0.85;
+                if i == passages && lecture: Rectangle {
+                    x: 0px;
+                    width: parent.width * clamp(avancement, 0, 1);
+                    border-radius: 6px;
+                    background: couleur;
+                }
+            }
+        }
+        HorizontalLayout {
+            Etiquette { contenu: @tr("Passages"); }
+            Rectangle { }
+            Chiffres {
+                text: lecture ? @tr("{}/3 · en cours", passages) : @tr("{}/3", passages);
+                font-size: 13px;
+                color: Theme.discret;
+            }
+        }
+    }
+}
+
+// Un fader vertical de l'égaliseur, de -12 à +12 dB. Flèches haut et bas : un demi-dB.
+export component Fader {
+    in property <float> valeur;
+    in property <float> mini: -12;
+    in property <float> maxi: 12;
+    in property <string> etiquette;
+    callback regle(float);
+    min-width: 46px;
+    min-height: 220px;
+    accessible-role: slider;
+    accessible-label: etiquette;
+    accessible-value: valeur;
+    accessible-value-minimum: mini;
+    accessible-value-maximum: maxi;
+    accessible-value-step: 0.5;
+    accessible-action-increment => { root.regle(min(maxi, valeur + 0.5)); }
+    accessible-action-decrement => { root.regle(max(mini, valeur - 0.5)); }
+    property <length> course: piste.height - 26px;
+    VerticalLayout {
+        spacing: 8px;
+        Chiffres {
+            text: (valeur > 0 ? "+" : "") + round(valeur * 10) / 10;
+            font-size: 13px;
+            horizontal-alignment: center;
+            color: valeur == 0 ? Theme.discret : Theme.texte;
+        }
+        piste := Rectangle {
+            vertical-stretch: 1;
+            // La fente du fader et son repère central à 0 dB.
+            Rectangle { width: 6px; border-radius: 3px; background: Theme.creux; border-width: 1px; border-color: Theme.trait; }
+            Rectangle { width: 22px; height: 1.5px; background: Theme.trait; }
+            bouton := Rectangle {
+                y: (1 - (valeur - mini) / (maxi - mini)) * course;
+                width: 34px;
+                height: 26px;
+                border-radius: 5px;
+                background: Theme.texte;
+                border-width: 1px;
+                border-color: white;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-color: Theme.ombre-bouton;
+                Rectangle { width: 22px; height: 3px; border-radius: 1.5px; background: Theme.ambre; }
+                Anneau { visible-anneau: portee.has-focus; rayon: 5px; }
+            }
+            prise := TouchArea {
+                mouse-cursor: ns-resize;
+                moved => {
+                    if (self.pressed) {
+                        root.regle(round((maxi - clamp((self.mouse-y - 13px) / course, 0, 1) * (maxi - mini)) * 2) / 2);
+                    }
+                }
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        portee.focus();
+                        root.regle(round((maxi - clamp((self.mouse-y - 13px) / course, 0, 1) * (maxi - mini)) * 2) / 2);
+                    }
+                }
+                double-clicked => { root.regle(0); }
+                scroll-event(e) => {
+                    root.regle(clamp(valeur + (e.delta-y > 0 ? 0.5 : -0.5), mini, maxi));
+                    return accept;
+                }
+            }
+        }
+        Text {
+            text: etiquette;
+            font-family: Theme.chiffres;
+            font-size: 13px;
+            color: Theme.discret;
+            horizontal-alignment: center;
+        }
+    }
+    portee := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.UpArrow) { root.regle(min(maxi, valeur + 0.5)); return accept; }
+            if (e.text == Key.DownArrow) { root.regle(max(mini, valeur - 0.5)); return accept; }
+            if (e.text == Key.Home || e.text == "0") { root.regle(0); return accept; }
+            return reject;
+        }
+    }
+}
+
+// Écran LCD : fond noir, grille, et une ou plusieurs courbes tracées par Rust.
+// Les courbes sont des commandes SVG dans un repère de 1000 × 240, 0 dB au milieu.
+export component EcranCourbe inherits Rectangle {
+    in property <string> courbe;
+    in property <color> couleur: Theme.a;
+    in property <string> courbe-fond: "";
+    in property <color> couleur-fond: Theme.discret;
+    min-height: 160px;
+    border-radius: 14px;
+    background: Theme.ecran;
+    border-width: 1px;
+    border-color: Theme.trait;
+    clip: true;
+    for i in 9: Rectangle {
+        x: parent.width * (i + 1) / 10;
+        width: 1px;
+        background: Theme.grille;
+    }
+    for i in 3: Rectangle {
+        y: parent.height * (i + 1) / 4;
+        height: 1px;
+        background: i == 1 ? Theme.trait : Theme.grille;
+    }
+    if courbe-fond != "": Path {
+        viewbox-width: 1000;
+        viewbox-height: 240;
+        commands: courbe-fond;
+        stroke: couleur-fond;
+        stroke-width: 1.5px;
+        fill: transparent;
+    }
+    if courbe != "": Path {
+        viewbox-width: 1000;
+        viewbox-height: 240;
+        commands: courbe;
+        stroke: couleur;
+        stroke-width: 2.5px;
+        fill: transparent;
+    }
+}
+
+// Vumètre à aiguille. L'aiguille est un tracé, pas une rotation : le rendu logiciel ne sait pas tourner un rectangle.
+export component Vumetre inherits Rectangle {
+    in property <float> niveau-db: -60;         // de -60 à 0 dBFS
+    property <float> part: clamp((niveau-db + 60) / 60, 0, 1);
+    property <angle> angle: -50deg + part * 100deg;
+    min-height: 150px;
+    min-width: 240px;
+    border-radius: 14px;
+    background: Theme.texte;
+    clip: true;
+    for i in 11: Rectangle {
+        property <angle> a: -50deg + i * 10deg;
+        x: parent.width / 2 + sin(a) * (parent.height * 0.78) - 1px;
+        y: parent.height * 0.98 - cos(a) * (parent.height * 0.78) - 4px;
+        width: i >= 9 ? 3px : 2px;
+        height: 8px;
+        background: i >= 9 ? Theme.rouille : Theme.fond;
+    }
+    Path {
+        viewbox-width: 200;
+        viewbox-height: 100;
+        stroke: Theme.rouille;
+        stroke-width: 2.5px;
+        MoveTo { x: 100; y: 98; }
+        LineTo { x: 100 + sin(root.angle) * 72; y: 98 - cos(root.angle) * 72; }
+    }
+    Rectangle {
+        y: parent.height - 16px;
+        width: 32px;
+        height: 32px;
+        border-radius: 16px;
+        background: Theme.fond;
+    }
+    Text {
+        y: parent.height * 0.42;
+        text: "dB";
+        font-family: Theme.titres;
+        font-weight: 700;
+        font-size: 18px;
+        color: Theme.fond;
+    }
+}
+
+// Affichage LCD vert pour un chiffre important.
+export component Lcd inherits Rectangle {
+    in property <string> texte;
+    in property <length> taille: 36px;
+    in property <color> encre: Theme.a;
+    height: taille + 20px;
+    min-width: contenu.preferred-width + 28px;
+    horizontal-stretch: 0;
+    border-radius: 8px;
+    background: Theme.ecran;
+    border-width: 1px;
+    border-color: Theme.trait;
+    contenu := Text {
+        text: texte;
+        font-family: Theme.chiffres;
+        font-weight: 500;
+        font-size: taille;
+        color: encre;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Ligne d'un contrôle de l'autotest : pastille d'état, titre, détail, action possible.
+export component LigneEtat {
+    in property <string> titre;
+    in property <string> detail;
+    in property <int> etat;                     // 0 ok, 1 attention, 2 erreur, 3 en cours
+    in property <string> action: "";
+    callback agit();
+    min-height: 56px;
+    HorizontalLayout {
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Rectangle {
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: etat == 0 ? Theme.fond-ok : etat == 2 ? Theme.fond-erreur : Theme.doux;
+                border-width: 1.5px;
+                border-color: etat == 0 ? Theme.ok : etat == 2 ? Theme.erreur : etat == 1 ? Theme.ambre : Theme.trait;
+                Text {
+                    text: etat == 0 ? "✓" : etat == 2 ? "!" : etat == 1 ? "?" : "…";
+                    font-family: Theme.chiffres;
+                    font-weight: 700;
+                    font-size: 14px;
+                    color: etat == 0 ? Theme.ok : etat == 2 ? Theme.erreur : etat == 1 ? Theme.ambre : Theme.discret;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            Text { text: titre; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+            if detail != "": Text { text: detail; font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+        }
+        if action != "": VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Bouton { texte: action; active => { root.agit(); } }
+        }
+    }
+}
+
+// Trait fin entre deux lignes d'une liste.
+export component Separateur inherits Rectangle {
+    height: 1px;
+    background: Theme.trait;
+}
+
+// Le logo : rond ambre, cinq barres d'égaliseur inégales, trois fentes de coucher de soleil.
+export component Logo inherits Rectangle {
+    in property <length> taille: 24px;
+    width: taille;
+    height: taille;
+    border-radius: taille / 2;
+    background: Theme.fond;
+    border-width: taille / 16;
+    border-color: Theme.ambre;
+    clip: true;
+    property <[{x: float, y: float, rouge: bool}]> barres: [
+        { x: 10.4, y: 38, rouge: false }, { x: 19.6, y: 20, rouge: true }, { x: 28.8, y: 45, rouge: false },
+        { x: 38, y: 27, rouge: false }, { x: 47.2, y: 36, rouge: false },
+    ];
+    for barre in barres: Rectangle {
+        x: barre.x / 64 * taille;
+        y: barre.y / 64 * taille;
+        width: 6.4 / 64 * taille;
+        height: taille;
+        border-radius: 3.2 / 64 * taille;
+        background: barre.rouge ? Theme.rouille : Theme.a;
+    }
+    for fente in [44, 50, 55.5]: Rectangle {
+        y: fente / 64 * taille;
+        height: taille / 32;
+        background: Theme.fond;
+    }
+}
