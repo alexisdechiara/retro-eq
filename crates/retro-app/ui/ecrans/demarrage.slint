@@ -1,8 +1,91 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { BoutonAuto, ChoixAuto } from "reglages_parts.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Carte, GenreBouton, LigneEtat, Separateur, Logo } from "../composants.slint";
+import { Appli, Ecran, Reglages, Diagnostic, EtatControle } from "../etat.slint";
 
 export component Demarrage inherits VerticalLayout {
     alignment: start;
     spacing: 24px;
-    Titre { contenu: @tr("Premier lancement"); }
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 14px;
+                alignment: start;
+                Logo { taille: 48px; }
+                VerticalLayout {
+                    alignment: center;
+                    Etiquette { contenu: @tr("Premier lancement"); }
+                }
+            }
+            Titre { contenu: @tr("Bienvenue dans Retro EQ"); }
+        }
+        VerticalLayout {
+            alignment: start;
+            horizontal-stretch: 0;
+            ChoixAuto {
+                options: ["Français", "English"];
+                choisi: Reglages.langue == "en" ? 1 : 0;
+                choisit(i) => { Reglages.choisir-langue(i == 1 ? "en" : "fr"); }
+            }
+        }
+    }
+    Paragraphe {
+        text: @tr("Retro EQ cherche le son qui te plaît en te faisant comparer deux réglages d’égaliseur, A et B, pendant que tu joues ou écoutes. À la fin, ta réponse devient un profil que tu peux garder.");
+        font-size: 18px;
+    }
+
+    Carte {
+        HorizontalLayout {
+            spacing: 16px;
+            TitreSection { contenu: @tr("Autotest"); vertical-alignment: center; }
+            Text {
+                text: Diagnostic.bilan;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                font-family: Theme.chiffres;
+                font-size: 16px;
+                color: Theme.ambre;
+                wrap: word-wrap;
+            }
+        }
+        Separateur { }
+        if Diagnostic.controles.length == 0: Paragraphe {
+            text: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Aucun contrôle pour l’instant. Lance l’autotest pour vérifier que tout est branché.");
+        }
+        for ligne[i] in Diagnostic.controles: VerticalLayout {
+            if i > 0: Separateur { }
+            LigneEtat {
+                titre: ligne.titre;
+                detail: ligne.detail;
+                etat: ligne.etat == EtatControle.ok ? 0 : ligne.etat == EtatControle.attention ? 1 : ligne.etat == EtatControle.erreur ? 2 : 3;
+                action: ligne.action;
+                agit => { Diagnostic.agir(i); }
+            }
+        }
+        // Un contrôle en erreur : on dit quoi régler d’abord, sans bloquer la suite.
+        VerticalLayout {
+            spacing: 0px;
+            for ligne in Diagnostic.controles: VerticalLayout {
+            if ligne.etat == EtatControle.erreur: Paragraphe {
+                text: @tr("À régler d’abord : {}. Tu peux quand même continuer, mais les tests risquent d’être faussés.", ligne.titre);
+                color: Theme.erreur;
+            }
+        }
+        }
+        Separateur { }
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            BoutonAuto { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
+            BoutonAuto {
+                texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
+                actif: !Diagnostic.en-cours;
+                active => { Diagnostic.relancer(); }
+            }
+        }
+        Paragraphe { text: @tr("Tu pourras relancer l’autotest depuis les Réglages."); font-size: 14px; }
+    }
 }
