@@ -1,12 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Ecran, Test, Egaliseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Interrupteur, EcranCourbe, Vumetre } from "../composants.slint";
-
-// Un bouton qui prend la largeur de son texte quand il est dans une rangée alignée à gauche.
-component BoutonT inherits Bouton {
-    min-width: self.texte.character-count * 9px + (self.prefixe != "" ? 26px : 0px) + (self.genre == GenreBouton.principal ? self.texte.character-count * 3px : 0px) + 52px;
-    preferred-width: self.min-width;
-}
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Interrupteur, EcranCourbe, Vumetre, Format } from "../composants.slint";
 
 export component Accueil inherits VerticalLayout {
     alignment: start;
@@ -24,26 +18,19 @@ export component Accueil inherits VerticalLayout {
     }
 
     // Erreur franche quand le moteur est absent.
-    if Appli.etat-moteur == 0: Rectangle {
-        background: Theme.fond-erreur;
-        border-radius: Theme.rayon-carte;
-        border-width: 1.5px;
-        border-color: Theme.erreur;
+    if Appli.etat-moteur == 0: Carte {
+        alerte: true;
         accessible-role: groupbox;
         accessible-label: @tr("Moteur audio absent");
-        VerticalLayout {
-            padding: 24px;
+        HorizontalLayout {
             spacing: 12px;
-            HorizontalLayout {
-                spacing: 12px;
-                Text { text: "!"; font-family: Theme.chiffres; font-weight: 700; font-size: 24px; color: Theme.erreur; vertical-alignment: center; horizontal-stretch: 0; }
-                TitreSection { contenu: @tr("Moteur audio absent"); vertical-alignment: center; }
-            }
-            Paragraphe { text: @tr("Retro EQ n’a pas trouvé le moteur qui applique l’égaliseur au son. Le diagnostic dit ce qui manque et comment le réparer."); color: Theme.texte; }
-            HorizontalLayout {
-                alignment: start;
-                BoutonT { texte: @tr("Ouvrir le diagnostic"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.diagnostic); } }
-            }
+            Text { text: "!"; font-family: Theme.chiffres; font-weight: 700; font-size: 24px; color: Theme.erreur; vertical-alignment: center; horizontal-stretch: 0; }
+            TitreSection { contenu: @tr("Moteur audio absent"); vertical-alignment: center; }
+        }
+        Paragraphe { text: @tr("Retro EQ n’a pas trouvé le moteur qui applique l’égaliseur au son. Le diagnostic dit ce qui manque et comment le réparer."); color: Theme.texte; }
+        HorizontalLayout {
+            alignment: start;
+            Bouton { texte: @tr("Ouvrir le diagnostic"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.diagnostic); } }
         }
     }
 
@@ -64,14 +51,14 @@ export component Accueil inherits VerticalLayout {
         HorizontalLayout {
             spacing: 14px;
             alignment: start;
-            if Appli.test-en-cours: BoutonT { texte: @tr("Reprendre le test"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.duels); } }
-            BoutonT {
+            if Appli.test-en-cours: Bouton { texte: @tr("Reprendre le test"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.duels); } }
+            Bouton {
                 texte: @tr("Lancer un test");
                 prefixe: Appli.test-en-cours ? "" : "▶";
                 genre: Appli.test-en-cours ? GenreBouton.secondaire : GenreBouton.principal;
                 active => { Appli.aller(Ecran.tester); }
             }
-            BoutonT { texte: @tr("Mes profils"); active => { Appli.aller(Ecran.profils); } }
+            Bouton { texte: @tr("Mes profils"); active => { Appli.aller(Ecran.profils); } }
         }
     }
 
@@ -103,8 +90,8 @@ export component Accueil inherits VerticalLayout {
             HorizontalLayout {
                 spacing: 10px;
                 alignment: start;
-                BoutonT { texte: @tr("Changer de profil"); active => { Appli.aller(Ecran.profils); } }
-                BoutonT { texte: @tr("Égaliseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.egaliseur); } }
+                Bouton { texte: @tr("Changer de profil"); active => { Appli.aller(Ecran.profils); } }
+                Bouton { texte: @tr("Égaliseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.egaliseur); } }
             }
         }
         // Le niveau en direct.
@@ -115,12 +102,12 @@ export component Accueil inherits VerticalLayout {
             HorizontalLayout {
                 spacing: 8px;
                 alignment: center;
-                Chiffres { text: round(Appli.niveau-db * 10) / 10; font-size: 28px; vertical-alignment: center; }
+                Chiffres { text: Format.nombre(Appli.niveau-db, false); font-size: 28px; vertical-alignment: center; }
                 Chiffres { text: "dB"; color: Theme.discret; vertical-alignment: bottom; }
             }
             HorizontalLayout {
                 alignment: center;
-                BoutonT { texte: @tr("Visualiseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.visualiseur); } }
+                Bouton { texte: @tr("Visualiseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.visualiseur); } }
             }
         }
     }
@@ -155,7 +142,7 @@ export component Accueil inherits VerticalLayout {
             if Appli.etat-moteur != 2: VerticalLayout {
                 alignment: center;
                 horizontal-stretch: 0;
-                BoutonT { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
+                Bouton { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
             }
         }
     }

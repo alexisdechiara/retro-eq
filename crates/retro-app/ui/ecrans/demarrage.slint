@@ -1,6 +1,5 @@
 import { Theme } from "../theme.slint";
-import { BoutonAuto, ChoixAuto } from "reglages_parts.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Carte, GenreBouton, LigneEtat, Separateur, Logo } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Carte, Bouton, Choix, GenreBouton, LigneEtat, Separateur, Logo } from "../composants.slint";
 import { Appli, Ecran, Reglages, Diagnostic, EtatControle } from "../etat.slint";
 
 export component Demarrage inherits VerticalLayout {
@@ -25,7 +24,7 @@ export component Demarrage inherits VerticalLayout {
         VerticalLayout {
             alignment: start;
             horizontal-stretch: 0;
-            ChoixAuto {
+            Choix {
                 options: ["Français", "English"];
                 choisi: Reglages.langue == "en" ? 1 : 0;
                 choisit(i) => { Reglages.choisir-langue(i == 1 ? "en" : "fr"); }
@@ -47,7 +46,7 @@ export component Demarrage inherits VerticalLayout {
                 vertical-alignment: center;
                 font-family: Theme.chiffres;
                 font-size: 16px;
-                color: Theme.ambre;
+                color: Theme.texte;
                 wrap: word-wrap;
             }
         }
@@ -79,8 +78,8 @@ export component Demarrage inherits VerticalLayout {
         HorizontalLayout {
             spacing: 14px;
             alignment: start;
-            BoutonAuto { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
-            BoutonAuto {
+            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
+            Bouton {
                 texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
                 actif: !Diagnostic.en-cours;
                 active => { Diagnostic.relancer(); }

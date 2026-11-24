@@ -1,12 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Ecran, Resultat } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Confiance, EcranCourbe, Separateur } from "../composants.slint";
-
-// Un bouton qui prend la largeur de son texte quand il est dans une rangée alignée à gauche.
-component BoutonT inherits Bouton {
-    min-width: self.texte.character-count * 9px + (self.prefixe != "" ? 26px : 0px) + (self.genre == GenreBouton.principal ? self.texte.character-count * 3px : 0px) + 52px;
-    preferred-width: self.min-width;
-}
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Confiance, EcranCourbe, Separateur, Format } from "../composants.slint";
 
 component LigneZoneResultat inherits VerticalLayout {
     in property <string> nom;
@@ -29,7 +23,7 @@ component LigneZoneResultat inherits VerticalLayout {
             horizontal-stretch: 0;
             min-width: 96px;
             Chiffres {
-                text: change ? @tr("{} dB", (gain > 0 ? "+" : gain < 0 ? "−" : "") + abs(round(gain * 10) / 10)) : @tr("inchangé");
+                text: change ? Format.db(gain) : @tr("inchangé");
                 font-size: change ? 20px : 15px;
                 color: change ? Theme.texte : Theme.discret;
                 horizontal-alignment: right;
@@ -38,7 +32,7 @@ component LigneZoneResultat inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
-            Confiance { niveau: confiance; width: 124px; }
+            Confiance { niveau: confiance; }
         }
     }
     if detail != "": Paragraphe { text: detail; font-size: 14px; }
@@ -73,7 +67,7 @@ export component EcranResultat inherits VerticalLayout {
         Paragraphe { text: @tr("Le résultat apparaît à la fin d’un test : la courbe avant et après, ce que tes oreilles ont choisi, zone par zone, et le degré de confiance."); }
         HorizontalLayout {
             alignment: start;
-            BoutonT { texte: @tr("Lancer un test"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.tester); } }
+            Bouton { texte: @tr("Lancer un test"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.tester); } }
         }
     }
 
@@ -87,7 +81,7 @@ export component EcranResultat inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: 14px;
                     Text { text: Resultat.titre.to-uppercase(); font-family: Theme.titres; font-weight: 700; font-size: 30px; color: Theme.texte; wrap: word-wrap; vertical-alignment: center; }
-                    VerticalLayout { alignment: center; horizontal-stretch: 0; Confiance { niveau: Resultat.confiance; width: 124px; } }
+                    VerticalLayout { alignment: center; horizontal-stretch: 0; Confiance { niveau: Resultat.confiance; } }
                 }
                 EcranCourbe { courbe: Resultat.courbe-nouvelle; courbe-fond: Resultat.courbe-reference; min-height: 200px; }
                 HorizontalLayout {
@@ -96,7 +90,7 @@ export component EcranResultat inherits VerticalLayout {
                     Legende { texte: @tr("Référence"); couleur: Theme.discret; tirets: true; }
                     Legende { texte: @tr("Nouvelle version"); couleur: Theme.a; }
                 }
-                Paragraphe { text: @tr("Préampli automatique : {} dB", round(Resultat.preampli-db * 10) / 10); font-size: 14px; }
+                Paragraphe { text: @tr("Préampli automatique : {}", Format.db(Resultat.preampli-db)); font-size: 14px; }
             }
             Carte {
                 TitreSection { contenu: @tr("Ce que tes oreilles ont choisi"); }
@@ -129,7 +123,7 @@ export component EcranResultat inherits VerticalLayout {
             alignment: start;
             Carte {
                 TitreSection { contenu: @tr("Garder ce profil"); }
-                if !Resultat.active: BoutonT {
+                if !Resultat.active: Bouton {
                     texte: @tr("Activer ce profil");
                     prefixe: "✓";
                     genre: GenreBouton.principal;
@@ -140,7 +134,7 @@ export component EcranResultat inherits VerticalLayout {
                     HorizontalLayout { alignment: start; Pastille { texte: @tr("✓ Profil activé"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 15px; } }
                     HorizontalLayout {
                         alignment: start;
-                        BoutonT { texte: @tr("Revenir à la référence"); genre: GenreBouton.lien; active => { Resultat.revenir-reference(); } }
+                        Bouton { texte: @tr("Revenir à la référence"); genre: GenreBouton.lien; active => { Resultat.revenir-reference(); } }
                     }
                 }
                 Separateur { }
@@ -148,18 +142,18 @@ export component EcranResultat inherits VerticalLayout {
                 GridLayout {
                     spacing: 10px;
                     Row {
-                        BoutonT { texte: "Peace"; active => { Resultat.exporter("peace"); } }
-                        BoutonT { texte: "Equalizer APO"; active => { Resultat.exporter("apo"); } }
+                        Bouton { texte: "Peace"; active => { Resultat.exporter("peace"); } }
+                        Bouton { texte: "Equalizer APO"; active => { Resultat.exporter("apo"); } }
                     }
                     Row {
-                        BoutonT { texte: "AutoEQ"; active => { Resultat.exporter("autoeq"); } }
-                        BoutonT { texte: "Wavelet"; active => { Resultat.exporter("wavelet"); } }
+                        Bouton { texte: "AutoEQ"; active => { Resultat.exporter("autoeq"); } }
+                        Bouton { texte: "Wavelet"; active => { Resultat.exporter("wavelet"); } }
                     }
                 }
                 Separateur { }
                 HorizontalLayout {
                     alignment: start;
-                    BoutonT { texte: @tr("Nouveau test"); active => { Resultat.nouveau-test(); } }
+                    Bouton { texte: @tr("Nouveau test"); active => { Resultat.nouveau-test(); } }
                 }
             }
         }

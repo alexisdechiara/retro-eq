@@ -1,6 +1,23 @@
 // Les composants partagés par tous les écrans. Un écran ne redessine jamais un bouton ou une carte.
 import { Theme } from "theme.slint";
 
+// Le seul endroit où un nombre devient du texte pour l'utilisateur : virgule en français, point en anglais.
+export global Format {
+    // Un nombre à une décimale au plus, sans zéro inutile : « 3 », « −2,5 ». Avec `avec-plus`, un « + » devant les positifs.
+    pure public function nombre(valeur: float, avec-plus: bool) -> string {
+        // Les dixièmes entiers évitent « -0 » et les erreurs d'arrondi.
+        let dixiemes = round(abs(valeur) * 10);
+        let entier = floor(dixiemes / 10);
+        let decimale = dixiemes - entier * 10;
+        let signe = dixiemes == 0 ? "" : valeur < 0 ? "−" : avec-plus ? "+" : "";
+        return signe + entier + (decimale != 0 ? @tr("séparateur décimal" => ",") + decimale : "");
+    }
+    // Une valeur en dB, signée : « +3 dB », « −2,5 dB », « 0 dB ».
+    pure public function db(valeur: float) -> string {
+        return @tr("{} dB", nombre(valeur, true));
+    }
+}
+
 // Anneau de focus ambre, commun à tout ce qui se pilote au clavier.
 component Anneau inherits Rectangle {
     in property <bool> visible-anneau;
@@ -63,13 +80,14 @@ export component Bouton {
     in property <GenreBouton> genre: GenreBouton.secondaire;
     in property <bool> actif: true;
     in property <string> prefixe: "";          // petit signe avant le texte : « ▶ », « ⏸ »
+    in property <length> hauteur: Theme.cible; // un grand bouton de départ peut être plus haut
     callback active();
-    min-height: Theme.cible;
+    min-height: hauteur;
     // La largeur vient du texte : sans cela, un bouton s'écrase dans une rangée et s'étire dans une colonne.
     min-width: max(Theme.cible, libelle.preferred-width + (genre == GenreBouton.lien ? 12px : 38px) + (prefixe != "" ? 26px : 0px));
     preferred-width: self.min-width;
-    preferred-height: Theme.cible;
-    max-height: Theme.cible;
+    preferred-height: hauteur;
+    max-height: hauteur;
     horizontal-stretch: 0;
     vertical-stretch: 0;
     accessible-role: button;
@@ -140,11 +158,12 @@ export component Bouton {
 
 export component Carte inherits Rectangle {
     in property <bool> choisie: false;
+    in property <bool> alerte: false;            // carte d'avertissement : fond et bord d'erreur
     in property <length> remplissage: 24px;
-    background: Theme.surface;
+    background: alerte ? Theme.fond-erreur : Theme.surface;
     border-radius: Theme.rayon-carte;
     border-width: 1.5px;
-    border-color: choisie ? Theme.ambre : Theme.trait;
+    border-color: alerte ? Theme.erreur : choisie ? Theme.ambre : Theme.trait;
     drop-shadow-blur: 30px;
     drop-shadow-offset-y: 18px;
     drop-shadow-color: #000000b0;
@@ -161,7 +180,10 @@ export component Pastille inherits Rectangle {
     in property <color> encre: Theme.texte;
     in property <length> taille: 18px;
     height: 28px;
+    // La largeur suit le texte, dans une rangée comme dans une colonne.
     min-width: contenu.preferred-width + 22px;
+    preferred-width: self.min-width;
+    max-width: self.min-width;
     horizontal-stretch: 0;
     border-radius: 14px;
     background: couleur;
@@ -210,7 +232,10 @@ export component Touche inherits Rectangle {
 export component Confiance inherits Rectangle {
     in property <int> niveau;
     height: 28px;
-    min-width: mot.preferred-width + 38px;
+    // Marges 22 + trois barres 15 + espace 5 + quatre interstices 12.
+    min-width: mot.preferred-width + 54px;
+    preferred-width: self.min-width;
+    max-width: self.min-width;
     horizontal-stretch: 0;
     border-radius: 14px;
     background: niveau == 2 ? Theme.fond-ok : Theme.doux;
@@ -335,19 +360,18 @@ export component Interrupteur {
 }
 
 // Rangée de choix exclusifs : « 10 s · 20 s · 45 s · 2 min ».
-export component Choix {
+export component Choix inherits HorizontalLayout {
     in property <[string]> options;
-    in property <int> choisi;
+    in property <int> choisi: -1;
+    in property <string> choisi-nom: "";        // choisir par le nom plutôt que par la position
     callback choisit(int);
+    spacing: 8px;
+    alignment: start;
     min-height: Theme.cible;
-    HorizontalLayout {
-        spacing: 8px;
-        alignment: start;
-        for option[i] in options: Bouton {
-            texte: option;
-            genre: i == choisi ? GenreBouton.choisi : GenreBouton.secondaire;
-            active => { root.choisit(i); }
-        }
+    for option[i] in options: Bouton {
+        texte: option;
+        genre: i == choisi || (choisi-nom != "" && option == choisi-nom) ? GenreBouton.choisi : GenreBouton.secondaire;
+        active => { root.choisit(i); }
     }
 }
 
@@ -491,7 +515,7 @@ export component Fader {
     VerticalLayout {
         spacing: 8px;
         Chiffres {
-            text: (valeur > 0 ? "+" : "") + round(valeur * 10) / 10;
+            text: Format.db(valeur);
             font-size: 13px;
             horizontal-alignment: center;
             color: valeur == 0 ? Theme.discret : Theme.texte;
@@ -559,37 +583,77 @@ export component EcranCourbe inherits Rectangle {
     in property <color> couleur: Theme.a;
     in property <string> courbe-fond: "";
     in property <color> couleur-fond: Theme.discret;
-    min-height: 160px;
-    border-radius: 14px;
+    in property <bool> mini: false;             // petite courbe de vignette : ni grille, ni axes, trait fin
+    in property <bool> axes: true;              // repères en dB à gauche et en Hz en bas (hors mini)
+    // Fractions de l'axe logarithmique 20 Hz – 20 kHz : 50, 100, 200, 500, 1k, 2k, 5k, 10k.
+    property <[float]> reperes: [0.133, 0.233, 0.333, 0.466, 0.566, 0.667, 0.800, 0.900];
+    property <[{f: float, t: string}]> frequences: [
+        { f: 0.0, t: "20 Hz" }, { f: 0.233, t: "100" }, { f: 0.566, t: "1k" }, { f: 0.9, t: "10k" }, { f: 1.0, t: "20k" },
+    ];
+    property <bool> avec-axes: axes && !mini;
+    property <length> gouttiere: avec-axes ? 34px : 0px;
+    property <length> pied: avec-axes ? 20px : 0px;
+    min-height: mini ? 0px : 160px;
+    border-radius: mini ? 8px : 14px;
     background: Theme.ecran;
-    border-width: 1px;
+    border-width: mini ? 0px : 1px;
     border-color: Theme.trait;
     clip: true;
-    for i in 9: Rectangle {
-        x: parent.width * (i + 1) / 10;
-        width: 1px;
-        background: Theme.grille;
+    trace := Rectangle {
+        x: gouttiere;
+        y: avec-axes ? 6px : 0px;
+        width: parent.width - gouttiere - (avec-axes ? 10px : 0px);
+        height: parent.height - self.y - pied;
+        if !mini: Rectangle {
+            for f in reperes: Rectangle {
+                x: parent.width * f;
+                width: 1px;
+                background: Theme.grille;
+            }
+            for i in 3: Rectangle {
+                y: parent.height * (i + 1) / 4;
+                height: 1px;
+                background: i == 1 ? Theme.trait : Theme.grille;
+            }
+        }
+        if courbe-fond != "": Path {
+            viewbox-width: 1000;
+            viewbox-height: 240;
+            commands: courbe-fond;
+            stroke: couleur-fond;
+            stroke-width: 1.5px;
+            fill: transparent;
+        }
+        if courbe != "": Path {
+            viewbox-width: 1000;
+            viewbox-height: 240;
+            commands: courbe;
+            stroke: couleur;
+            stroke-width: mini ? 2px : 2.5px;
+            fill: transparent;
+        }
     }
-    for i in 3: Rectangle {
-        y: parent.height * (i + 1) / 4;
-        height: 1px;
-        background: i == 1 ? Theme.trait : Theme.grille;
-    }
-    if courbe-fond != "": Path {
-        viewbox-width: 1000;
-        viewbox-height: 240;
-        commands: courbe-fond;
-        stroke: couleur-fond;
-        stroke-width: 1.5px;
-        fill: transparent;
-    }
-    if courbe != "": Path {
-        viewbox-width: 1000;
-        viewbox-height: 240;
-        commands: courbe;
-        stroke: couleur;
-        stroke-width: 2.5px;
-        fill: transparent;
+    if avec-axes: Rectangle {
+        for d[i] in [{ y: 0.0, t: "+12" }, { y: 0.5, t: "0" }, { y: 1.0, t: "−12" }]: Text {
+            x: 0px;
+            width: gouttiere - 6px;
+            y: clamp(trace.y + trace.height * d.y - self.height / 2, 2px, parent.height - pied - self.height);
+            text: d.t;
+            font-family: Theme.chiffres;
+            font-size: 11px;
+            color: Theme.discret;
+            horizontal-alignment: right;
+        }
+        for r in frequences: Text {
+            width: 52px;
+            x: r.f == 0 ? trace.x : r.f == 1 ? trace.x + trace.width - self.width : trace.x + trace.width * r.f - self.width / 2;
+            y: parent.height - pied + 3px;
+            text: r.t;
+            font-family: Theme.chiffres;
+            font-size: 11px;
+            color: Theme.discret;
+            horizontal-alignment: r.f == 0 ? left : r.f == 1 ? right : center;
+        }
     }
 }
 

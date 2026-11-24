@@ -1,6 +1,5 @@
 import { Theme } from "../theme.slint";
-import { BoutonAuto, ChoixAuto } from "reglages_parts.slint";
-import { Titre, TitreSection, Paragraphe, Chiffres, Carte, Separateur, Logo } from "../composants.slint";
+import { Titre, TitreSection, Paragraphe, Chiffres, Carte, Bouton, Separateur, Logo } from "../composants.slint";
 import { Appli } from "../etat.slint";
 
 component LigneLicence inherits HorizontalLayout {
@@ -49,7 +48,7 @@ export component APropos inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
-            BoutonAuto { texte: @tr("Code source sur GitHub"); active => { Appli.ouvrir-lien("https://github.com/alexisdechiara/retro-eq"); } }
+            Bouton { texte: @tr("Code source sur GitHub"); active => { Appli.ouvrir-lien("https://github.com/alexisdechiara/retro-eq"); } }
         }
     }
 
@@ -72,8 +71,8 @@ export component APropos inherits VerticalLayout {
         HorizontalLayout {
             alignment: start;
             spacing: 8px;
-            BoutonAuto { texte: @tr("Site de Slint"); active => { Appli.ouvrir-lien("https://slint.dev"); } }
-            BoutonAuto { texte: @tr("Site d’Equalizer APO"); active => { Appli.ouvrir-lien("https://sourceforge.net/projects/equalizerapo/"); } }
+            Bouton { texte: @tr("Site de Slint"); active => { Appli.ouvrir-lien("https://slint.dev"); } }
+            Bouton { texte: @tr("Site d’Equalizer APO"); active => { Appli.ouvrir-lien("https://sourceforge.net/projects/equalizerapo/"); } }
         }
     }
 }

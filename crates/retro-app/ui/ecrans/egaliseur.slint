@@ -1,16 +1,17 @@
 import { Theme } from "../theme.slint";
 import { Appli, Egaliseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Interrupteur, Fader, EcranCourbe, Lcd, Pastille, Separateur } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Interrupteur, Fader, EcranCourbe, Lcd, Pastille, Separateur, Format } from "../composants.slint";
 
 export component EcranEgaliseur inherits VerticalLayout {
     alignment: start;
     spacing: 28px;
 
-    property <string> preampli-texte: (Egaliseur.preampli-db > 0 ? "+" : "") + round(Egaliseur.preampli-db * 10) / 10 + " dB";
+    property <string> preampli-texte: Format.db(Egaliseur.preampli-db);
 
     // En-tête : titre, phrase d'accroche, profil et interrupteur général.
     HorizontalLayout {
         spacing: 24px;
+        alignment: space-between;
         VerticalLayout {
             spacing: 12px;
             horizontal-stretch: 1;
@@ -150,7 +151,7 @@ export component EcranEgaliseur inherits VerticalLayout {
                         font-family: Theme.chiffres;
                         font-weight: 700;
                         font-size: 16px;
-                        color: Theme.ambre;
+                        color: Theme.texte;
                         vertical-alignment: center;
                         width: 12px;
                     }
@@ -226,17 +227,14 @@ export component EcranEgaliseur inherits VerticalLayout {
             alignment: start;
             Bouton {
                 texte: @tr("Remettre à plat");
-                min-width: 180px;
                 active => { Egaliseur.remettre-a-plat(); }
             }
             if Egaliseur.modifie: Bouton {
                 texte: @tr("Annuler");
-                min-width: 120px;
                 active => { Egaliseur.annuler(); }
             }
             if Egaliseur.modifie: Bouton {
                 texte: @tr("Enregistrer une nouvelle version");
-                min-width: 340px;
                 genre: GenreBouton.principal;
                 active => { Egaliseur.enregistrer(); }
             }

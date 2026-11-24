@@ -1,6 +1,5 @@
 import { Theme } from "../theme.slint";
-import { BoutonAuto, ChoixAuto } from "reglages_parts.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, GenreBouton, Touche, Interrupteur, Separateur } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Bouton, Choix, GenreBouton, Touche, Interrupteur, Separateur } from "../composants.slint";
 import { Appli, Ecran, Reglages } from "../etat.slint";
 
 // Une ligne de réglage : titre et aide à gauche, le contrôle à droite.
@@ -61,7 +60,7 @@ export component EcranReglages inherits VerticalLayout {
             spacing: 10px;
             Text { text: @tr("Bascule entre A et B"); font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; }
             Text { text: @tr("Intervalle par défaut entre deux passages. Tu peux le changer pour chaque test."); font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
-            ChoixAuto {
+            Choix {
                 options: [@tr("10 s"), @tr("20 s"), @tr("45 s"), @tr("2 min")];
                 choisi: idx-intervalle;
                 choisit(i) => { Reglages.regler-intervalle([10, 20, 45, 120][i]); }
@@ -128,7 +127,7 @@ export component EcranReglages inherits VerticalLayout {
         Rangee {
             titre: @tr("Langue");
             aide: @tr("Le français est la langue de référence.");
-            ChoixAuto {
+            Choix {
                 options: ["Français", "English"];
                 choisi: Reglages.langue == "en" ? 1 : 0;
                 choisit(i) => { Reglages.choisir-langue(i == 1 ? "en" : "fr"); }
@@ -138,7 +137,7 @@ export component EcranReglages inherits VerticalLayout {
         Rangee {
             titre: @tr("Navigation");
             aide: @tr("Onglets dans la barre de titre, ou colonne d’icônes à gauche.");
-            ChoixAuto {
+            Choix {
                 options: [@tr("Barre du haut"), @tr("Rail latéral")];
                 choisi: Reglages.rail ? 1 : 0;
                 choisit(i) => { Reglages.regler-rail(i == 1); }
@@ -152,17 +151,17 @@ export component EcranReglages inherits VerticalLayout {
         Paragraphe { text: @tr("Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt) et AutoEQ (ParametricEQ.txt). Les fichiers importés deviennent des profils."); }
         HorizontalLayout {
             alignment: start;
-            BoutonAuto { texte: @tr("Importer un fichier…"); prefixe: "↧"; active => { Reglages.importer(); } }
+            Bouton { texte: @tr("Importer un fichier…"); prefixe: "↧"; active => { Reglages.importer(); } }
         }
         Separateur { }
         Etiquette { contenu: @tr("Exporter le profil actif"); }
         HorizontalLayout {
             spacing: 8px;
             alignment: start;
-            BoutonAuto { texte: "Peace"; active => { Reglages.exporter("peace"); } }
-            BoutonAuto { texte: "Equalizer APO"; active => { Reglages.exporter("apo"); } }
-            BoutonAuto { texte: "AutoEQ"; active => { Reglages.exporter("autoeq"); } }
-            BoutonAuto { texte: "Wavelet"; active => { Reglages.exporter("wavelet"); } }
+            Bouton { texte: "Peace"; active => { Reglages.exporter("peace"); } }
+            Bouton { texte: "Equalizer APO"; active => { Reglages.exporter("apo"); } }
+            Bouton { texte: "AutoEQ"; active => { Reglages.exporter("autoeq"); } }
+            Bouton { texte: "Wavelet"; active => { Reglages.exporter("wavelet"); } }
         }
     }
 
@@ -172,29 +171,22 @@ export component EcranReglages inherits VerticalLayout {
         HorizontalLayout {
             alignment: start;
             spacing: 8px;
-            BoutonAuto { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
-            BoutonAuto { texte: @tr("À propos"); active => { Appli.aller(Ecran.a-propos); } }
+            Bouton { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
+            Bouton { texte: @tr("À propos"); active => { Appli.aller(Ecran.a-propos); } }
         }
     }
 
     // Section prudente, séparée du reste.
-    Rectangle {
-        background: Theme.fond-erreur;
-        border-radius: Theme.rayon-carte;
-        border-width: 1.5px;
-        border-color: Theme.erreur;
-        VerticalLayout {
-            padding: 24px;
-            spacing: 14px;
-            TitreSection { contenu: @tr("Rendre le son d’origine"); }
-            Paragraphe {
-                text: @tr("Retire Retro EQ du moteur audio et restaure la configuration d’origine de ton PC. Tes profils restent gardés. Retro EQ ne fera plus rien au son tant que tu ne le réactives pas.");
-                color: Theme.texte;
-            }
-            HorizontalLayout {
-                alignment: start;
-                BoutonAuto { texte: @tr("Rendre le son d’origine"); active => { Reglages.rendre-son-origine(); } }
-            }
+    Carte {
+        alerte: true;
+        TitreSection { contenu: @tr("Rendre le son d’origine"); }
+        Paragraphe {
+            text: @tr("Retire Retro EQ du moteur audio et restaure la configuration d’origine de ton PC. Tes profils restent gardés. Retro EQ ne fera plus rien au son tant que tu ne le réactives pas.");
+            color: Theme.texte;
+        }
+        HorizontalLayout {
+            alignment: start;
+            Bouton { texte: @tr("Rendre le son d’origine"); active => { Reglages.rendre-son-origine(); } }
         }
     }
 }

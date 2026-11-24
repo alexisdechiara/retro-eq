@@ -7,7 +7,7 @@ import "polices/Anton-Regular.ttf";
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest } from "etat.slint";
-import { Logo, Platine, Touche, Bouton, GenreBouton, Segments } from "composants.slint";
+import { Logo, Platine, Touche, Bouton, GenreBouton, Segments, Format } from "composants.slint";
 import { Demarrage } from "ecrans/demarrage.slint";
 import { Accueil } from "ecrans/accueil.slint";
 import { Tester } from "ecrans/tester.slint";
@@ -60,6 +60,49 @@ component Onglet {
     }
 }
 
+// L'onglet Accueil de la barre de titre : une petite maison, dans une zone ronde de 40 px.
+component OngletAccueil {
+    in property <bool> courant;
+    callback active();
+    min-width: 64px;
+    min-height: 52px;
+    horizontal-stretch: 0;
+    accessible-role: tab;
+    accessible-label: @tr("Accueil");
+    accessible-action-default => { root.active(); }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: zone.has-hover && !courant ? Theme.doux.with-alpha(0.5) : transparent;
+        Path {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 22px;
+            height: 22px;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            commands: "M3 11 L12 3 L21 11 M5.5 9.5 V20 H10 V14 H14 V20 H18.5 V9.5";
+            stroke: courant ? Theme.texte : Theme.discret;
+            stroke-width: 2px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+        }
+        if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 20px; }
+    }
+    if courant: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
+    zone := TouchArea { mouse-cursor: pointer; clicked => { root.active(); } }
+    portee := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
+            return reject;
+        }
+    }
+}
+
 // Un des trois boutons de la fenêtre : réduire, agrandir, fermer.
 component BoutonFenetre {
     in property <string> signe;
@@ -96,7 +139,7 @@ component Navigation {
             || (e == Ecran.reglages && (Appli.ecran == Ecran.diagnostic || Appli.ecran == Ecran.a-propos));
     }
     if !vertical: HorizontalLayout {
-        Onglet { texte: @tr("Accueil"); courant: Appli.ecran == Ecran.accueil; active => { Appli.aller(Ecran.accueil); } }
+        OngletAccueil { courant: Appli.ecran == Ecran.accueil; active => { Appli.aller(Ecran.accueil); } }
         for entree in entrees: Onglet { texte: entree.nom; courant: root.courant(entree.ecran); active => { Appli.aller(entree.ecran); } }
     }
     if vertical: VerticalLayout {
@@ -116,6 +159,8 @@ export component FenetrePrincipale inherits Window {
     background: Theme.fond;
     default-font-family: Theme.courant;
     default-font-size: 16px;
+    // Agrandie, la fenêtre dépasse la largeur utile : on garde 1344 px de contenu, centrés.
+    property <length> marge-laterale: max(0px, (root.width - (Appli.rail ? 200px : 0px) - 1344px) / 2);
 
     VerticalLayout {
         // Le liseré aux cinq couleurs, signature de la Station Pilleur.
@@ -154,7 +199,7 @@ export component FenetrePrincipale inherits Window {
                         Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Appli.egaliseur-actif && Appli.etat-moteur == 2 ? Theme.ok : Theme.discret; }
                     }
                     Text {
-                        text: Appli.etat-moteur != 2 ? @tr("Moteur audio absent") : !Appli.egaliseur-actif ? @tr("Égaliseur coupé") : @tr("{} · {} dB", Appli.profil-actif, round(Appli.niveau-db));
+                        text: Appli.etat-moteur != 2 ? @tr("Moteur audio absent") : !Appli.egaliseur-actif ? @tr("Égaliseur coupé") : @tr("{} · {}", Appli.profil-actif, Format.db(round(Appli.niveau-db)));
                         font-size: 13px;
                         color: Theme.discret;
                         vertical-alignment: center;
@@ -174,7 +219,12 @@ export component FenetrePrincipale inherits Window {
                 Rectangle { x: parent.width - 1px; width: 1px; background: Theme.trait; }
             }
             ScrollView {
-                VerticalLayout {
+                // Fenêtre agrandie : le contenu garde au plus 1344 px de large et reste centré.
+                HorizontalLayout {
+                    Rectangle { width: root.marge-laterale; }
+                    VerticalLayout {
+                    horizontal-stretch: 1;
+                    max-width: 1344px;
                     padding-top: 40px;
                     padding-bottom: 72px;
                     padding-left: Theme.marge;
@@ -192,6 +242,8 @@ export component FenetrePrincipale inherits Window {
                     if Appli.ecran == Ecran.reglages: EcranReglages { }
                     if Appli.ecran == Ecran.diagnostic: EcranDiagnostic { }
                     if Appli.ecran == Ecran.a-propos: APropos { }
+                    }
+                    Rectangle { width: root.marge-laterale; }
                 }
             }
         }

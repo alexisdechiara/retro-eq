@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Test, Appli } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Bouton, GenreBouton, Carte, Touche, Interrupteur, Platine, Separateur } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Bouton, GenreBouton, Carte, Touche, Interrupteur, Platine, Separateur, Choix } from "../composants.slint";
 import { EtapesTest } from "nouveau_test_parts.slint";
 
 // Une ligne du résumé : intitulé en petites capitales, valeur en gras.
@@ -35,22 +35,6 @@ component Controle inherits HorizontalLayout {
         }
     }
     Text { text: texte; font-family: Theme.courant; font-size: 16px; color: Theme.texte; wrap: word-wrap; vertical-alignment: center; }
-}
-
-// Rangée de choix exclusifs. `Choix` et `Bouton` n'ont pas de largeur préférée : on l'estime ici à partir du texte.
-component Rangee inherits HorizontalLayout {
-    in property <[string]> options;
-    in property <int> choisi: -1;
-    in property <string> choisi-nom: "";
-    callback choisit(int);
-    spacing: 8px;
-    alignment: start;
-    for option[i] in options: Bouton {
-        texte: option;
-        min-width: 38px + option.character-count * 8px;
-        genre: i == choisi || (choisi-nom != "" && option == choisi-nom) ? GenreBouton.choisi : GenreBouton.secondaire;
-        active => { root.choisit(i); }
-    }
 }
 
 component Reglage inherits VerticalLayout {
@@ -100,8 +84,7 @@ export component NouveauTest inherits VerticalLayout {
                     texte: @tr("Démarrer le test");
                     prefixe: "▶";
                     genre: GenreBouton.principal;
-                    min-width: 280px;
-                    min-height: 62px;
+                    hauteur: 62px;
                     active => { Test.demarrer(); }
                 }
                 VerticalLayout {
@@ -144,7 +127,7 @@ export component NouveauTest inherits VerticalLayout {
             Reglage {
                 intitule: @tr("Bascule toutes les");
                 aide: @tr("Un intervalle plus long laisse plus de temps pour comparer, mais allonge le test.");
-                Rangee {
+                Choix {
                     options: [@tr("10 s"), @tr("20 s"), @tr("45 s"), @tr("2 min")];
                     choisi: root.position-intervalle;
                     choisit(i) => { Test.intervalle-s = [10, 20, 45, 120][i]; }
@@ -153,7 +136,7 @@ export component NouveauTest inherits VerticalLayout {
             Reglage {
                 intitule: @tr("Durée du test");
                 aide: Test.precis ? @tr("Plus de duels, une courbe plus fiable.") : @tr("Un premier résultat en une vingtaine de minutes.");
-                Rangee {
+                Choix {
                     options: [@tr("Rapide · 12 duels"), @tr("Précis · 30 duels")];
                     choisi: Test.precis ? 1 : 0;
                     choisit(i) => { Test.precis = i == 1; }
@@ -164,7 +147,7 @@ export component NouveauTest inherits VerticalLayout {
             intitule: @tr("Zone à tester");
             aide: @tr("Les duels ne testeront que cette zone.");
             if Test.zones.length == 0: Paragraphe { text: @tr("Aucune zone à proposer pour le moment."); }
-            Rangee {
+            Choix {
                 options: Test.zones;
                 choisi: Test.zone-choisie;
                 choisit(i) => { Test.zone-choisie = i; }
@@ -174,7 +157,7 @@ export component NouveauTest inherits VerticalLayout {
             intitule: @tr("Autre profil");
             aide: @tr("Ce profil sera comparé à ta référence.");
             if Test.profils.length == 0: Paragraphe { text: @tr("Aucun autre profil à comparer pour le moment."); }
-            Rangee {
+            Choix {
                 options: Test.profils;
                 choisi-nom: Test.autre-profil;
                 choisit(i) => { Test.autre-profil = Test.profils[i]; }

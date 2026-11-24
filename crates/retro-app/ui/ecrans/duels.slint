@@ -3,12 +3,6 @@ import { Test, Appli, Ecran, EtatTest } from "../etat.slint";
 import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Touche, Segments, Platine, Separateur } from "../composants.slint";
 import { EtapesTest } from "nouveau_test_parts.slint";
 
-// Un bouton dont la largeur suit le texte (Bouton n'a pas de largeur préférée).
-component BoutonTexte inherits Bouton {
-    min-width: 44px + self.texte.character-count * 8.5px + (self.prefixe != "" ? 22px : 0px);
-    max-width: self.min-width + 60px;
-}
-
 // Un grand bouton de réponse : A, Pareil, B. Utilisable à la souris comme au clavier.
 component Reponse inherits Rectangle {
     in property <string> lettre;
@@ -186,25 +180,25 @@ export component Duels inherits VerticalLayout {
             signe: "II";
             titre: @tr("En pause · appel Discord");
             texte: @tr("Ton profil reste actif. Le test reprend tout seul 10 s après la fin de l’appel, au même passage.");
-            BoutonTexte { texte: @tr("Reprendre maintenant"); prefixe: "▶"; active => { Test.reprendre(); } }
+            Bouton { texte: @tr("Reprendre maintenant"); prefixe: "▶"; active => { Test.reprendre(); } }
         }
         if Test.etat == EtatTest.pause: Bandeau {
             signe: "II";
             titre: @tr("Test en pause");
             texte: @tr("Rien ne bascule tant que tu ne reprends pas. Le test repart au même passage.");
-            BoutonTexte { texte: @tr("Reprendre"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.reprendre(); } }
+            Bouton { texte: @tr("Reprendre"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.reprendre(); } }
         }
         if Test.etat == EtatTest.pret: Bandeau {
             signe: "▶";
             titre: @tr("Prêt pour ce duel");
             texte: @tr("Lance l’écoute quand tu es prêt : A et B alternent, tu réponds à la fin.");
-            BoutonTexte { texte: @tr("Commencer"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.demarrer(); } }
+            Bouton { texte: @tr("Commencer"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.demarrer(); } }
         }
         if Test.etat == EtatTest.termine: Bandeau {
             signe: "✓";
             titre: @tr("Test terminé");
             texte: @tr("Tous les duels sont jugés. Ton résultat est prêt.");
-            BoutonTexte { texte: @tr("Voir le résultat"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.resultat); } }
+            Bouton { texte: @tr("Voir le résultat"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.resultat); } }
         }
     }
 
@@ -245,14 +239,14 @@ export component Duels inherits VerticalLayout {
             padding-top: 10px;
             spacing: 14px;
             alignment: start;
-            if !en-pause: BoutonTexte { texte: @tr("Mettre en pause"); prefixe: "⏸"; active => { Test.pause(); } }
-            if en-pause: BoutonTexte { texte: @tr("Reprendre"); prefixe: "▶"; active => { Test.reprendre(); } }
-            BoutonTexte { texte: @tr("Passer ce duel"); active => { Test.passer(); } }
-            BoutonTexte { texte: @tr("Recommencer ce duel"); active => { Test.recommencer(); } }
+            if !en-pause: Bouton { texte: @tr("Mettre en pause"); prefixe: "⏸"; active => { Test.pause(); } }
+            if en-pause: Bouton { texte: @tr("Reprendre"); prefixe: "▶"; active => { Test.reprendre(); } }
+            Bouton { texte: @tr("Passer ce duel"); active => { Test.passer(); } }
+            Bouton { texte: @tr("Recommencer ce duel"); active => { Test.recommencer(); } }
             VerticalLayout {
                 alignment: center;
                 horizontal-stretch: 0;
-                BoutonTexte { texte: @tr("Arrêter le test…"); genre: GenreBouton.lien; active => { Test.arreter(); } }
+                Bouton { texte: @tr("Arrêter le test…"); genre: GenreBouton.lien; active => { Test.arreter(); } }
             }
         }
         Paragraphe { text: @tr("La question arrivera dans la mini-fenêtre, même par-dessus un jeu."); }

@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Visualiseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Vumetre, Pastille } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Vumetre, Pastille, Format } from "../composants.slint";
 
 // Une mesure : étiquette, valeur à largeur fixe (la mise en page ne bouge pas quand le chiffre change), unité.
 component Mesure inherits Rectangle {
@@ -89,9 +89,9 @@ export component EcranVisualiseur inherits VerticalLayout {
     alignment: start;
     spacing: 28px;
 
-    property <string> niveau-texte: round(Visualiseur.niveau-db * 10) / 10 + "";
-    property <string> crete-texte: round(Visualiseur.crete-db * 10) / 10 + "";
-    property <string> lufs-texte: round(Visualiseur.volume-lufs * 10) / 10 + "";
+    property <string> niveau-texte: Format.nombre(Visualiseur.niveau-db, false);
+    property <string> crete-texte: Format.nombre(Visualiseur.crete-db, false);
+    property <string> lufs-texte: Format.nombre(Visualiseur.volume-lufs, false);
 
     HorizontalLayout {
         spacing: 24px;
@@ -122,7 +122,7 @@ export component EcranVisualiseur inherits VerticalLayout {
             HorizontalLayout {
                 spacing: 12px;
                 Mesure { nom: @tr("Niveau"); valeur: Visualiseur.capture-active ? niveau-texte : "–"; }
-                Mesure { nom: @tr("Crête"); valeur: Visualiseur.capture-active ? crete-texte : "–"; encre: Visualiseur.crete-db > -1 ? Theme.erreur : Theme.ambre; }
+                Mesure { nom: @tr("Crête"); valeur: Visualiseur.capture-active ? crete-texte : "–"; encre: Visualiseur.crete-db > -1 ? Theme.erreur : Theme.a; }
             }
             Paragraphe {
                 text: @tr("Niveau du signal envoyé au casque. 0 dB, c’est la saturation : au-dessus, ça grésille.");

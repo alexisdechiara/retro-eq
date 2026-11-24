@@ -1,6 +1,5 @@
 import { Theme } from "../theme.slint";
-import { BoutonAuto, ChoixAuto } from "reglages_parts.slint";
-import { Titre, TitreSection, Paragraphe, Carte, LigneEtat, Separateur } from "../composants.slint";
+import { Titre, TitreSection, Paragraphe, Carte, Bouton, LigneEtat, Separateur } from "../composants.slint";
 import { Diagnostic, EtatControle } from "../etat.slint";
 
 component LigneDossier inherits HorizontalLayout {
@@ -23,7 +22,7 @@ component LigneDossier inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         horizontal-stretch: 0;
-        BoutonAuto { texte: @tr("Ouvrir"); actif: chemin != ""; active => { Diagnostic.ouvrir-dossier(chemin); } }
+        Bouton { texte: @tr("Ouvrir"); actif: chemin != ""; active => { Diagnostic.ouvrir-dossier(chemin); } }
     }
 }
 
@@ -41,7 +40,7 @@ export component EcranDiagnostic inherits VerticalLayout {
         VerticalLayout {
             alignment: start;
             horizontal-stretch: 0;
-            BoutonAuto {
+            Bouton {
                 texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
                 prefixe: Diagnostic.en-cours ? "" : "⟳";
                 actif: !Diagnostic.en-cours;
@@ -60,7 +59,7 @@ export component EcranDiagnostic inherits VerticalLayout {
                 vertical-alignment: center;
                 font-family: Theme.chiffres;
                 font-size: 16px;
-                color: Theme.ambre;
+                color: Theme.texte;
                 wrap: word-wrap;
             }
         }
