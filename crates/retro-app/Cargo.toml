@@ -17,6 +17,7 @@ retro-dsp.workspace = true
 retro-engine.workspace = true
 retro-audio.workspace = true
 slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "renderer-software"] }
+i-slint-backend-winit = "=1.19.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]

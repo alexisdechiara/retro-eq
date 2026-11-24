@@ -30,6 +30,7 @@ export global Appli {
     in property <bool> annonce-erreur: false;
     callback aller(Ecran);
     callback deplacer-fenetre();
+    callback redimensionner(int);                // 0 haut, 1 droite, 2 bas, 3 gauche, 4 à 7 les coins dans le sens horaire depuis haut-gauche
     callback reduire();
     callback agrandir();
     callback fermer();

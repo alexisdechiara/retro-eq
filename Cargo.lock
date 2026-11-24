@@ -3434,6 +3434,7 @@ dependencies = [
 name = "retro-app"
 version = "0.1.0"
 dependencies = [
+ "i-slint-backend-winit",
  "image",
  "retro-audio",
  "retro-dsp",
@@ -3448,6 +3449,8 @@ version = "0.1.0"
 dependencies = [
  "retro-dsp",
  "thiserror 2.0.21",
+ "wasapi",
+ "windows",
 ]
 
 [[package]]
@@ -4589,6 +4592,19 @@ checksum = "b42e295b7452c4604982280d8586001fcad9b8b201cac67bca9771e7a7475403"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wasapi"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58b35dbcb6fae6fbaba9f6f52a22686bb405978ee112ed6eb33d98bd63c97583"
+dependencies = [
+ "log",
+ "num-integer",
+ "thiserror 2.0.21",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]

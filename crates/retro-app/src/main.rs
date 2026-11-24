@@ -1,6 +1,7 @@
 slint::include_modules!();
 
 mod demo;
+mod fenetre;
 
 /// Nom d'écran passé à `--ecran`, pour ouvrir l'appli directement dessus.
 fn ecran_depuis(nom: &str) -> Option<Ecran> {
@@ -40,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let hauteur = argument(&arguments, "--hauteur").and_then(|h| h.parse().ok()).unwrap_or(900);
         return capturer(&fenetre, chemin, hauteur);
     }
+    fenetre::brancher(&fenetre);
     fenetre.run()?;
     Ok(())
 }
