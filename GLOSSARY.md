@@ -24,7 +24,7 @@ _À éviter_ : vote, avis, résultat
 
 **Test** :
 Une série de duels qui part d'une référence et aboutit à une nouvelle version d'un profil.
-_À éviter_ : session, parcours, campagne
+_À éviter_ : session, campagne
 
 **Référence** :
 La version active avant le test, celle qu'on retrouve toujours quand le test s'arrête, quelle qu'en soit la raison.
@@ -33,6 +33,14 @@ _À éviter_ : preset d'origine, base, original
 **Variante** :
 Une version candidate fabriquée à partir de la référence pour lui être opposée dans un duel.
 _À éviter_ : candidat, proposition, mutation
+
+**Zone** :
+Une plage de fréquences nommée du spectre, par exemple « Graves · 60–250 Hz ». Une variante ne diffère de la référence que dans une zone.
+_À éviter_ : bande (qui désigne un fader de l'égaliseur), région, plage
+
+**Bande** :
+Un des 10 réglages de l'égaliseur, repéré par sa fréquence centrale. Une zone peut couvrir plusieurs bandes.
+_À éviter_ : zone, fader (qui est sa représentation à l'écran), filtre
 
 **Confiance** :
 Le niveau de certitude d'un résultat, d'après le risque qu'il soit dû au hasard : Indice, Probable ou Sûr.
@@ -61,4 +69,5 @@ _À éviter_ : backend, driver, pilote
 ## Ambiguïtés à lever
 
 - « Version » désigne à la fois un état d'un profil et, dans « version A » et « version B », les deux côtés d'un duel. À trancher : garder le même mot, ou nommer autrement les deux côtés d'un duel.
+- Les différentes façons de mener un test (duels en jeu, parcours complet, sur une musique, une seule zone, preset contre preset…) n'ont pas encore de nom. Candidat : « mode ». La maquette les montre comme des cassettes.
 - « Preset » revient dans `PRODUCT.md` (presets de départ, presets Peace) à côté de « profil ». À trancher : un preset est-il un profil comme un autre, ou un point de départ en lecture seule ?
