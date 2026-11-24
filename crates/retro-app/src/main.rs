@@ -5,8 +5,10 @@ mod ui {
 }
 pub use ui::*;
 
+mod controleur;
 mod demo;
 mod fenetre;
+mod textes;
 
 /// Nom d'écran passé à `--ecran`, pour ouvrir l'appli directement dessus.
 fn ecran_depuis(nom: &str) -> Option<Ecran> {
