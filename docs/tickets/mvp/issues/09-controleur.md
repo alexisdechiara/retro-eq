@@ -1,6 +1,6 @@
 # Contrôleur : relier domaine, moteur, capture et interface
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: 04, 05, 07, 08
 

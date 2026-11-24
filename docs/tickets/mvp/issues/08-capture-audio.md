@@ -1,6 +1,6 @@
 # Capture loopback, appli au premier plan, appel, plein écran
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 01
 

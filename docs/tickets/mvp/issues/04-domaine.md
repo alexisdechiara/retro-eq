@@ -1,6 +1,6 @@
 # Profils, versions, plan de test, confiance, résultat, stockage
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 01
 

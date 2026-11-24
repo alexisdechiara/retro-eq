@@ -1,6 +1,6 @@
 # Déroulement d'un test (machine à états)
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Blocked by: 04
 

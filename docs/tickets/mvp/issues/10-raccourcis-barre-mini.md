@@ -1,6 +1,6 @@
 # Raccourcis globaux, barre des tâches, mini-fenêtre
 
-Status: ready-for-agent
+Status: claimed
 Type: task
 Blocked by: 09
 
