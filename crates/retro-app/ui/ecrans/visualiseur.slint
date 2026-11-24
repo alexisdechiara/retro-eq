@@ -1,8 +1,256 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { Appli, Visualiseur } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Vumetre, Pastille } from "../composants.slint";
+
+// Une mesure : étiquette, valeur à largeur fixe (la mise en page ne bouge pas quand le chiffre change), unité.
+component Mesure inherits Rectangle {
+    in property <string> nom;
+    in property <string> valeur;
+    in property <string> unite: "dB";
+    in property <color> encre: Theme.a;
+    in property <string> note: "";
+    background: Theme.ecran;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.trait;
+    min-height: 84px;
+    max-height: 120px;
+    vertical-stretch: 0;
+    VerticalLayout {
+        padding: 12px;
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 4px;
+        Etiquette { contenu: nom; }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Text {
+                text: valeur;
+                font-family: Theme.chiffres;
+                font-weight: 500;
+                font-size: 30px;
+                color: encre;
+                horizontal-alignment: right;
+                min-width: 108px;
+                horizontal-stretch: 0;
+            }
+            Text {
+                text: unite;
+                font-family: Theme.chiffres;
+                font-size: 16px;
+                color: Theme.discret;
+                vertical-alignment: bottom;
+                horizontal-stretch: 0;
+            }
+        }
+        if note != "": Text {
+            text: note;
+            font-family: Theme.courant;
+            font-size: 13px;
+            color: Theme.discret;
+        }
+    }
+}
+
+// Une barre du spectre en segments de LED : turquoise, ambre vers le haut, rouille au sommet.
+component BarreLed inherits Rectangle {
+    in property <float> v;
+    property <float> p: clamp(v, 0, 1);
+    Rectangle {
+        y: parent.height * (1 - min(p, 0.7));
+        height: parent.height * min(p, 0.7);
+        background: Theme.a;
+    }
+    if p > 0.7: Rectangle {
+        y: parent.height * (1 - min(p, 0.88));
+        height: parent.height * (min(p, 0.88) - 0.7);
+        background: Theme.ambre;
+    }
+    if p > 0.88: Rectangle {
+        y: parent.height * (1 - p);
+        height: parent.height * (p - 0.88);
+        background: Theme.rouille;
+    }
+}
+
+component RepereFrequence inherits Text {
+    in property <float> fraction;
+    in property <length> zone;
+    x: zone * fraction - 22px;
+    width: 44px;
+    horizontal-alignment: center;
+    font-family: Theme.chiffres;
+    font-size: 12px;
+    color: Theme.discret;
+}
 
 export component EcranVisualiseur inherits VerticalLayout {
     alignment: start;
-    spacing: 24px;
-    Titre { contenu: @tr("Visualiseur"); }
+    spacing: 28px;
+
+    property <string> niveau-texte: round(Visualiseur.niveau-db * 10) / 10 + "";
+    property <string> crete-texte: round(Visualiseur.crete-db * 10) / 10 + "";
+    property <string> lufs-texte: round(Visualiseur.volume-lufs * 10) / 10 + "";
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 12px;
+            Titre { contenu: @tr("Visualiseur"); }
+            Paragraphe {
+                text: @tr("Ce qui sort de ton casque en ce moment : le niveau du signal et le spectre du son, avec ta courbe d’égaliseur par-dessus.");
+                font-size: 18px;
+                max-width: 660px;
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 24px;
+        // Niveau : vumètre et mesures.
+        Carte {
+            horizontal-stretch: 1;
+            TitreSection { contenu: @tr("Niveau du signal"); }
+            if Visualiseur.capture-active: Etiquette { contenu: @tr("Source : {}", Visualiseur.source); }
+            Vumetre {
+                niveau-db: Visualiseur.capture-active ? Visualiseur.niveau-db : -60;
+                min-height: 190px;
+                accessible-role: image;
+                accessible-label: @tr("Vumètre : niveau du signal");
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                Mesure { nom: @tr("Niveau"); valeur: Visualiseur.capture-active ? niveau-texte : "–"; }
+                Mesure { nom: @tr("Crête"); valeur: Visualiseur.capture-active ? crete-texte : "–"; encre: Visualiseur.crete-db > -1 ? Theme.erreur : Theme.ambre; }
+            }
+            Paragraphe {
+                text: @tr("Niveau du signal envoyé au casque. 0 dB, c’est la saturation : au-dessus, ça grésille.");
+                font-size: 14px;
+            }
+        }
+        // Volume perçu, estimé.
+        Carte {
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 12px;
+                TitreSection { contenu: @tr("À tes oreilles"); }
+                Rectangle { }
+                Pastille { texte: @tr("Estimé").to-uppercase(); taille: 14px; }
+            }
+            Mesure {
+                nom: @tr("Volume perçu");
+                valeur: Visualiseur.capture-active ? lufs-texte : "–";
+                unite: "LUFS";
+            }
+            Paragraphe {
+                text: @tr("C’est une estimation : l’appli ne peut pas connaître le niveau réel de son à ton oreille, qui dépend du volume de ton casque et de sa sensibilité.");
+                font-size: 15px;
+            }
+        }
+    }
+
+    // Le spectre.
+    Carte {
+        TitreSection { contenu: @tr("Ce que tu entends"); }
+        Paragraphe {
+            text: @tr("Spectre du son qui part vers le casque, des graves aux aigus. La ligne claire est ta courbe d’égaliseur.");
+            font-size: 15px;
+        }
+        zone := Rectangle {
+            background: Theme.ecran;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: Theme.trait;
+            min-height: 320px;
+            clip: true;
+            VerticalLayout {
+                padding: 18px;
+                padding-bottom: 12px;
+                spacing: 10px;
+                graphe := Rectangle {
+                    vertical-stretch: 1;
+                    min-height: 240px;
+                    if Visualiseur.capture-active && Visualiseur.bandes.length > 0: HorizontalLayout {
+                        spacing: 3px;
+                        for v in Visualiseur.bandes: BarreLed {
+                            v: v;
+                        }
+                    }
+                    // Les fentes entre les segments de LED.
+                    if Visualiseur.capture-active && Visualiseur.bandes.length > 0: Rectangle {
+                        for i in 15: Rectangle {
+                            y: parent.height * (i + 1) / 16 - 1px;
+                            height: 2px;
+                            background: Theme.ecran;
+                        }
+                    }
+                    if Visualiseur.capture-active && Visualiseur.courbe != "": Path {
+                        viewbox-width: 1000;
+                        viewbox-height: 240;
+                        commands: Visualiseur.courbe;
+                        stroke: Theme.texte;
+                        stroke-width: 2.5px;
+                        fill: transparent;
+                    }
+                    if !Visualiseur.capture-active: VerticalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        padding: 20px;
+                        Text {
+                            text: @tr("Rien n’est capté pour l’instant");
+                            font-family: Theme.titres;
+                            font-weight: 700;
+                            font-size: 28px;
+                            letter-spacing: 1px;
+                            color: Theme.texte;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                        Paragraphe {
+                            text: @tr("Aucun son ne passe par Retro EQ. Lance de la musique ou un jeu sur la sortie audio choisie, et vérifie que l’égaliseur est actif : le spectre s’affichera tout seul.");
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+                // Axe des fréquences, de 20 Hz à 20 kHz, en échelle logarithmique.
+                Rectangle {
+                    height: 20px;
+                    RepereFrequence { zone: parent.width; fraction: 0; text: "20"; x: 0px; horizontal-alignment: left; }
+                    RepereFrequence { zone: parent.width; fraction: 0.133; text: "50"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.232; text: "100"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.333; text: "200"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.465; text: "500"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.566; text: "1k"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.667; text: "2k"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.799; text: "5k"; }
+                    RepereFrequence { zone: parent.width; fraction: 0.899; text: "10k"; }
+                    RepereFrequence { zone: parent.width; fraction: 1; text: "20k"; x: parent.width - 44px; horizontal-alignment: right; }
+                }
+                Text {
+                    text: @tr("Hz");
+                    font-family: Theme.chiffres;
+                    font-size: 12px;
+                    color: Theme.discret;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 24px;
+            alignment: start;
+            HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 0;
+                Rectangle { width: 22px; height: 12px; border-radius: 3px; background: Theme.a; y: 3px; }
+                Text { text: @tr("Le son en ce moment, par fréquence"); font-family: Theme.courant; font-size: 14px; color: Theme.discret; vertical-alignment: center; }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 0;
+                Rectangle { width: 22px; height: 3px; background: Theme.texte; y: 7px; }
+                Text { text: @tr("Ta courbe d’égaliseur (0 dB au milieu)"); font-family: Theme.courant; font-size: 14px; color: Theme.discret; vertical-alignment: center; }
+            }
+        }
+    }
 }

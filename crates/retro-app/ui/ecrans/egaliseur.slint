@@ -1,8 +1,251 @@
 import { Theme } from "../theme.slint";
-import { Titre } from "../composants.slint";
+import { Appli, Egaliseur } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Interrupteur, Fader, EcranCourbe, Lcd, Pastille, Separateur } from "../composants.slint";
 
 export component EcranEgaliseur inherits VerticalLayout {
     alignment: start;
-    spacing: 24px;
-    Titre { contenu: @tr("Égaliseur"); }
+    spacing: 28px;
+
+    property <string> preampli-texte: (Egaliseur.preampli-db > 0 ? "+" : "") + round(Egaliseur.preampli-db * 10) / 10 + " dB";
+
+    // En-tête : titre, phrase d'accroche, profil et interrupteur général.
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 12px;
+            horizontal-stretch: 1;
+            Titre { contenu: @tr("Égaliseur"); }
+            Paragraphe {
+                text: @tr("Ta courbe, bande par bande. Chaque changement s’entend tout de suite ; les duels restent le meilleur moyen de savoir si tu préfères.");
+                font-size: 18px;
+                max-width: 660px;
+            }
+        }
+        VerticalLayout {
+            alignment: end;
+            horizontal-stretch: 0;
+            spacing: 8px;
+            Interrupteur {
+                texte: @tr("Égaliseur actif");
+                coche: Appli.egaliseur-actif;
+                bascule(v) => { Appli.basculer-egaliseur(); }
+                width: 300px;
+            }
+        }
+    }
+
+    // Le rack : afficheurs LCD, courbe de réponse, rangée de dix faders.
+    Rectangle {
+        background: Theme.surface;
+        border-radius: Theme.rayon-carte;
+        border-width: 1.5px;
+        border-color: Theme.trait;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 18px;
+        drop-shadow-color: #000000b0;
+        VerticalLayout {
+            padding: 28px;
+            spacing: 20px;
+            HorizontalLayout {
+                spacing: 16px;
+                alignment: start;
+                Rectangle {
+                    background: Theme.ecran;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.trait;
+                    horizontal-stretch: 0;
+                    min-width: 300px;
+                    VerticalLayout {
+                        padding: 12px;
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        spacing: 4px;
+                        Etiquette { contenu: @tr("Profil"); }
+                        Text {
+                            text: Egaliseur.profil == "" ? @tr("Aucun profil") : Egaliseur.profil;
+                            font-family: Theme.chiffres;
+                            font-weight: 500;
+                            font-size: 24px;
+                            color: Theme.a;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: @tr("graphique · 10 bandes");
+                            font-family: Theme.chiffres;
+                            font-size: 13px;
+                            color: Theme.discret;
+                        }
+                    }
+                }
+                Rectangle {
+                    background: Theme.ecran;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.trait;
+                    horizontal-stretch: 0;
+                    min-width: 240px;
+                    VerticalLayout {
+                        padding: 12px;
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        spacing: 4px;
+                        Etiquette { contenu: @tr("Préampli"); }
+                        Text {
+                            text: preampli-texte;
+                            font-family: Theme.chiffres;
+                            font-weight: 500;
+                            font-size: 24px;
+                            color: Theme.a;
+                            min-width: 120px;
+                        }
+                        Text {
+                            text: Egaliseur.preampli-auto ? @tr("automatique") : @tr("manuel");
+                            font-family: Theme.chiffres;
+                            font-size: 13px;
+                            color: Theme.discret;
+                        }
+                    }
+                }
+            }
+            EcranCourbe {
+                courbe: Egaliseur.courbe;
+                min-height: 170px;
+                accessible-role: image;
+                accessible-label: @tr("Courbe de réponse de l’égaliseur");
+            }
+            // Les dix faders, dans un panneau creux comme sur un vrai rack.
+            Rectangle {
+                background: Theme.ecran;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Theme.trait;
+                HorizontalLayout {
+                    padding: 18px;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 6px;
+                    for gain[i] in Egaliseur.gains: Fader {
+                        valeur: gain;
+                        etiquette: i < Egaliseur.frequences.length ? Egaliseur.frequences[i] : "";
+                        min-height: 280px;
+                        regle(v) => { Egaliseur.regler(i, v); }
+                    }
+                }
+            }
+            Paragraphe {
+                text: @tr("Glisse un fader, ou choisis-le au clavier : flèches haut et bas pour un demi-dB, 0 ou Début pour le remettre à zéro. Double-clic : remet la bande à 0.");
+                font-size: 14px;
+            }
+            if Egaliseur.filtres-supplementaires > 0: Rectangle {
+                background: Theme.doux;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.trait;
+                HorizontalLayout {
+                    padding: 14px;
+                    spacing: 12px;
+                    Text {
+                        text: "i";
+                        font-family: Theme.chiffres;
+                        font-weight: 700;
+                        font-size: 16px;
+                        color: Theme.ambre;
+                        vertical-alignment: center;
+                        width: 12px;
+                    }
+                    Paragraphe {
+                        text: @tr("Ce profil contient {} filtres en plus des 10 bandes : ils sont conservés.", Egaliseur.filtres-supplementaires);
+                        color: Theme.texte;
+                        font-size: 15px;
+                        horizontal-alignment: left;
+                    }
+                }
+            }
+        }
+    }
+
+    // Préampli.
+    Carte {
+        TitreSection { contenu: @tr("Préampli"); }
+        Interrupteur {
+            texte: @tr("Préampli automatique");
+            aide: @tr("Le préampli est réglé au plus petit niveau qui évite la saturation avec ta courbe.");
+            coche: Egaliseur.preampli-auto;
+            bascule(v) => { Egaliseur.basculer-preampli-auto(); }
+        }
+        Separateur { }
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                Etiquette { contenu: Egaliseur.preampli-auto ? @tr("Préampli (automatique)") : @tr("Préampli (manuel)"); }
+            }
+            Bouton {
+                texte: "−";
+                accessible-label: @tr("Baisser le préampli d’un demi-dB");
+                actif: !Egaliseur.preampli-auto;
+                active => { Egaliseur.regler-preampli(max(-24, Egaliseur.preampli-db - 0.5)); }
+            }
+            Rectangle {
+                width: 130px;
+                height: Theme.cible;
+                border-radius: 8px;
+                background: Theme.ecran;
+                border-width: 1px;
+                border-color: Theme.trait;
+                opacity: Egaliseur.preampli-auto ? 0.6 : 1;
+                Chiffres {
+                    text: preampli-texte;
+                    font-size: 20px;
+                    color: Theme.a;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Bouton {
+                texte: "+";
+                accessible-label: @tr("Monter le préampli d’un demi-dB");
+                actif: !Egaliseur.preampli-auto;
+                active => { Egaliseur.regler-preampli(min(0, Egaliseur.preampli-db + 0.5)); }
+            }
+        }
+        if Egaliseur.preampli-auto: Paragraphe {
+            text: @tr("Le réglage manuel est désactivé : en mode automatique, le préampli est le plus petit qui évite la saturation.");
+            font-size: 14px;
+        }
+    }
+
+    // Actions.
+    Carte {
+        TitreSection { contenu: @tr("Actions"); }
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            Bouton {
+                texte: @tr("Remettre à plat");
+                min-width: 180px;
+                active => { Egaliseur.remettre-a-plat(); }
+            }
+            if Egaliseur.modifie: Bouton {
+                texte: @tr("Annuler");
+                min-width: 120px;
+                active => { Egaliseur.annuler(); }
+            }
+            if Egaliseur.modifie: Bouton {
+                texte: @tr("Enregistrer une nouvelle version");
+                min-width: 340px;
+                genre: GenreBouton.principal;
+                active => { Egaliseur.enregistrer(); }
+            }
+        }
+        Paragraphe {
+            text: Egaliseur.modifie
+                ? @tr("Tu as modifié la courbe. Enregistrer crée une nouvelle version du profil : rien n’est écrasé, tu peux toujours revenir à la précédente.")
+                : @tr("Aucune modification en cours. Quand tu changes un fader, tu peux enregistrer une nouvelle version ; rien n’est écrasé.");
+            font-size: 14px;
+        }
+    }
 }
