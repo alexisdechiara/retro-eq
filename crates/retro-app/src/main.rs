@@ -1,4 +1,9 @@
-slint::include_modules!();
+// Le code Rust que Slint génère depuis les fichiers .slint. Nos règles de lint ne s'y appliquent pas.
+#[allow(clippy::all, clippy::unwrap_used)]
+mod ui {
+    slint::include_modules!();
+}
+pub use ui::*;
 
 mod demo;
 mod fenetre;
@@ -33,12 +38,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ecran) = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom)) {
         fenetre.global::<Appli>().set_ecran(ecran);
     }
-    fenetre.global::<Appli>().set_rail(arguments.iter().any(|a| a == "--rail"));
+    fenetre
+        .global::<Appli>()
+        .set_rail(arguments.iter().any(|a| a == "--rail"));
     if arguments.iter().any(|a| a == "--demo") {
         demo::remplir(&fenetre);
     }
     if let Some(chemin) = argument(&arguments, "--capture") {
-        let hauteur = argument(&arguments, "--hauteur").and_then(|h| h.parse().ok()).unwrap_or(900);
+        let hauteur = argument(&arguments, "--hauteur")
+            .and_then(|h| h.parse().ok())
+            .unwrap_or(900);
         return capturer(&fenetre, chemin, hauteur);
     }
     fenetre::brancher(&fenetre);
@@ -48,16 +57,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Affiche la fenêtre, enregistre ce qu'elle montre dans un PNG, puis quitte.
 /// Sert à comparer l'appli à la maquette sans écran.
-fn capturer(fenetre: &FenetrePrincipale, chemin: String, hauteur: u32) -> Result<(), Box<dyn std::error::Error>> {
-    fenetre.window().set_size(slint::PhysicalSize::new(1440, hauteur));
+fn capturer(
+    fenetre: &FenetrePrincipale,
+    chemin: String,
+    hauteur: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    fenetre
+        .window()
+        .set_size(slint::PhysicalSize::new(1440, hauteur));
     fenetre.show()?;
     let faible = fenetre.as_weak();
     slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {
         if let Some(fenetre) = faible.upgrade() {
-            let resultat = fenetre.window().take_snapshot().map_err(|e| e.to_string()).and_then(|pixels| {
-                image::save_buffer(&chemin, pixels.as_bytes(), pixels.width(), pixels.height(), image::ColorType::Rgba8)
+            let resultat = fenetre
+                .window()
+                .take_snapshot()
+                .map_err(|e| e.to_string())
+                .and_then(|pixels| {
+                    image::save_buffer(
+                        &chemin,
+                        pixels.as_bytes(),
+                        pixels.width(),
+                        pixels.height(),
+                        image::ColorType::Rgba8,
+                    )
                     .map_err(|e| e.to_string())
-            });
+                });
             if let Err(erreur) = resultat {
                 eprintln!("capture impossible : {erreur}");
             }

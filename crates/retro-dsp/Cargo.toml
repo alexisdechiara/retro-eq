@@ -9,7 +9,6 @@ rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
-thiserror.workspace = true
 realfft = "3.5"
 
 [lints]
