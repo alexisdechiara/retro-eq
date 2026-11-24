@@ -2,10 +2,10 @@
 //!
 //! # Ce que le format est (observé sur des fichiers réels)
 //!
-//! Peace n'a pas de spécification publique. Ce module est écrit d'après des
-//! fichiers réels et d'après le code et les textes de Peace lui-même
-//! (miroir `mchampanis/peace-equalizer-apo-extension` sur GitHub), voir
-//! `fixtures/README.md` pour les sources.
+//! Peace n'a pas de spécification publique. Ce module est écrit d'après la
+//! structure observée sur des préréglages Peace publiquement disponibles ; les
+//! fichiers d'essai de `fixtures/` sont écrits à la main pour Retro EQ (voir
+//! `fixtures/README.md`).
 //!
 //! C'est un fichier INI (souvent en fins de ligne CRLF, sans BOM). Les bandes
 //! du réglage « Tous les haut-parleurs » sont réparties sur plusieurs sections,
@@ -291,23 +291,23 @@ mod tests {
     use crate::formats::RaisonIgnoree;
     use retro_dsp::TypeFiltre;
 
-    const MINIMAL: &str = include_str!("fixtures/peace_minimal.peace");
-    const GRADO: &str = include_str!("fixtures/peace_grado_rs2x.peace");
-    const HE4XX: &str = include_str!("fixtures/peace_he4xx.peace");
-    const PLATEAU_BAS: &str = include_str!("fixtures/peace_low_shelf_1khz.peace");
-    const TILT: &str = include_str!("fixtures/peace_tilt_10db.peace");
-    const GRAPHIC_VIDE: &str = include_str!("fixtures/peace_graphic_eq_vide.peace");
+    const MINIMAL: &str = include_str!("fixtures/peace_exemple_minimal.peace");
+    const GRADO: &str = include_str!("fixtures/peace_exemple_bandes_eteintes.peace");
+    const PLATEAUX: &str = include_str!("fixtures/peace_exemple_plateaux.peace");
+    const PLATEAU_BAS: &str = include_str!("fixtures/peace_exemple_plateau_bas.peace");
+    const PENTE: &str = include_str!("fixtures/peace_exemple_pente.peace");
+    const GRAPHIC_VIDE: &str = include_str!("fixtures/peace_exemple_graphic_eq_vide.peace");
 
     #[test]
     fn lit_le_fichier_minimal_et_signale_les_types_non_geres() {
         // Filter2=2 (passe-haut) et Filter4=3 (passe-bande) ne sont pas représentables.
         let i = lire(MINIMAL).expect("lecture");
         assert_eq!(i.courbe.filtres.len(), 2);
-        assert_eq!(i.courbe.filtres[0].frequence_hz, 28.0);
-        assert_eq!(i.courbe.filtres[0].gain_db, 2.0);
-        assert_eq!(i.courbe.filtres[0].q, 1.0);
-        assert_eq!(i.courbe.filtres[1].frequence_hz, 1200.0);
-        assert_eq!(i.courbe.filtres[1].q, 1.6);
+        assert_eq!(i.courbe.filtres[0].frequence_hz, 45.0);
+        assert_eq!(i.courbe.filtres[0].gain_db, 1.5);
+        assert_eq!(i.courbe.filtres[0].q, 0.9);
+        assert_eq!(i.courbe.filtres[1].frequence_hz, 3500.0);
+        assert_eq!(i.courbe.filtres[1].q, 2.2);
         let raisons: Vec<_> = i.ignores.iter().map(|l| l.raison.clone()).collect();
         assert_eq!(
             raisons,
@@ -316,16 +316,16 @@ mod tests {
                 RaisonIgnoree::TypeFiltreNonGere("Peace 3".into()),
             ]
         );
-        assert_eq!(i.ignores[0].texte, "Frequency2=105");
+        assert_eq!(i.ignores[0].texte, "Frequency2=220");
         assert_eq!(i.courbe.preampli_db, 0.0);
     }
 
     #[test]
     fn les_bandes_desactivees_sont_ignorees() {
         let i = lire(GRADO).expect("lecture");
-        // 9 bandes, 6 désactivées (1, 3, 4, 5, 8, 9) : restent 100 Hz, 2100 Hz, 3000 Hz.
+        // 9 bandes, 6 désactivées (1, 2, 4, 6, 8, 9) : restent 250 Hz, 900 Hz, 2600 Hz.
         let freqs: Vec<_> = i.courbe.filtres.iter().map(|f| f.frequence_hz).collect();
-        assert_eq!(freqs, [100.0, 2100.0, 3000.0]);
+        assert_eq!(freqs, [250.0, 900.0, 2600.0]);
         assert_eq!(
             i.ignores
                 .iter()
@@ -337,25 +337,25 @@ mod tests {
 
     #[test]
     fn lit_les_plateaux_bas_et_haut() {
-        let i = lire(HE4XX).expect("lecture");
+        let i = lire(PLATEAUX).expect("lecture");
         assert_eq!(i.courbe.filtres[0].type_filtre, TypeFiltre::Cloche);
         assert_eq!(i.courbe.filtres[1].type_filtre, TypeFiltre::PlateauBas);
-        assert_eq!(i.courbe.filtres[1].frequence_hz, 105.0);
+        assert_eq!(i.courbe.filtres[1].frequence_hz, 95.0);
         assert_eq!(i.courbe.filtres[2].type_filtre, TypeFiltre::PlateauHaut);
-        assert_eq!(i.courbe.filtres[2].frequence_hz, 580.0);
+        assert_eq!(i.courbe.filtres[2].frequence_hz, 640.0);
         assert_eq!(i.courbe.filtres.len(), 10);
     }
 
     #[test]
-    fn lit_un_preset_officiel_de_peace_avec_preampli() {
+    fn lit_un_preset_a_un_seul_plateau_avec_preampli() {
         let i = lire(PLATEAU_BAS).expect("lecture");
-        assert_eq!(i.courbe.preampli_db, -10.0);
+        assert_eq!(i.courbe.preampli_db, -6.0);
         assert_eq!(i.courbe.filtres.len(), 1);
         let f = i.courbe.filtres[0];
         assert_eq!(f.type_filtre, TypeFiltre::PlateauBas);
-        assert_eq!(f.frequence_hz, 1000.0);
-        assert_eq!(f.gain_db, 10.0);
-        assert_eq!(f.q, 1.41);
+        assert_eq!(f.frequence_hz, 2500.0);
+        assert_eq!(f.gain_db, 6.0);
+        assert_eq!(f.q, 0.85);
         // Les 12 autres bandes sont à plat.
         assert_eq!(
             i.ignores
@@ -367,9 +367,9 @@ mod tests {
     }
 
     #[test]
-    fn les_plateaux_a_pente_en_db_du_preset_tilt_sont_ignores() {
+    fn les_plateaux_a_pente_en_db_du_preset_pente_sont_ignores() {
         // Types 8 et 9 : plateaux réglés par une pente en dB, sans Q : non représentables.
-        let i = lire(TILT).expect("lecture");
+        let i = lire(PENTE).expect("lecture");
         assert!(i.courbe.filtres.is_empty());
         let nb = i
             .ignores

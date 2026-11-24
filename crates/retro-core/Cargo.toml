@@ -10,7 +10,7 @@ rust-version.workspace = true
 [dependencies]
 retro-dsp.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 
 [dev-dependencies]
