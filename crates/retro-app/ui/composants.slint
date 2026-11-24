@@ -65,8 +65,11 @@ export component Bouton {
     in property <string> prefixe: "";          // petit signe avant le texte : « ▶ », « ⏸ »
     callback active();
     min-height: Theme.cible;
-    min-width: Theme.cible;
+    // La largeur vient du texte : sans cela, un bouton s'écrase dans une rangée et s'étire dans une colonne.
+    min-width: max(Theme.cible, libelle.preferred-width + (genre == GenreBouton.lien ? 12px : 38px) + (prefixe != "" ? 26px : 0px));
+    preferred-width: self.min-width;
     preferred-height: Theme.cible;
+    max-height: Theme.cible;
     horizontal-stretch: 0;
     vertical-stretch: 0;
     accessible-role: button;
