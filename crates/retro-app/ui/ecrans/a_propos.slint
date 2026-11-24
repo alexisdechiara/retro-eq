@@ -41,6 +41,7 @@ export component APropos inherits VerticalLayout {
         }
         VerticalLayout {
             alignment: center;
+            horizontal-stretch: 1;
             spacing: 4px;
             Titre { contenu: @tr("Retro EQ"); }
             Paragraphe { text: @tr("Version {} · logiciel libre sous licence GPLv3", Appli.version); font-size: 18px; }

@@ -10,6 +10,7 @@ component Rangee inherits HorizontalLayout {
     min-height: Theme.cible;
     VerticalLayout {
         alignment: center;
+        horizontal-stretch: 1;
         spacing: 2px;
         Text { text: titre; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
         if aide != "": Text { text: aide; font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
