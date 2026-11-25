@@ -1234,7 +1234,7 @@ fn un_duel_rejoue_est_compte_selon_son_nouveau_tirage() {
         for i in 0..2 {
             // Chaque duel est interrompu une fois avant d'être répondu.
             b.ecouter_un_passage();
-            let raison = [E::Pause, E::PlusTard][i];
+            let raison = [E::Pause, E::PlusTard][i].clone();
             b.envoyer(raison);
             let e = b.envoyer(E::Reprendre);
             let (duel, prevu) = tirage_de(&e).unwrap();
