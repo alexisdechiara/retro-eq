@@ -161,7 +161,9 @@ component Cassette inherits VerticalLayout {
                 mouse-cursor: disponible ? MouseCursor.pointer : MouseCursor.default;
                 clicked => { portee.focus(); root.choisir(); }
             }
+            // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
             portee := FocusScope {
+                focus-on-click: false;
                 enabled: disponible;
                 key-pressed(e) => {
                     if (e.text == " " || e.text == Key.Return) { root.choisir(); return accept; }

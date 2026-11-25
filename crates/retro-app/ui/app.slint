@@ -51,8 +51,10 @@ component Onglet {
     if courant && !vertical: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
     if courant && vertical: Rectangle { x: 0px; width: 3px; height: 24px; border-radius: 1.5px; background: Theme.ambre; }
     if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 6px; }
-    zone := TouchArea { mouse-cursor: pointer; clicked => { root.active(); } }
+    zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
+    // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
     portee := FocusScope {
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
             return reject;
@@ -94,8 +96,9 @@ component OngletAccueil {
         if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 20px; }
     }
     if courant: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
-    zone := TouchArea { mouse-cursor: pointer; clicked => { root.active(); } }
+    zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
     portee := FocusScope {
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
             return reject;
