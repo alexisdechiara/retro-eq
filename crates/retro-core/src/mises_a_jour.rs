@@ -855,6 +855,54 @@ mod tests {
         }
     }
 
+    /// Le nom du fichier que la publication joint à la version doit être reconnu par
+    /// `est_un_installateur`, sinon l'appli n'afficherait jamais « Installateur : … ». On lit
+    /// le nom dans les trois fichiers qui le fixent : le script Inno Setup, le script de
+    /// construction et le workflow de publication.
+    #[test]
+    fn le_nom_de_l_installateur_publie_est_reconnu() {
+        const ISS: &str = include_str!("../../../installateur/retro-eq.iss");
+        const CONSTRUIRE: &str = include_str!("../../../installateur/construire.ps1");
+        const RELEASE: &str = include_str!("../../../.github/workflows/release.yml");
+
+        // Le texte entre `debut` et `.exe`, `.exe` compris, sur la première ligne qui le contient.
+        let nom_dans = |texte: &str, debut: &str| -> String {
+            let ligne = texte
+                .lines()
+                .find(|l| l.contains(debut))
+                .unwrap_or_else(|| panic!("« {debut} » absent"));
+            let depart = ligne.find(debut).unwrap_or(0) + debut.len();
+            let reste = &ligne[depart..];
+            let fin = reste.find(".exe").map_or(reste.len(), |i| i + 4);
+            reste[..fin].to_string()
+        };
+        let version = "0.2.0";
+
+        // Inno Setup : `OutputBaseFilename=retro-eq-{#AppVersion}-installateur-x64` (sans `.exe`).
+        let iss = ISS
+            .lines()
+            .find_map(|l| l.strip_prefix("OutputBaseFilename="))
+            .unwrap_or_else(|| panic!("OutputBaseFilename absent"))
+            .trim()
+            .replace("{#AppVersion}", version)
+            + ".exe";
+        // construire.ps1 : `"retro-eq-$version-installateur-x64.exe"`.
+        let ps1 = nom_dans(CONSTRUIRE, "\"retro-eq-").replace("$version", version);
+        let ps1 = format!("retro-eq-{ps1}");
+        // release.yml : `installateur/sortie/retro-eq-$env:VERSION-installateur-x64.exe`.
+        let yml = nom_dans(RELEASE, "installateur/sortie/").replace("$env:VERSION", version);
+
+        assert_eq!(iss, "retro-eq-0.2.0-installateur-x64.exe");
+        assert_eq!(ps1, iss, "construire.ps1 attend un autre nom que Inno Setup");
+        assert_eq!(yml, iss, "release.yml joint un autre nom que Inno Setup");
+        assert!(est_un_installateur(&iss), "{iss} n'est pas reconnu");
+
+        // L'archive jointe en plus ne doit pas être prise pour l'installateur.
+        let zip = nom_dans(RELEASE, "dist/retro-eq-").replace("$env:VERSION", version);
+        assert!(zip.contains("windows-x64"), "{zip}");
+        assert!(!est_un_installateur(&format!("retro-eq-{zip}")));
+    }
+
     #[test]
     fn les_notes_sont_du_texte_brut_tronque() {
         assert_eq!(notes_en_texte_brut("a\r\n\r\n\r\n\r\nb  \n"), "a\n\nb");
