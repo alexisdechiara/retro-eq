@@ -107,6 +107,90 @@ pub(super) fn finir_en_repondant(b: &mut Banc, h: &mut HasardGraine) -> u32 {
     reponses
 }
 
+/// ADR-0012, lu dans le journal : un duel qui a commencé à jouer puis a été interrompu
+/// par une pause (la référence a été entendue) ou recommencé ne redémarre jamais sans un
+/// nouveau tirage écrit juste avant.
+pub(super) fn verifier_les_nouveaux_tirages(journal: &[Entree]) {
+    let mut entame = false;
+    let mut a_retirer = false;
+    for (i, entree) in journal.iter().enumerate() {
+        match entree {
+            Entree::PassageDemarre { .. } => entame = true,
+            Entree::Pause { .. } => a_retirer |= entame,
+            Entree::DuelRecommence { .. } => a_retirer = true,
+            Entree::ReponseDonnee { .. }
+            | Entree::DuelPasse { .. }
+            | Entree::ReponseAnnulee { .. }
+            | Entree::DuelRetire { .. } => {
+                entame = false;
+                a_retirer = false;
+            }
+            Entree::DuelDemarre { duel, .. } => {
+                assert!(!a_retirer, "duel {duel} rejoué sans nouveau tirage (entrée {i})");
+                if i > 0 {
+                    if let Entree::DuelRetire { duel: retire, .. } = &journal[i - 1] {
+                        assert_eq!(retire, duel);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn sans_pause_la_reference_n_est_jamais_entendue_avant_la_fin_du_test() {
+    // La fuite relevée par la relecture : à l'intérieur d'un duel, tout `Appliquer` doit
+    // porter un côté. On envoie tout ce qui ne met pas en pause, sur des tests entiers.
+    let mut reecoutes = 0;
+    for graine in 300..360 {
+        let mut h = HasardGraine::new(graine);
+        let mut b = banc_au_hasard(&mut h);
+        b.demarrer();
+        let mut pas = 0;
+        while b.etat() != EtatTest::Termine {
+            pas += 1;
+            assert!(pas < 20_000);
+            // Jamais plus que le délai de réponse d'un coup : pas de pause automatique.
+            b.avancer(u64::from(h.entier(INTERVALLE as u32 + 2_000)));
+            let evt = match h.entier(40) {
+                0..=24 => Evenement::Tic,
+                25..=27 => Evenement::Reponse(reponse_au_hasard(&mut h)),
+                28 => Evenement::Annuler,
+                29 => Evenement::PasserDuel,
+                30..=31 => Evenement::RecommencerDuel,
+                32..=37 => Evenement::Reecouter {
+                    cote: cote_au_hasard(&mut h),
+                    appuye: h.pile_ou_face(),
+                },
+                38 => Evenement::PremierPlan("Jeu.exe".into()),
+                _ => Evenement::Reprendre,
+            };
+            let effets = b.envoyer(evt.clone());
+            if matches!(evt, Evenement::Reecouter { .. }) && !effets.is_empty() {
+                reecoutes += 1;
+            }
+            if b.etat() != EtatTest::Termine {
+                assert!(
+                    matches!(b.etat(), EtatTest::EnEcoute { .. } | EtatTest::AttenteReponse),
+                    "{:?}",
+                    b.etat()
+                );
+                assert!(
+                    appliquees(&effets).iter().all(|(cote, _)| cote.is_some()),
+                    "référence entendue en plein test après {evt:?}"
+                );
+            }
+        }
+        // Du premier passage à la dernière réponse : uniquement des côtés, puis la référence.
+        let toutes = appliquees(&b.tous);
+        let (derniere, avant) = toutes.split_last().unwrap();
+        assert_eq!(*derniere, (None, reference()));
+        assert!(avant.iter().all(|(cote, courbe)| cote.is_some() && *courbe != reference()));
+    }
+    assert!(reecoutes > 50, "{reecoutes}");
+}
+
 #[test]
 fn des_milliers_d_evenements_au_hasard_ne_cassent_aucun_invariant() {
     let mut etats_vus = std::collections::HashSet::new();
@@ -121,6 +205,7 @@ fn des_milliers_d_evenements_au_hasard_ne_cassent_aucun_invariant() {
             b.envoyer(evenement_au_hasard(&mut h, reponses, false));
             etats_vus.insert(std::mem::discriminant(&b.etat()));
         }
+        verifier_les_nouveaux_tirages(&b.journal);
         // Les horodatages du journal ne reculent jamais.
         assert!(b
             .journal

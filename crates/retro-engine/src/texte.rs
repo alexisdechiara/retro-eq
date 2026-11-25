@@ -112,11 +112,11 @@ mod tests {
         // 0,1 dB d'écart de niveau entre deux côtés d'un duel s'entendrait : on n'arrondit pas à 0,1.
         let c = Courbe {
             preampli_db: -4.37,
-            filtres: vec![filtre(TypeFiltre::Cloche, 1000.0, 2.456, 1.4142)],
+            filtres: vec![filtre(TypeFiltre::Cloche, 1000.0, 2.456, 1.3142)],
         };
         let texte = texte_config(&c);
         assert!(texte.contains("Preamp: -4.37 dB\n"), "{texte}");
-        assert!(texte.contains("Gain 2.46 dB Q 1.414\n"), "{texte}");
+        assert!(texte.contains("Gain 2.46 dB Q 1.314\n"), "{texte}");
     }
 
     #[test]

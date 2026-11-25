@@ -10,6 +10,15 @@ fn graves_plus() -> DuelPrevu {
     zone(Zone::Graves, Sens::Plus, true)
 }
 
+/// L'historique sans ce qui dépend de l'orientation tirée : (numéro, sujet, préférence).
+fn sens_de(b: &Banc) -> Vec<(u32, Sujet, Option<crate::plan::Preference>)> {
+    b.vue()
+        .historique
+        .iter()
+        .map(|d| (d.numero, d.sujet, d.preference))
+        .collect()
+}
+
 /// Reconstruit un banc depuis le journal d'un autre, comme au redémarrage de l'appli.
 fn rebatir(journal: &[Entree], t: u64) -> Banc {
     let (d, effets) = Deroulement::reprendre_depuis(journal, contexte(), t).unwrap();
@@ -89,6 +98,17 @@ fn un_journal_incoherent_est_une_erreur_pas_une_panique() {
             duel: verification(),
             horodatage_ms: 2,
         },
+        // Un nouveau tirage pour un autre duel que le duel courant, ou d'un autre sujet.
+        Entree::DuelRetire {
+            duel: 1,
+            prevu: controle(),
+            horodatage_ms: 2,
+        },
+        Entree::DuelRetire {
+            duel: 0,
+            prevu: graves_plus(),
+            horodatage_ms: 2,
+        },
         depart.clone(),
     ];
     for entree in cas {
@@ -148,22 +168,27 @@ fn le_test_repris_est_en_pause_reference_remise_et_rejoue_le_duel_interrompu() {
         }
     );
     assert_eq!((v.duel, v.total), (2, 3));
-    assert_eq!(
-        (v.passages_a, v.passages_b),
-        (0, 0),
-        "le duel sera rejoué en entier"
-    );
+    assert_eq!((v.passages_a, v.passages_b), (0, 0), "le duel sera rejoué en entier");
     assert_eq!(v.historique, b.vue().historique);
     assert!(r.envoyer(E::Tic).is_empty());
     assert!(r.repondre(Reponse::B).is_empty());
 
     r.envoyer(E::PremierPlan("Jeu.exe".into()));
     let e = r.envoyer(E::Reprendre);
-    let (cote_ref, _) = cotes_zone(Zone::Graves, Sens::Plus, &spectre());
+    // Le duel avait commencé et la référence vient d'être remise : nouveau tirage.
+    let (_, prevu) = tirage_de(&e).unwrap();
+    assert_eq!(prevu.sujet, graves_plus().sujet);
+    let (cote_ref, cote_var) = cotes_zone(Zone::Graves, Sens::Plus, &spectre());
+    let premier = prevu.ordre_passages[0];
     assert_eq!(
         e,
         vec![
             Effet::Journaliser(Entree::Reprise { horodatage_ms: t }),
+            Effet::Journaliser(Entree::DuelRetire {
+                duel: 1,
+                prevu,
+                horodatage_ms: t
+            }),
             Effet::Journaliser(Entree::DuelDemarre {
                 duel: 1,
                 horodatage_ms: t
@@ -171,16 +196,67 @@ fn le_test_repris_est_en_pause_reference_remise_et_rejoue_le_duel_interrompu() {
             Effet::Journaliser(Entree::PassageDemarre {
                 duel: 1,
                 passage: 0,
-                cote: Cote::A,
+                cote: premier,
                 appli_premier_plan: Some("Jeu.exe".into()),
                 horodatage_ms: t
             }),
             Effet::Appliquer {
-                cote: Some(Cote::A),
-                courbe: cote_ref
+                cote: Some(premier),
+                courbe: if premier == prevu.cote_reference() {
+                    cote_ref
+                } else {
+                    cote_var
+                }
             },
         ]
     );
+}
+
+#[test]
+fn un_duel_pas_encore_entame_n_est_pas_retire_a_la_reprise() {
+    // Arrêt juste après une réponse dont la suite n'a pas été écrite : le duel suivant
+    // n'a jamais été entendu, son tirage d'origine reste valable.
+    let mut b = Banc::nouveau(vec![controle(), graves_plus()]);
+    b.demarrer();
+    b.repondre(Reponse::Pareil);
+    let position = b
+        .journal
+        .iter()
+        .position(|e| matches!(e, Entree::ReponseDonnee { .. }))
+        .unwrap();
+    let mut r = rebatir(&b.journal[..=position], b.t);
+    let e = r.envoyer(E::Reprendre);
+    assert!(tirage_de(&e).is_none());
+    assert_eq!(r.prevu(1), graves_plus());
+}
+
+#[test]
+fn la_reprise_retrouve_les_duels_retires_et_compte_les_memes_duels() {
+    let mut b = Banc::nouveau(plan_gagnant());
+    b.demarrer();
+    // Duel 0 interrompu deux fois, puis répondu « la variante » selon le dernier tirage.
+    for _ in 0..2 {
+        b.ecouter_un_passage();
+        b.envoyer(E::Pause);
+        b.envoyer(E::Reprendre);
+    }
+    b.repondre_selon(crate::plan::Preference::Variante);
+    b.ecouter_un_passage();
+    b.envoyer(E::PlusTard);
+    b.envoyer(E::Reprendre);
+
+    let mut r = rebatir(&b.journal, b.t);
+    assert_eq!(r.d.plan, b.d.plan, "le plan joué, tirages compris");
+    assert_eq!(r.d.tirages, b.d.tirages);
+    assert_eq!(r.vue().historique, b.vue().historique);
+    // Les deux finissent le duel 1 sur un nouveau tirage commun (même graine, même rang).
+    b.envoyer(E::Pause);
+    let attendu = tirage_de(&b.envoyer(E::Reprendre)).unwrap();
+    assert_eq!(tirage_de(&r.envoyer(E::Reprendre)), Some(attendu));
+    for banc in [&mut b, &mut r] {
+        banc.repondre_selon(crate::plan::Preference::Variante);
+        assert!(banc.vue().est_verification);
+    }
 }
 
 #[test]
@@ -203,29 +279,56 @@ fn la_reprise_respecte_annulations_duels_passes_et_recommences() {
 
 #[test]
 fn la_reprise_retrouve_le_duel_de_verification_du_journal() {
-    let mut b = Banc::nouveau(vec![graves_plus()]);
+    use crate::plan::Preference as P;
+    let mut b = Banc::nouveau(plan_gagnant());
     b.demarrer();
     b.repondre(Reponse::B);
+    b.repondre(Reponse::A);
     b.ecouter_un_passage();
     assert!(b.vue().est_verification);
 
-    // Le contexte propose un autre tirage : c'est celui du journal qui doit être gardé.
+    // Le contexte propose un autre tirage : c'est celui du journal qui est gardé.
     let mut c = contexte();
     c.verification = duel(Sujet::Verification, true);
     let (d, effets) = Deroulement::reprendre_depuis(&b.journal, c, b.t).unwrap();
     let mut r = Banc::autour(d, reference(), b.t);
     r.executer(&effets);
-    assert_eq!(r.vue().total, 2);
-    assert!(r.vue().est_verification);
+    assert_eq!(r.vue().total, 3);
+    assert_eq!(r.prevu(2), verification());
+    // Le duel de vérification avait commencé : il est retiré, et reste une vérification.
     let e = r.envoyer(E::Reprendre);
-    assert_eq!(appliquees(&e), vec![b.appliquee_au_passage(1, 0)]);
-    r.repondre(Reponse::A); // dans le tirage du journal, A est la nouvelle version
+    let (duel, prevu) = tirage_de(&e).unwrap();
+    assert_eq!((duel, prevu.sujet), (2, Sujet::Verification));
+    assert!(r.vue().est_verification);
+    r.repondre_selon(P::Variante);
     let resultat = r.resultat().unwrap();
-    assert_eq!(resultat.verification, Some(Reponse::A));
-    assert_eq!(
-        resultat.verification_preference,
-        Some(crate::plan::Preference::Variante)
+    assert_eq!(resultat.verification_preference, Some(P::Variante));
+    assert!(resultat.recommandee);
+}
+
+#[test]
+fn les_reglages_des_variantes_sont_ceux_du_journal() {
+    // Air a un pas de 1 dB : avec un plancher à 0,5 dB, un duel perdu le divise par deux.
+    let mut p = parametres(
+        Mode::DuelsEnJeu { precis: false },
+        vec![zone(Zone::Air, Sens::Plus, true), controle()],
     );
+    p.variantes = ReglagesVariantes {
+        pas_initial_db: 4.0,
+        pas_plancher_db: 0.5,
+    };
+    let mut b = Banc::avec(p.clone());
+    let e = b.demarrer();
+    assert!(matches!(
+        &e[0],
+        Effet::Journaliser(Entree::TestDemarre { variantes, .. }) if *variantes == p.variantes
+    ));
+    b.repondre(Reponse::A);
+    // Le contexte de reprise porte d'autres réglages : ils sont ignorés.
+    let mut r = rebatir(&b.journal, b.t);
+    r.envoyer(E::Reprendre);
+    r.repondre(Reponse::Pareil);
+    assert_eq!(r.resultat().unwrap().nouveaux_pas[Zone::Air.index()], 0.5);
 }
 
 #[test]
@@ -268,10 +371,20 @@ fn remettre_au_debut_du_duel(b: &mut Banc) {
     b.envoyer(E::RecommencerDuel);
 }
 
+/// Le résultat sans la réponse brute à la vérification, qui dépend de l'orientation tirée.
+fn sans_reponse_brute(b: &Banc) -> Option<ResultatTest> {
+    b.resultat().map(|mut r| {
+        r.verification = None;
+        r
+    })
+}
+
 #[test]
 fn aller_retour_un_test_repris_finit_comme_l_original() {
+    use crate::plan::Preference as P;
     let mut repris = 0;
     let mut clos = 0;
+    let mut avec_changement = 0;
     for graine in 0..150 {
         let mut h = HasardGraine::new(1_000 + graine);
         let mut original = banc_au_hasard(&mut h);
@@ -308,57 +421,82 @@ fn aller_retour_un_test_repris_finit_comme_l_original() {
         copie.journal = journal;
         copie.executer(&effets);
 
-        // Ce qui est acquis est identique.
+        // Ce qui est acquis est identique, tirages compris.
         assert_eq!(copie.vue().historique, original.vue().historique);
         assert_eq!(copie.vue().total, original.vue().total);
         assert_eq!(copie.vue().duel, original.vue().duel);
         assert_eq!(copie.d.applis, original.d.applis);
         assert_eq!(copie.d.plan, original.d.plan);
+        assert_eq!(copie.d.tirages, original.d.tirages);
 
-        // La même suite d'événements, sur les deux.
+        // La même suite sur les deux. Le duel en cours n'aura pas forcément le même tirage
+        // des deux côtés : on répond donc par ce que la réponse veut dire (« la variante »,
+        // « la référence », « pareil »), et on compare ce que le test en retient.
         original.t = t;
         for b in [&mut original, &mut copie] {
             b.envoyer(E::PremierPlan("Suite.exe".into()));
         }
         remettre_au_debut_du_duel(&mut original);
         copie.envoyer(E::Reprendre);
-        assert_eq!(copie.etat(), original.etat());
 
         let mut suite = h.clone();
         let mut pas = 0;
         while original.etat() != EtatTest::Termine {
             pas += 1;
             assert!(pas < 5_000, "le test ne se termine pas");
+            assert_eq!(copie.etat(), original.etat());
             let duree = duree_au_hasard(&mut suite).min(2 * INTERVALLE);
-            let evt = match suite.entier(10) {
-                0..=5 => E::Tic,
-                6 => E::PasserDuel,
-                7 => E::Annuler,
-                _ => {
-                    E::Reponse([Reponse::A, Reponse::Pareil, Reponse::B][suite.entier(3) as usize])
-                }
-            };
             for b in [&mut original, &mut copie] {
                 b.avancer(duree);
             }
-            // Seule différence admise : le conseil de pause, car le temps d'écoute
-            // cumulé repart de zéro après une reprise.
-            let sans_conseil = |mut effets: Vec<Effet>| {
-                effets.retain(|e| *e != Effet::ConseillerPause);
-                effets
-            };
-            let attendus = sans_conseil(original.envoyer(evt.clone()));
-            assert_eq!(sans_conseil(copie.envoyer(evt)), attendus);
+            match suite.entier(12) {
+                0..=5 => {
+                    for b in [&mut original, &mut copie] {
+                        b.envoyer(E::Tic);
+                    }
+                }
+                6 => {
+                    for b in [&mut original, &mut copie] {
+                        b.envoyer(E::PasserDuel);
+                    }
+                }
+                7 => {
+                    for b in [&mut original, &mut copie] {
+                        b.envoyer(E::Annuler);
+                    }
+                }
+                8 => {
+                    for b in [&mut original, &mut copie] {
+                        b.envoyer(E::Reprendre);
+                    }
+                }
+                n => {
+                    if !matches!(
+                        original.etat(),
+                        EtatTest::EnEcoute { .. } | EtatTest::AttenteReponse
+                    ) {
+                        continue;
+                    }
+                    // Deux fois sur trois « la variante » : assez pour retenir des changements.
+                    let preference = [P::Variante, P::Variante, P::Reference][n as usize - 9];
+                    for b in [&mut original, &mut copie] {
+                        b.repondre_selon(preference);
+                    }
+                }
+            }
         }
         assert_eq!(copie.etat(), EtatTest::Termine);
-        assert_eq!(copie.vue().historique, original.vue().historique);
-        assert_eq!(copie.resultat(), original.resultat());
-        assert!(copie.resultat().is_some());
+        assert_eq!(sens_de(&copie), sens_de(&original));
+        assert_eq!(sans_reponse_brute(&copie), sans_reponse_brute(&original));
+        if copie.resultat().unwrap().a_des_changements() {
+            avec_changement += 1;
+        }
         // Le journal complet du test repris se relit sans erreur jusqu'à sa clôture.
         assert_eq!(erreur(&copie.journal), ErreurReprise::TestClos);
     }
     assert!(repris > 60, "{repris}");
     assert!(clos > 5, "{clos}");
+    assert!(avec_changement > 10, "{avec_changement}");
 }
 
 #[test]
@@ -378,6 +516,7 @@ fn a_chaque_instant_le_journal_suffit_a_retrouver_les_reponses() {
             assert_eq!(d.vue(b.t).historique, b.vue().historique);
             assert_eq!(d.plan, b.d.plan);
             assert_eq!(d.applis, b.d.applis);
+            assert_eq!(d.tirages, b.d.tirages);
         }
     }
 }
