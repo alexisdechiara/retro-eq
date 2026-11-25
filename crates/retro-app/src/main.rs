@@ -33,6 +33,7 @@ mod courbes;
 mod demo;
 mod fenetre;
 mod mini;
+mod niveaux;
 mod pont;
 mod raccourcis;
 mod textes;

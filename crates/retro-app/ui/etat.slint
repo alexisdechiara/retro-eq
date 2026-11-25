@@ -133,6 +133,10 @@ export global Egaliseur {
 export global Visualiseur {
     in property <float> niveau-db: -60;
     in property <float> crete-db: -60;
+    in property <float> moyenne-db: -60;         // moyenne des 30 dernières secondes de son
+    in property <float> crete-max-db: -60;       // crête la plus haute depuis la remise à zéro
+    in property <bool> mesures-pretes: false;    // faux tant qu'aucun son n'a été capté
+    callback remettre-a-zero();
     in property <float> volume-lufs: -60;
     in property <[float]> bandes;                // de 0 à 1, des graves aux aigus
     in property <string> source: "";

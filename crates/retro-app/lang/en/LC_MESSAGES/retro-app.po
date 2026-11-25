@@ -834,14 +834,10 @@ msgid "Niveau du signal"
 msgstr "Signal level"
 
 
-msgid "Niveau"
-msgstr "Level"
 
 msgid "Crête"
 msgstr "Peak"
 
-msgid "Niveau du signal envoyé au casque. 0 dB, c’est la saturation : au-dessus, ça grésille."
-msgstr "Level of the signal sent to the headset. 0 dB is clipping: above it, it crackles."
 
 msgid "À tes oreilles"
 msgstr "At your ears"
@@ -875,3 +871,33 @@ msgstr "The sound right now, by frequency"
 
 msgid "Ta courbe d’égaliseur (0 dB au milieu)"
 msgstr "Your equalizer curve (0 dB in the middle)"
+
+msgid "Moyenne · 30 dernières secondes"
+msgstr "Average · last 30 seconds"
+
+msgid "Saturation"
+msgstr "Clipping"
+
+msgid "Proche de la saturation"
+msgstr "Close to clipping"
+
+msgid "Loin de la saturation"
+msgstr "Well below clipping"
+
+msgid "En direct"
+msgstr "Live"
+
+msgid "Crête la plus haute"
+msgstr "Highest peak"
+
+msgid "Les mesures apparaissent dès qu’un son passe."
+msgstr "Readings appear as soon as sound plays."
+
+msgid "Le signal a saturé : baisse le préampli dans l’égaliseur."
+msgstr "The signal clipped: lower the preamp in the equaliser."
+
+msgid "Il reste {} dB avant la saturation (0 dB). Trait clair : la moyenne. Trait ambre : la crête la plus haute."
+msgstr "{} dB of headroom left before clipping (0 dB). Light mark: the average. Amber mark: the highest peak."
+
+msgid "Remettre à zéro"
+msgstr "Reset"

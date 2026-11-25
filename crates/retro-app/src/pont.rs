@@ -15,6 +15,7 @@ use crate::barre::{Barre, EvenementBarre};
 use crate::controleur::{ChoixTest, Controleur, EtatTestVue, VueDuels};
 use crate::courbes::chemin_svg;
 use crate::mini::Mini;
+use crate::niveaux::SuiviNiveau;
 use crate::raccourcis::{Action, Raccourcis};
 use crate::textes;
 use crate::*;
@@ -134,6 +135,7 @@ pub struct Pont {
     mini: Option<Mini>,
     modeles: Modeles,
     mesure: Mesure,
+    suivi: SuiviNiveau,
     trames: Option<Receiver<Trame>>,
     /// Avance ajoutée à l'heure du système : seul un scénario d'essai s'en sert, pour
     /// faire défiler un test sans attendre.
@@ -179,6 +181,8 @@ impl Pont {
                 raccourcis: Rc::new(VecModel::default()),
             },
             mesure: Mesure::new(BANDES),
+            // 30 images par seconde pendant 30 secondes.
+            suivi: SuiviNiveau::nouveau(900),
             trames: None,
             avance_ms: 0,
             images: 0,
@@ -608,6 +612,10 @@ impl Pont {
         let niveau = self.mesure.niveau_db();
         visualiseur.set_niveau_db(niveau);
         visualiseur.set_crete_db(self.mesure.crete_db());
+        self.suivi.ajouter(niveau, self.mesure.crete_db());
+        visualiseur.set_mesures_pretes(self.suivi.moyenne_db().is_some());
+        visualiseur.set_moyenne_db(self.suivi.moyenne_db().unwrap_or(-60.0));
+        visualiseur.set_crete_max_db(self.suivi.crete_max_db().unwrap_or(-60.0));
         fenetre.global::<Appli>().set_niveau_db(niveau);
         maj(&self.modeles.bandes, self.mesure.bandes().to_vec());
         if self.images % 6 == 0 {
@@ -959,6 +967,11 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         }};
     }
 
+    fenetre
+        .global::<Visualiseur>()
+        .on_remettre_a_zero(agir!(|p, f| {
+            p.suivi.remettre_a_zero();
+        }));
     let appli = fenetre.global::<Appli>();
     appli.on_autoriser_moteur(agir!(|p, f| {
         p.controleur.autoriser_moteur();

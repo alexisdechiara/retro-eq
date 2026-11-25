@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Visualiseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Pastille, Format } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Pastille, Bouton, GenreBouton, Format } from "../composants.slint";
 
 // Une mesure : étiquette, valeur à largeur fixe (la mise en page ne bouge pas quand le chiffre change), unité.
 component Mesure inherits Rectangle {
@@ -108,19 +108,103 @@ export component EcranVisualiseur inherits VerticalLayout {
 
     HorizontalLayout {
         spacing: 24px;
-        // Niveau : les mesures, en chiffres.
+        // Niveau : la moyenne en grand, puis le direct et les crêtes.
         Carte {
             horizontal-stretch: 1;
-            TitreSection { contenu: @tr("Niveau du signal"); }
-            if Visualiseur.capture-active: Etiquette { contenu: @tr("Source : {}", Visualiseur.source); }
+            property <bool> pret: Visualiseur.capture-active && Visualiseur.mesures-pretes;
+            // Ce qu'il reste avant la saturation, d'après la crête la plus haute.
+            property <float> marge: max(0, 0 - Visualiseur.crete-max-db);
+            HorizontalLayout {
+                TitreSection { contenu: @tr("Niveau du signal"); }
+                if Visualiseur.capture-active: Etiquette { contenu: Visualiseur.source; horizontal-alignment: right; vertical-alignment: center; }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    spacing: 2px;
+                    horizontal-stretch: 0;
+                    Etiquette { contenu: @tr("Moyenne · 30 dernières secondes"); }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        Text {
+                            text: pret ? Format.nombre(Visualiseur.moyenne-db, false) : "–";
+                            font-family: Theme.chiffres;
+                            font-weight: 500;
+                            font-size: 64px;
+                            color: Theme.texte;
+                            min-width: 150px;
+                        }
+                        Text { text: "dB"; font-family: Theme.chiffres; font-size: 22px; color: Theme.discret; vertical-alignment: center; }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    if pret: Pastille {
+                        texte: marge < 1 ? @tr("Saturation") : marge < 6 ? @tr("Proche de la saturation") : @tr("Loin de la saturation");
+                        couleur: marge < 1 ? Theme.fond-erreur : Theme.doux;
+                        encre: marge < 1 ? Theme.erreur : Theme.texte;
+                        taille: 14px;
+                    }
+                }
+            }
+            // La barre : le niveau de l'instant, avec un repère pour la moyenne et un pour la crête la plus haute.
+            Rectangle {
+                height: 34px;
+                barre := Rectangle {
+                    y: 0px;
+                    height: 16px;
+                    border-radius: 4px;
+                    background: Theme.ecran;
+                    border-width: 1px;
+                    border-color: Theme.trait;
+                    clip: true;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * (pret ? clamp((Visualiseur.niveau-db + 60) / 60, 0, 1) : 0);
+                        background: Visualiseur.niveau-db > -1 ? Theme.erreur : Theme.a;
+                    }
+                    // La zone des trois derniers décibels : au-delà, ça sature.
+                    Rectangle { x: parent.width * 0.95; width: 1px; background: Theme.erreur; }
+                }
+                if pret: Rectangle {
+                    x: barre.width * clamp((Visualiseur.moyenne-db + 60) / 60, 0, 1) - 1px;
+                    y: -3px;
+                    width: 2px;
+                    height: 22px;
+                    background: Theme.texte;
+                }
+                if pret: Rectangle {
+                    x: barre.width * clamp((Visualiseur.crete-max-db + 60) / 60, 0, 1) - 1px;
+                    y: -3px;
+                    width: 2px;
+                    height: 22px;
+                    background: marge < 1 ? Theme.erreur : Theme.ambre;
+                }
+                Text { x: 0px; y: 20px; text: "−60"; font-family: Theme.chiffres; font-size: 11px; color: Theme.discret; }
+                Text { x: barre.width / 2 - 12px; y: 20px; text: "−30"; font-family: Theme.chiffres; font-size: 11px; color: Theme.discret; }
+                Text { x: barre.width - 22px; y: 20px; text: "0 dB"; font-family: Theme.chiffres; font-size: 11px; color: Theme.discret; }
+            }
             HorizontalLayout {
                 spacing: 12px;
-                Mesure { nom: @tr("Niveau"); valeur: Visualiseur.capture-active ? niveau-texte : "–"; }
-                Mesure { nom: @tr("Crête"); valeur: Visualiseur.capture-active ? crete-texte : "–"; encre: Visualiseur.crete-db > -1 ? Theme.erreur : Theme.a; }
+                Mesure { nom: @tr("En direct"); valeur: pret ? niveau-texte : "–"; }
+                Mesure { nom: @tr("Crête"); valeur: pret ? crete-texte : "–"; encre: Visualiseur.crete-db > -1 ? Theme.erreur : Theme.a; }
+                Mesure { nom: @tr("Crête la plus haute"); valeur: pret ? Format.nombre(Visualiseur.crete-max-db, false) : "–"; encre: marge < 1 ? Theme.erreur : Theme.texte; }
             }
-            Paragraphe {
-                text: @tr("Niveau du signal envoyé au casque. 0 dB, c’est la saturation : au-dessus, ça grésille.");
-                font-size: 14px;
+            HorizontalLayout {
+                spacing: 12px;
+                Paragraphe {
+                    text: !pret ? @tr("Les mesures apparaissent dès qu’un son passe.") : marge < 1 ? @tr("Le signal a saturé : baisse le préampli dans l’égaliseur.") : @tr("Il reste {} dB avant la saturation (0 dB). Trait clair : la moyenne. Trait ambre : la crête la plus haute.", Format.nombre(marge, false));
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    Bouton { texte: @tr("Remettre à zéro"); genre: GenreBouton.lien; actif: pret; active => { Visualiseur.remettre-a-zero(); } }
+                }
             }
         }
         // Volume perçu, estimé.

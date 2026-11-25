@@ -286,6 +286,9 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
     let visualiseur = fenetre.global::<Visualiseur>();
     visualiseur.set_niveau_db(-18.0);
     visualiseur.set_crete_db(-6.0);
+    visualiseur.set_moyenne_db(-21.0);
+    visualiseur.set_crete_max_db(-2.5);
+    visualiseur.set_mesures_pretes(true);
     visualiseur.set_volume_lufs(-21.0);
     visualiseur.set_capture_active(true);
     visualiseur.set_source("INZONE H9 II – Game".into());
