@@ -16,6 +16,8 @@ windows-registry = "0.5"
 
 [dev-dependencies]
 tempfile = "3"
+# Pour la sonde d'essai (examples/sonde_apo.rs) : capte la sortie pendant que le moteur écrit.
+retro-audio.workspace = true
 
 [lints]
 workspace = true

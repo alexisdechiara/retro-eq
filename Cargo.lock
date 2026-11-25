@@ -4162,6 +4162,7 @@ dependencies = [
 name = "retro-engine"
 version = "0.1.0"
 dependencies = [
+ "retro-audio",
  "retro-dsp",
  "tempfile",
  "thiserror 2.0.21",
