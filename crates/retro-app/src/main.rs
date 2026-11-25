@@ -7,6 +7,8 @@
 //! - `--ecran <nom>` : ouvre directement cet écran ;
 //! - `--capture <fichier.png>` (avec `--hauteur <px>`) : enregistre l'écran et quitte ;
 //! - `--rail` : navigation dans le rail latéral ;
+//! - `--rendre-son-origine` : sans fenêtre, retire le moteur des sorties audio, écrit une ligne
+//!   et rend 0 (réussi) ou 1 (échec). Appelé par le désinstalleur ;
 //! - `--langue <fr|en>` : impose la langue de l'interface pour cette exécution (sans toucher
 //!   aux réglages enregistrés). Sans elle, `--demo` est en français et l'appli suit ses
 //!   réglages, ou la langue du système au tout premier lancement.
@@ -32,9 +34,11 @@ mod controleur;
 mod courbes;
 mod demo;
 mod fenetre;
+mod instance;
 mod mini;
 mod pont;
 mod raccourcis;
+mod sans_fenetre;
 mod textes;
 mod traductions;
 
@@ -130,6 +134,15 @@ fn maintenant_ms() -> u64 {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments: Vec<String> = std::env::args().collect();
+    // Mode sans fenêtre, lancé par le désinstalleur : on ne montre rien et on rend un code.
+    if arguments
+        .iter()
+        .any(|a| a == sans_fenetre::RENDRE_SON_ORIGINE)
+    {
+        std::process::exit(sans_fenetre::lancer_rendre_son_origine());
+    }
+    // Dit à l'installateur que l'appli tourne (voir `instance.rs`).
+    instance::poser();
     let capture = argument(&arguments, "--capture");
     let fenetre = FenetrePrincipale::new()?;
     let ecran = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom));

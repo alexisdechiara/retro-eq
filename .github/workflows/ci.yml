@@ -41,3 +41,21 @@ jobs:
           name: retro-eq-windows-x64
           path: target/release/retro-eq.exe
           if-no-files-found: error
+
+      # Installateur : la recette est dans installateur/construire.ps1 (version lue dans
+      # Cargo.toml, Inno Setup installé avec Chocolatey s'il manque sur la machine).
+      - name: Mode sans fenêtre (--rendre-son-origine)
+        shell: pwsh
+        run: |
+          # Comme le fait le désinstalleur : on attend la fin du processus et on lit son code.
+          # Sans Equalizer APO ni données sur cette machine, il n'y a rien à retirer : code 0.
+          $p = Start-Process -FilePath target\release\retro-eq.exe -ArgumentList '--rendre-son-origine' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "--rendre-son-origine : code $($p.ExitCode)" }
+      - name: Installateur (Inno Setup)
+        shell: pwsh
+        run: ./installateur/construire.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retro-eq-installateur-x64
+          path: installateur/sortie/*.exe
+          if-no-files-found: error
