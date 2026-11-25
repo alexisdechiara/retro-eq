@@ -185,11 +185,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (raccourcis, mini) = if capture.is_some() {
             (raccourcis::Raccourcis::inertes(), None)
         } else {
-            let mut mini = mini::Mini::nouvelle().ok();
-            if let Some(mini) = &mut mini {
-                mini.initialiser();
-            }
-            (raccourcis::Raccourcis::nouveau(), mini)
+            // La vraie fenêtre Win32 n'est créée qu'au premier `montrer`, depuis la boucle
+            // d'événements (voir `mini.rs`).
+            (
+                raccourcis::Raccourcis::nouveau(),
+                mini::Mini::nouvelle().ok(),
+            )
         };
         let pont = pont::Pont::nouveau(
             controleur,
@@ -233,7 +234,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(800);
         return capturer(&fenetre, chemin, hauteur);
     }
-    fenetre::brancher(&fenetre);
+    // `_veille` garde la fenêtre à taille fixe tant que l'appli tourne (voir `fenetre.rs`).
+    let _veille = fenetre::brancher(&fenetre);
     fenetre.show()?;
     // `run_event_loop_until_quit` et non `run` : la boucle continue quand la fenêtre est
     // cachée dans la barre des tâches. Elle s'arrête sur « Quitter ».
@@ -248,6 +250,8 @@ fn capturer(
     chemin: String,
     hauteur: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Une capture peut être plus haute que la fenêtre réelle (pages entières).
+    fenetre.global::<Appli>().set_taille_libre(true);
     fenetre
         .window()
         .set_size(slint::PhysicalSize::new(1280, hauteur));

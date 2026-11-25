@@ -172,6 +172,8 @@ fn fenetre_principale() -> FenetrePrincipale {
     // À faire après `new()`, qui enregistre les traductions embarquées. `banc()` n'en a pas
     // besoin : ses textes sont compilés sans traductions.
     slint::select_bundled_translation("").expect("le français (langue source) se sélectionne");
+    // Certains tests agrandissent la fenêtre pour atteindre le bas d'une page.
+    Appli::get(&f).set_taille_libre(true);
     f.window().set_size(slint::LogicalSize::new(1280., 800.));
     f.show().expect("la fenêtre s'affiche");
     f

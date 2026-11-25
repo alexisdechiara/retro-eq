@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Test, Appli, Ecran, EtatTest } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Touche, Segments, Platine, Separateur } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Touche, Segments, Platine, Separateur, Signe } from "../composants.slint";
 import { EtapesTest } from "nouveau_test_parts.slint";
 
 // Un grand bouton de réponse : A, Pareil, B. Utilisable à la souris comme au clavier.
@@ -89,7 +89,7 @@ component Bandeau inherits Rectangle {
                 height: 52px;
                 border-radius: 26px;
                 background: Theme.doux;
-                Text { text: signe; font-family: Theme.chiffres; font-weight: 700; font-size: 22px; color: Theme.texte; horizontal-alignment: center; vertical-alignment: center; }
+                Signe { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; code: signe; taille: 22px; couleur: Theme.texte; }
             }
         }
         VerticalLayout {

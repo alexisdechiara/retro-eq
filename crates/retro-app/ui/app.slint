@@ -7,7 +7,7 @@ import "polices/Anton-Regular.ttf";
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour } from "etat.slint";
-import { Logo, Platine, Touche, Bouton, GenreBouton, Segments, Format } from "composants.slint";
+import { Logo, Platine, Touche, Bouton, GenreBouton, Segments, Format, Signe } from "composants.slint";
 import { Demarrage } from "ecrans/demarrage.slint";
 import { Accueil } from "ecrans/accueil.slint";
 import { Tester } from "ecrans/tester.slint";
@@ -126,12 +126,12 @@ component BoutonFenetre {
     accessible-label: nom;
     accessible-action-default => { root.active(); }
     Rectangle { background: danger ? (zone.has-hover ? Theme.fermer.brighter(0.2) : Theme.fermer) : zone.has-hover ? Theme.doux : transparent; }
-    Text {
-        text: signe;
-        font-size: 13px;
-        color: danger ? white : Theme.discret;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    Signe {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        code: signe;
+        taille: 12px;
+        couleur: danger ? white : Theme.discret;
     }
     zone := TouchArea { clicked => { root.active(); } }
 }
@@ -166,8 +166,16 @@ export component FenetrePrincipale inherits Window {
     title: "Retro EQ";
     no-frame: true;
     // Deux tailles seulement : 1280 × 800, ou agrandie. Pas de redimensionnement libre.
+    // Taille mini = taille maxi : Slint rend alors la fenêtre non redimensionnable (plus de
+    // bords étirables ni d'ancrage Snap). Sans cela, ses contraintes suivaient le contenu et
+    // Slint la rendait redimensionnable à chaque changement (constaté sur le PC, 25/11/2026).
+    // Pour agrandir, `fenetre.rs` lève la limite (`agrandie`) juste avant d'agrandir.
     preferred-width: 1280px;
     preferred-height: 800px;
+    min-width: Appli.taille-libre ? 0px : 1280px;
+    min-height: Appli.taille-libre ? 0px : 800px;
+    max-width: Appli.agrandie || Appli.taille-libre ? 100000px : 1280px;
+    max-height: Appli.agrandie || Appli.taille-libre ? 100000px : 800px;
     background: Theme.fond;
     default-font-family: Theme.courant;
     default-font-size: 16px;

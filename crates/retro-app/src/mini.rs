@@ -10,7 +10,10 @@ use slint::ComponentHandle;
 
 pub struct Mini {
     fenetre: MiniFenetre,
+    /// Ce que la fenêtre montre vraiment.
     visible: bool,
+    /// Ce que le pont a demandé en dernier.
+    voulue: bool,
     #[cfg(windows)]
     prete: bool,
 }
@@ -20,6 +23,7 @@ impl Mini {
         Ok(Mini {
             fenetre: MiniFenetre::new()?,
             visible: false,
+            voulue: false,
             #[cfg(windows)]
             prete: false,
         })
@@ -30,17 +34,16 @@ impl Mini {
         &self.fenetre
     }
 
-    /// À appeler au lancement, avant d'afficher la fenêtre principale : sous Windows, la
-    /// mini-fenêtre est créée et stylée à ce moment-là, quand aucun jeu n'a encore le focus.
-    pub fn initialiser(&mut self) {
-        #[cfg(windows)]
-        {
-            self.prete = self.preparer();
-        }
-    }
-
     /// Montre ou cache la mini-fenêtre. Sans effet si elle est déjà dans cet état.
+    ///
+    /// Sous Windows, tant que la vraie fenêtre n'est pas prête (voir [`Self::preparer_si_besoin`]),
+    /// on retient seulement ce qui est demandé.
     pub fn montrer(&mut self, visible: bool) {
+        self.voulue = visible;
+        #[cfg(windows)]
+        if !self.prete {
+            return;
+        }
         if visible == self.visible {
             return;
         }
@@ -48,6 +51,23 @@ impl Mini {
         self.appliquer(visible);
     }
 
+    /// Sous Windows : crée la vraie fenêtre, lui donne ses styles et la cache, puis applique
+    /// ce qui a été demandé entre-temps. À appeler depuis la boucle d'événements (le minuteur
+    /// du pont), jamais avant : tant que la boucle ne tourne pas, Slint ne crée pas la fenêtre
+    /// et il n'y a pas de poignée Win32 à styler. Le premier `montrer` venait d'avant la
+    /// boucle : la fenêtre s'affichait sans styles, en haut à gauche, et y restait (constaté
+    /// sur le PC le 25/11/2026). Ailleurs : sans effet.
+    pub fn preparer_si_besoin(&mut self) {
+        #[cfg(windows)]
+        if !self.prete {
+            self.prete = self.preparer();
+            if self.prete {
+                // `preparer` la laisse cachée.
+                self.visible = false;
+                self.montrer(self.voulue);
+            }
+        }
+    }
     #[cfg(not(windows))]
     fn appliquer(&mut self, visible: bool) {
         let _ = if visible {
@@ -61,7 +81,7 @@ impl Mini {
     fn appliquer(&mut self, visible: bool) {
         use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNOACTIVATE};
         if !self.prete {
-            self.prete = self.preparer();
+            return;
         }
         if let Some(hwnd) = self.poignee() {
             // SAFETY: `hwnd` est la poignée d'une fenêtre vivante de ce fil (elle vient de

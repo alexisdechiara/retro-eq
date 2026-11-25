@@ -643,6 +643,10 @@ impl Pont {
 
     fn image(&mut self, fenetre: &FenetrePrincipale) {
         self.images += 1;
+        // La mini-fenêtre ne peut être créée et stylée qu'une fois la boucle lancée (voir mini.rs).
+        if let Some(mini) = &mut self.mini {
+            mini.preparer_si_besoin();
+        }
         let t = self.maintenant();
         self.ecouter(fenetre);
         self.recevoir_mises_a_jour(fenetre);

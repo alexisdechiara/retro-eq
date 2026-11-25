@@ -73,6 +73,60 @@ export component Chiffres inherits Text {
     color: Theme.texte;
 }
 
+// Un petit signe (▶, ⏸, ✕, ↧…) dessiné en tracé plutôt qu'écrit en caractère : les polices
+// embarquées n'ont pas ces symboles, et la police de secours de Windows change d'un PC à
+// l'autre. Sur le PC d'Alexis (25/11/2026), ✕, ↧ et ⌕ s'affichaient en rectangle vide.
+// Tout autre texte (« II »…) est écrit tel quel.
+export component Signe {
+    in property <string> code;
+    in property <brush> couleur;
+    in property <length> taille: 14px;
+    property <bool> connu: code == "▶" || code == "⏸" || code == "✕" || code == "▢" || code == "❐" || code == "—"
+        || code == "↧" || code == "⇧" || code == "⌕" || code == "↻" || code == "⟳" || code == "✓" || code == "☕";
+    property <length> trait: max(1.5px, taille / 9);
+    width: connu ? taille : repli.preferred-width;
+    height: taille;
+
+    if code == "▶": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; fill: couleur;
+        commands: "M 4 2 L 14 8 L 4 14 Z"; }
+    if code == "⏸": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; fill: couleur;
+        commands: "M 3 2 L 6.5 2 L 6.5 14 L 3 14 Z M 9.5 2 L 13 2 L 13 14 L 9.5 14 Z"; }
+    if code == "✕": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 3 3 L 13 13 M 13 3 L 3 13"; }
+    if code == "▢": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 2.5 2.5 L 13.5 2.5 L 13.5 13.5 L 2.5 13.5 Z"; }
+    if code == "❐": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 2.5 5.5 L 10.5 5.5 L 10.5 13.5 L 2.5 13.5 Z M 5.5 5.5 L 5.5 2.5 L 13.5 2.5 L 13.5 10.5 L 10.5 10.5"; }
+    if code == "—": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 2.5 8 L 13.5 8"; }
+    // Importer : une flèche qui descend sur un plateau.
+    if code == "↧": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 8 1.5 L 8 11 M 4 7 L 8 11 L 12 7 M 2.5 14.5 L 13.5 14.5"; }
+    if code == "⇧": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 8 1.5 L 14 8 L 10.5 8 L 10.5 14.5 L 5.5 14.5 L 5.5 8 L 2 8 Z"; }
+    // Chercher : une loupe.
+    if code == "⌕": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 11 6.5 A 4.5 4.5 0 1 0 2 6.5 A 4.5 4.5 0 1 0 11 6.5 M 9.8 9.8 L 14.5 14.5"; }
+    // Recommencer : un cercle presque fermé avec sa pointe.
+    if code == "↻" || code == "⟳": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 13.5 8 A 5.5 5.5 0 1 1 11.9 4.1 M 12.5 1 L 12.2 4.4 L 8.8 4.2"; }
+    if code == "✓": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 2.5 8.5 L 6.5 12.5 L 13.5 4"; }
+    // Une pause café : une tasse et son anse.
+    if code == "☕": Path { width: 100%; height: 100%; viewbox-width: 16; viewbox-height: 16; stroke: couleur; stroke-width: trait;
+        commands: "M 2.5 6 L 11 6 L 11 10 A 3 3 0 0 1 8 13 L 5.5 13 A 3 3 0 0 1 2.5 10 Z M 11 7 L 12.5 7 A 1.5 1.5 0 0 1 12.5 10 L 11 10 M 5 1.5 L 5 3.5 M 8.5 1.5 L 8.5 3.5"; }
+    repli := Text {
+        visible: !connu;
+        text: connu ? "" : code;
+        font-family: Theme.chiffres;
+        font-weight: 700;
+        font-size: taille;
+        color: couleur;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 export enum GenreBouton { principal, secondaire, lien, choisi }
 
 export component Bouton {
@@ -114,11 +168,9 @@ export component Bouton {
             padding-right: genre == GenreBouton.lien ? 6px : 18px;
             spacing: 10px;
             alignment: center;
-            if prefixe != "": Text {
-                text: prefixe;
-                vertical-alignment: center;
-                font-size: 14px;
-                color: libelle.color;
+            if prefixe != "": VerticalLayout {
+                alignment: center;
+                Signe { code: prefixe; couleur: libelle.color; taille: 14px; }
             }
             libelle := Text {
                 text: genre == GenreBouton.principal ? texte.to-uppercase() : texte;
