@@ -165,6 +165,11 @@ fn fenetre_glisse(fenetre: &impl ComponentHandle, position: LogicalPosition) {
 fn fenetre_principale() -> FenetrePrincipale {
     i_slint_backend_testing::init_no_event_loop();
     let f = FenetrePrincipale::new().expect("la fenêtre se crée");
+    // Les libellés cherchés sont en français. Slint suit sinon la langue du système (une machine
+    // anglaise, comme le runner Windows de la CI) : on impose la langue source, comme l'appli.
+    // À faire après `new()`, qui enregistre les traductions embarquées. `banc()` n'en a pas
+    // besoin : ses textes sont compilés sans traductions.
+    slint::select_bundled_translation("").expect("le français (langue source) se sélectionne");
     f.window().set_size(slint::LogicalSize::new(1280., 800.));
     f.show().expect("la fenêtre s'affiche");
     f
