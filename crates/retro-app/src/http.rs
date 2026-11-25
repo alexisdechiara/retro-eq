@@ -191,6 +191,7 @@ mod essai_reel {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests_reseau {
     use super::*;
 
