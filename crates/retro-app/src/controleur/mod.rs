@@ -1646,7 +1646,7 @@ impl Controleur {
                     gain_db: z.gain_db,
                     change: z.est_changee(),
                     confiance: textes::niveau_confiance(z.confiance),
-                    detail: textes::detail_zone(z),
+                    detail: textes::detail_zone(z, r.controles.rien_retenu),
                 })
                 .collect(),
             applis: r

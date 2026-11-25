@@ -223,6 +223,8 @@ pub struct Raccourcis {
     test_pris: bool,
     conflits: Vec<Touche>,
     appuis: Appuis,
+    /// Raccourcis volontairement non enregistrés (capture d'écran) : ce n'est pas une panne.
+    inertes: bool,
 }
 
 impl Raccourcis {
@@ -235,6 +237,7 @@ impl Raccourcis {
             test_pris: false,
             conflits: Vec::new(),
             appuis: Appuis::default(),
+            inertes: false,
         };
         for touche in TOUCHES_PERMANENTES {
             r.enregistrer(touche);
@@ -251,6 +254,7 @@ impl Raccourcis {
             test_pris: false,
             conflits: Vec::new(),
             appuis: Appuis::default(),
+            inertes: true,
         }
     }
 
@@ -338,7 +342,7 @@ impl Raccourcis {
 
     /// Le système a-t-il accepté de nous laisser enregistrer des raccourcis ?
     pub fn disponibles(&self) -> bool {
-        self.gestionnaire.is_some()
+        self.gestionnaire.is_some() || self.inertes
     }
 
     /// Les noms des raccourcis déjà pris par une autre appli.

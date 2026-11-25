@@ -25,7 +25,8 @@ pub struct ResultatZone {
     pub pour_variante: u32,
     pub pour_reference: u32,
     pub pareil: u32,
-    /// Confiance du changement ; `Indice` quand il n'y a pas de changement.
+    /// Confiance du changement (au moins 2 victoires sans défaite : jamais moins que
+    /// Probable) ; `Indice` quand il n'y a pas de changement.
     pub confiance: Confiance,
     /// La variante a gagné dans les deux sens : on ne change rien et on le signale.
     pub contradictoire: bool,
@@ -71,7 +72,8 @@ pub struct BilanDuels {
     pub pareil: u32,
     /// Qui l'emporte (`Aucune` à égalité).
     pub preference: Preference,
-    /// Confiance dans la préférence ; `Indice` à égalité.
+    /// Confiance dans la préférence, sur un risque bilatéral (le gagnant est désigné
+    /// après coup) ; `Indice` à égalité ou si les contrôles ont bloqué le test.
     pub confiance: Confiance,
 }
 

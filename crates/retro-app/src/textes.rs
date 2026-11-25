@@ -371,12 +371,14 @@ pub fn verification(preference: Option<Preference>) -> String {
 }
 
 /// Le détail d'une zone du résultat : les comptes tels quels, sans précision inventée.
-pub fn detail_zone(z: &ResultatZone) -> String {
+pub fn detail_zone(z: &ResultatZone, rien_retenu: bool) -> String {
     let comptes = format!(
         "variante {} fois, référence {} fois, Pareil {} fois",
         z.pour_variante, z.pour_reference, z.pareil
     );
-    if z.contradictoire {
+    if rien_retenu {
+        format!("Non retenu pour ce test (voir les duels de contrôle) · {comptes}")
+    } else if z.contradictoire {
         format!("Réponses contradictoires (préférée en plus et en moins) : rien ne change · {comptes}")
     } else if z.est_changee() {
         format!(

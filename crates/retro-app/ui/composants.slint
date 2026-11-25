@@ -616,21 +616,35 @@ export component EcranCourbe inherits Rectangle {
                 background: i == 1 ? Theme.trait : Theme.grille;
             }
         }
-        if courbe-fond != "": Path {
-            viewbox-width: 1000;
-            viewbox-height: 240;
-            commands: courbe-fond;
-            stroke: couleur-fond;
-            stroke-width: 1.5px;
-            fill: transparent;
-        }
-        if courbe != "": Path {
-            viewbox-width: 1000;
-            viewbox-height: 240;
-            commands: courbe;
-            stroke: couleur;
-            stroke-width: mini ? 2px : 2.5px;
-            fill: transparent;
+        // Un Path garde ses proportions : pour que la courbe occupe toute la largeur et que ses
+        // fréquences tombent sous les repères, on la dessine à 1000 × 240 puis on étire le tout.
+        // L'épaisseur du trait est divisée par l'échelle pour rester la même à l'écran.
+        Rectangle {
+            property <float> ex: max(0.01, parent.width / 1000px);
+            property <float> ey: max(0.01, parent.height / 240px);
+            x: 0px;
+            y: 0px;
+            width: 1000px;
+            height: 240px;
+            transform-origin: { x: 0px, y: 0px };
+            transform-scale-x: self.ex;
+            transform-scale-y: self.ey;
+            if courbe-fond != "": Path {
+                viewbox-width: 1000;
+                viewbox-height: 240;
+                commands: courbe-fond;
+                stroke: couleur-fond;
+                stroke-width: 1.5px / min(parent.ex, parent.ey);
+                fill: transparent;
+            }
+            if courbe != "": Path {
+                viewbox-width: 1000;
+                viewbox-height: 240;
+                commands: courbe;
+                stroke: couleur;
+                stroke-width: (mini ? 2px : 2.5px) / min(parent.ex, parent.ey);
+                fill: transparent;
+            }
         }
     }
     if avec-axes: Rectangle {

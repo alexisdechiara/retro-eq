@@ -59,54 +59,79 @@ Presets de départ (`presets()`) : « À plat », plus les presets du H9 II quan
 pub enum Mode { DuelsEnJeu { precis: bool }, UneSeuleZone { zone: Zone, duels: u32 }, ProfilContreProfil { autre: Courbe, duels: u32 } }
 pub enum Sujet { Zone { zone: Zone, sens: Sens }, Controle, AutreProfil, Verification }
 pub struct DuelPrevu { sujet: Sujet, reference_est_a: bool, ordre_passages: [Cote; 6] }
-pub fn plan(mode: &Mode, version: &Version, historique_zones: &[Zone], hasard: &mut impl Hasard) -> Vec<DuelPrevu>
+pub type Couple = (Zone, Sens);
+pub struct HistoriquePlan { couples: Vec<Couple> /* du plus ancien au plus récent */, indices: Vec<Couple> /* du dernier test */ }
+impl HistoriquePlan { fn depuis_zones(&[Zone]) -> Self; fn ajouter_test(&mut self, plan: &[DuelPrevu], indices: &[Couple]) }
+pub fn plan_avec_historique(mode: &Mode, version: &Version, historique: &HistoriquePlan, hasard: &mut impl Hasard) -> Vec<DuelPrevu>
+pub fn plan(mode: &Mode, version: &Version, historique_zones: &[Zone], hasard: &mut impl Hasard) -> Vec<DuelPrevu>   // ancienne entrée : zones seulement, pas d'indices
+pub fn duel_verification(hasard: &mut impl Hasard) -> DuelPrevu
+pub fn retirer_duel(prevu: &DuelPrevu, hasard: &mut impl Hasard) -> DuelPrevu   // même sujet, nouveau tirage
 ```
 
-Règles (ADR-0005) : un duel sur six est de contrôle (arrondi, au moins 1 dès 6 duels), jamais le premier ni deux à la suite ; les autres duels sont distribués à tour de rôle entre les couples (zone, sens), zones les moins récemment testées d'abord ; l'ordre des duels est mélangé ; `reference_est_a` est tiré à pile ou face ; `ordre_passages` contient 3 A et 3 B dans un ordre tiré au hasard, sans jamais trois fois de suite le même côté. `Hasard` est un trait (`fn entier(&mut self, borne: u32) -> u32`) avec une implémentation à graine pour les tests et une vraie.
+Règles (ADR-0005) : un duel sur six est de contrôle (arrondi, au moins 1 dès 6 duels), jamais le premier ni deux à la suite. En « duels en jeu », les autres duels vont par paires : chaque couple (zone, sens) retenu est joué deux fois (rapide : 10 duels = 5 couples ; précis : 25 duels = 12 couples, le premier joué une troisième fois), et les deux duels d'un couple ne se suivent pas. Les couples sont pris dans cet ordre : indices du dernier test, puis couples jamais testés (ordre du spectre), puis du testé le moins récemment au plus récemment. L'ordre des duels est mélangé ; `reference_est_a` est tiré à pile ou face ; `ordre_passages` contient 3 A et 3 B dans un ordre tiré au hasard, sans jamais trois fois de suite le même côté. `Hasard` est un trait (`fn entier(&mut self, borne: u32) -> u32`) avec une implémentation à graine pour les tests et une vraie.
 
 ### Déroulement d'un test
 
 Cœur pur, sans horloge ni entrée-sortie : l'appli lui envoie des événements avec l'heure, il rend des effets à exécuter.
 
 ```rust
-pub struct Deroulement { .. }
+pub struct ParametresTest { test_id: String, profil_id: String, reference: Version, mode: Mode, plan: Vec<DuelPrevu>,
+                            reglages: ReglagesTest, variantes: ReglagesVariantes, spectre: Spectre, verification: DuelPrevu }
+pub struct ContexteReprise { reference: Version, variantes: ReglagesVariantes /* ignoré : relu dans le journal */, spectre: Spectre, verification: DuelPrevu }
 pub enum Evenement { Demarrer, Tic, Reponse(Reponse), PlusTard, Annuler, Pause, Reprendre, PasserDuel, RecommencerDuel,
-                     Reecouter { cote: Cote, appuye: bool }, AppelEnCours(bool), PremierPlan(String) }
-pub enum Reponse { A, Pareil, B }
+                     Reecouter { cote: Cote, appuye: bool }, AppelEnCours(bool), PremierPlan(String), Abandonner }
 pub enum Effet { Appliquer { cote: Option<Cote>, courbe: Courbe }, Journaliser(Entree), DemanderReponse, MasquerQuestion, Bip, ConseillerPause, Termine(ResultatTest) }
+pub enum EtatTest { Pret, EnEcoute { duel: u32, passage: u32 }, AttenteReponse, EnPause { raison: RaisonPause }, Termine, Abandonne }
+pub enum RaisonPause { Manuelle, Appel, PlusTard, SansReponse }
 impl Deroulement {
-    pub fn nouveau(test_id, reference: Courbe, plan: Vec<DuelPrevu>, reglages: ReglagesTest, spectre: Spectre) -> Self
+    pub fn nouveau(parametres: ParametresTest) -> Self
     pub fn traiter(&mut self, evt: Evenement, maintenant_ms: u64) -> Vec<Effet>
-    pub fn vue(&self, maintenant_ms: u64) -> VueTest          // tout ce que l'interface affiche : duel n/N, côté actif, passages faits par côté, ms avant bascule, état
-    pub fn reprendre_depuis(journal: &[Entree], ..) -> Self   // reprise après un arrêt brutal
-    pub fn maj_spectre(&mut self, spectre: Spectre)
+    pub fn vue(&self, maintenant_ms: u64) -> VueTest          // état, duel n/N, côté en place, passages faits par côté, progression, ms avant bascule, ms avant la pause sans réponse, vérification, pause conseillée, historique des duels clos
+    pub fn reprendre_depuis(journal: &[Entree], contexte: ContexteReprise, maintenant_ms: u64) -> Result<(Self, Vec<Effet>), ErreurReprise>
+    pub fn maj_spectre(&mut self, spectre: Spectre)           // sert à partir du prochain début de duel
 }
 ```
 
-Règles :
+Règles (ADR-0012 pour l'aveugle) :
 
-- États : `Pret`, `EnEcoute { duel, passage }`, `AttenteReponse`, `EnPause { raison }`, `Termine`. Raisons de pause : manuelle, appel, « plus tard ».
-- Un duel joue ses 6 passages dans l'ordre prévu, chacun de `intervalle_ms` (10 000 à 120 000, 20 000 par défaut). À chaque début de passage : `Effet::Appliquer` avec la courbe du côté (référence et variante passées par `egaliser_volumes`), et une entrée de journal qui note le côté et l'appli au premier plan.
-- Après le 6ᵉ passage : la référence est remise, `DemanderReponse`. Une réponse peut aussi arriver avant la fin des passages : elle clôt le duel.
-- `Reecouter { cote, appuye: true }` pendant l'attente applique ce côté ; `appuye: false` remet la référence.
-- `Reponse` : journalisée **avant** tout autre effet, puis duel suivant. `Bip` est émis si le réglage « bip » est actif (plein écran exclusif).
-- `PlusTard` : met le test en pause, le duel en cours sera rejoué. `Annuler` : annule la dernière réponse et rejoue ce duel. `PasserDuel` : le duel est noté passé, sans réponse. `RecommencerDuel` : recommence ses passages.
-- `AppelEnCours(true)` : pause, référence remise ; `false` : reprise au début du passage interrompu.
-- Toute sortie de l'écoute (pause, fin, annulation) émet un `Appliquer` de la référence : une variante ne reste jamais active.
-- Après 40 minutes d'écoute cumulée sans pause : `ConseillerPause`, une seule fois.
-- Dernier duel répondu : en mode `DuelsEnJeu` et `UneSeuleZone`, si le résultat change au moins une zone, un duel `Verification` (référence contre nouvelle version) est ajouté et joué. Puis `Termine(ResultatTest)`.
-- `reprendre_depuis` : relit le journal, garde les réponses, rejoue le duel interrompu depuis son premier passage, démarre en pause.
+- Le déroulement calcule lui-même les deux côtés d'un duel (variante de zone avec le pas de la version, référence deux fois pour un contrôle, autre profil, nouvelle courbe pour la vérification), passés par `egaliser_volumes` au début du duel et gardés jusqu'à sa fin.
+- Un duel joue ses 6 passages dans l'ordre prévu, chacun de `intervalle_ms` (10 000 à 120 000, 20 000 par défaut). À chaque début de passage : une entrée de journal qui note le côté et l'appli au premier plan, puis `Effet::Appliquer` avec la courbe du côté. Un `Tic` en retard de plus de deux intervalles (PC endormi) recommence le passage au lieu d'en sauter.
+- **Pendant un duel, on ne repasse jamais par la référence.** Après le 6ᵉ passage : `DemanderReponse`, le dernier côté reste en place. `Reecouter { cote, appuye: true }` applique ce côté, qui reste au relâchement. Une réponse peut aussi arriver avant la fin des passages : elle clôt le duel.
+- Sans réponse après `delai_reponse_ms` (`ReglagesTest`, 120 000 par défaut, borné à 30 000–600 000 ; chaque appui de réécoute le relance), un `Tic` met le test en pause `SansReponse`.
+- Toute pause (manuelle, appel, « plus tard », sans réponse) remet la référence, masque la question et est journalisée. Si un duel était en cours, il est rejoué à la reprise depuis son premier passage avec un **nouveau tirage** (même sujet, `reference_est_a` et `ordre_passages` retirés), écrit au journal (`Entree::DuelRetire { duel, prevu }`) avant son `DuelDemarre`. `RecommencerDuel` retire aussi. Les tirages sont déterministes : graine dérivée de `test_id`, rang du tirage. Le résultat compte le duel tel qu'il a été joué.
+- `Reponse` : journalisée **avant** tout autre effet, puis `Bip` si le réglage est actif, puis duel suivant.
+- `Annuler` : annule la dernière réponse et rejoue ce duel (sans nouveau tirage) ; les duels passés après elle redeviennent à jouer ; la dernière réponse d'un test sans vérification ne peut pas être annulée. `PasserDuel` : le duel est noté passé, sans réponse.
+- `AppelEnCours(true)` : pause ; `false` : reprise si la pause venait de l'appel. Seuls les changements comptent. `Reprendre` est ignoré tant qu'un appel est en cours ; `Pause` pendant une pause d'appel la rend manuelle.
+- Invariant : en `Pret`, `EnPause`, `Termine` et `Abandonne`, la dernière courbe appliquée est la référence telle quelle ; en `EnEcoute` et `AttenteReponse`, c'est un des deux côtés du duel, jamais la référence.
+- Après 40 minutes d'écoute cumulée : `ConseillerPause`, une seule fois. Une pause de plus de 5 minutes remet le compteur à zéro.
+- Dernier duel répondu : en mode `DuelsEnJeu` et `UneSeuleZone`, si le résultat change au moins une zone, un duel `Verification` (référence contre nouvelle version) est ajouté et joué. Puis `Journaliser(TestTermine)` et `Termine(ResultatTest)`. `Abandonner` : référence remise, `TestAbandonne`, pas de résultat.
+- `reprendre_depuis` : relit le journal (réponses, annulations, duels passés, duels retirés, vérification, réglages des variantes), rend un test en pause manuelle et les effets à exécuter aussitôt (référence remise, pause journalisée). Le duel interrompu est rejoué, avec un nouveau tirage s'il avait commencé. Journal vide, sans `TestDemarre`, clos ou incohérent : `ErreurReprise`.
 
 ### Confiance et résultat
 
 ```rust
 pub fn risque_hasard(victoires: u32, total: u32) -> f64    // P(X >= victoires) pour X ~ Binomiale(total, 1/2)
 pub enum Confiance { Indice, Probable, Sur }               // Sur : risque < 0,06 ; Probable : risque <= 0,25 ; sinon Indice
-pub struct ResultatZone { zone, gain_db: f64, duels: u32, pour_variante: u32, pour_reference: u32, pareil: u32, confiance: Confiance, contradictoire: bool }
-pub struct ResultatTest { zones: Vec<ResultatZone>, controles: BilanControles, nouvelle_courbe: Courbe, nouveaux_pas: [f64; 7], verification: Option<Reponse>, confiance: Confiance, par_appli: Vec<PreferenceAppli> }
+pub struct ResultatZone { zone, gain_db: f64, duels: u32, pour_variante: u32, pour_reference: u32, pareil: u32, confiance: Confiance, contradictoire: bool, indice: Option<Sens> }
+pub struct BilanControles { total: u32, repondus: u32, a_ou_b: u32, pareil: u32, penalise: bool /* = rien_retenu */, rien_retenu: bool }
+pub struct ResultatTest { zones: Vec<ResultatZone>, controles: BilanControles, nouvelle_courbe: Courbe, nouveaux_pas: [f64; 7],
+                          verification: Option<Reponse>, verification_preference: Option<Preference>, confiance: Confiance,
+                          par_appli: Vec<PreferenceAppli>, autre_profil: Option<BilanDuels>, indices: Vec<(Zone, Sens)>, recommandee: bool }
+pub fn calculer_resultat(reference: &Courbe, version: &Version, reglages: &ReglagesVariantes, plan: &[DuelPrevu],
+                         reponses: &[Option<Reponse>], verification: Option<(&DuelPrevu, Reponse)>, applis: &[Option<String>]) -> ResultatTest
 ```
 
-Règles (ADR-0005) : une zone change dans le sens où la variante a gagné plus de duels que la référence ; si elle gagne dans les deux sens, `contradictoire` et aucun changement. `total` du calcul binomial = duels hors « Pareil » dans le sens retenu. Si au moins la moitié des duels de contrôle ont reçu A ou B, la confiance de chaque zone et du test baisse d'un cran. La confiance du test est celle de la vérification quand elle existe (préférée 1 fois sur 1 : Indice), sinon la plus basse des zones changées. `nouvelle_courbe` = référence + filtres de zone retenus (les filtres identiques en type, fréquence et Q sont fusionnés en sommant les gains), avec préampli automatique. `par_appli` : pour chaque appli au premier plan, combien de duels et quelle préférence.
+Règles (ADR-0005) :
+
+- Une zone ne change que si, dans un sens, la variante a gagné **au moins 2 duels sans en perdre aucun**, et pas dans les deux sens à la fois (`contradictoire`, aucun changement). « Pareil » ne compte pour personne.
+- Une seule victoire sans défaite est un **indice** (`ResultatZone.indice`, `ResultatTest.indices`) : rien ne change, le pas de la zone est gardé, et le couple passe en tête du plan suivant. Un indice dans chaque sens s'annule.
+- Pas : gardé quand un changement ou un indice est retenu, divisé par deux (plancher 1 dB) pour une zone testée sans l'un ni l'autre, inchangé pour une zone non testée.
+- Contrôles : si au moins la moitié des contrôles répondus ont reçu A ou B, **rien n'est retenu** pour ce test (`controles.rien_retenu`) : `nouvelle_courbe` = référence avec préampli automatique, pas inchangés, aucun indice, confiances à Indice. Il n'y a plus de baisse d'un cran.
+- Confiance d'une zone changée : binomiale sur les duels hors « Pareil » du sens retenu (2 sur 2 : Probable ; 5 sur 5 : Sûr). Confiance du test : celle de la vérification quand elle existe (1 sur 1 : Indice), sinon la plus basse des zones changées, sinon celle du bilan profil contre profil.
+- Profil contre profil : le gagnant étant désigné après coup, le risque est bilatéral, `min(1, 2 × risque_hasard(gagnant, total))`.
+- `recommandee` : vrai si au moins une zone change et que la vérification n'a pas préféré la référence (« Pareil » ou pas de vérification ne s'y opposent pas) ; faux s'il n'y a rien à activer.
+- `nouvelle_courbe` = référence + filtres de zone retenus (les filtres identiques en type, fréquence et Q sont fusionnés en sommant les gains), avec préampli automatique. `par_appli` : pour chaque appli au premier plan, combien de duels et quelle préférence.
+- Un test de régression simule des milliers de tests rapides : réponses au hasard A/Pareil/B, moins de 10 % de courbes modifiées ; au hasard A/B, moins de 2 % ; un auditeur parfait obtient son changement dès que le couple est au plan.
 
 ### Stockage (ADR-0007)
 

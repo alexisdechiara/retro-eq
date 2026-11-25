@@ -613,7 +613,9 @@ impl Pont {
     /// - `mode:<id>`, `test` : choisit un mode puis lance un test (bascule toutes les 10 s) ;
     /// - `avance:<secondes>` : fait passer le temps du test, par pas de 5 s ;
     /// - `repondre:a|b|pareil`, `pause`, `reprendre`, `arreter` ;
-    /// - `finir` ou `finir:<n>` : écoute et répond jusqu'à la fin du test, ou à n duels ;
+    /// - `finir` ou `finir:<n>` : écoute et répond (A, B, Pareil à tour de rôle) jusqu'à la
+    ///   fin du test, ou à n duels ; `finir::graves` répond comme quelqu'un qui préfère
+    ///   plus de graves et entend bien que les duels de contrôle sont identiques ;
     /// - `activer`, `revenir` : l'écran Résultat ;
     /// - `importer:<chemin>`, `exporter:<format>`.
     pub fn jouer_scenario(&mut self, fenetre: &FenetrePrincipale, scenario: &str) {
@@ -657,7 +659,11 @@ impl Pont {
                     let mut duels = 0;
                     while self.controleur.test_en_cours() && duels < limite && duels < 200 {
                         self.avancer(61);
-                        let reponse = [Reponse::A, Reponse::B, Reponse::Pareil][duels as usize % 3];
+                        let reponse = if b == "graves" {
+                            self.reponse_qui_aime_les_graves()
+                        } else {
+                            [Reponse::A, Reponse::B, Reponse::Pareil][duels as usize % 3]
+                        };
                         let t = self.maintenant();
                         self.controleur.repondre(reponse, t);
                         duels += 1;
@@ -674,6 +680,50 @@ impl Pont {
         }
         self.synchroniser(fenetre);
         self.relever_annonce(fenetre);
+    }
+
+    /// Pour le scénario `finir::graves` seulement : la réponse d'un auditeur idéal qui
+    /// préfère plus de graves. Elle triche en lisant le plan dans le journal du test, ce
+    /// que l'interface ne fait jamais (le test doit rester à l'aveugle) : c'est un outil
+    /// pour fabriquer un résultat lisible sur une capture, rien d'autre.
+    fn reponse_qui_aime_les_graves(&self) -> Reponse {
+        use retro_core::{Entree, LectureJournal, Sens, Sujet, Zone};
+        let dossier = self.controleur.dossier_donnees().join("tests");
+        let dernier = std::fs::read_dir(dossier)
+            .ok()
+            .and_then(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).max());
+        let Some(Ok(lecture)) = dernier.map(LectureJournal::lire) else {
+            return Reponse::Pareil;
+        };
+        let mut duels = Vec::new();
+        for entree in lecture.entrees {
+            match entree {
+                Entree::TestDemarre { plan, .. } => duels = plan,
+                Entree::DuelVerificationAjoute { duel, .. } => duels.push(duel),
+                Entree::DuelRetire { duel, prevu, .. } => {
+                    if let Some(place) = duels.get_mut(duel as usize) {
+                        *place = prevu;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let courant = self.controleur.vue_duels(self.maintenant()).duel as usize;
+        let Some(duel) = courant.checked_sub(1).and_then(|i| duels.get(i)) else {
+            return Reponse::Pareil;
+        };
+        let variante = match duel.sujet {
+            Sujet::Zone {
+                zone: Zone::Graves,
+                sens,
+            } => sens == Sens::Plus,
+            Sujet::Verification => true,
+            _ => return Reponse::Pareil,
+        };
+        match (variante, duel.reference_est_a) {
+            (true, true) | (false, false) => Reponse::B,
+            _ => Reponse::A,
+        }
     }
 
     /// Fait passer `secondes` de temps de test, par pas de 5 s (un passage dure au moins 10 s).
