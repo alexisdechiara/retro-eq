@@ -1,0 +1,158 @@
+// Le panneau « Chercher mon casque (AutoEQ) » de l'écran Mes profils (ADR-0013).
+// Aucune logique : il montre l'état que Rust lui donne et appelle les fonctions de `AutoEq`.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { AutoEq, LigneAutoEq } from "../etat.slint";
+import { TitreSection, Paragraphe, Bouton, GenreBouton, Carte, Pastille, Separateur } from "../composants.slint";
+
+// Un champ de saisie au thème : un TextInput dans une pastille creuse, avec l'anneau ambre au focus.
+component ChampTexte inherits Rectangle {
+    in-out property <string> texte;
+    in property <string> indication;
+    callback modifie(string);
+    callback valide();
+    min-height: Theme.cible;
+    background: Theme.creux;
+    border-radius: self.height / 2;
+    border-width: 1.5px;
+    border-color: saisie.has-focus ? Theme.ambre : Theme.trait;
+    init => { saisie.focus(); }
+    saisie := TextInput {
+        accessible-role: text-input;
+        accessible-label: root.indication;
+        x: 20px;
+        width: parent.width - 40px;
+        height: parent.height;
+        text <=> root.texte;
+        single-line: true;
+        font-family: Theme.courant;
+        font-size: 16px;
+        color: Theme.texte;
+        selection-background-color: Theme.ambre;
+        selection-foreground-color: Theme.sur-ambre;
+        vertical-alignment: center;
+        edited => { root.modifie(self.text); }
+        accepted => { root.valide(); }
+    }
+    if root.texte == "": Text {
+        x: 20px;
+        text: indication;
+        font-family: Theme.courant;
+        font-size: 16px;
+        color: Theme.discret;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+    if saisie.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: self.height / 2; }
+    TouchArea { mouse-cursor: text; clicked => { saisie.focus(); } }
+}
+
+// Un résultat : le casque, qui l'a mesuré et sur quel banc, et le bouton qui crée le profil.
+component LigneResultat inherits Rectangle {
+    in property <LigneAutoEq> r;
+    in property <bool> occupe;
+    callback choisit();
+    min-height: 64px;
+    HorizontalLayout {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text { text: r.nom; font-family: Theme.courant; font-weight: 700; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+            Text { text: @tr("Mesuré par {}", r.source) + (r.detail != "" ? " · " + r.detail : ""); font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: end;
+                if r.hors-ligne: Pastille { texte: @tr("✓ Déjà sur ce PC"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 14px; }
+                Bouton { texte: @tr("Créer un profil"); actif: !occupe; active => { root.choisit(); } }
+            }
+        }
+    }
+}
+
+export component PanneauAutoEq inherits Carte {
+    HorizontalLayout {
+        spacing: 12px;
+        TitreSection { contenu: @tr("Chercher mon casque (AutoEQ)"); vertical-alignment: center; }
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            HorizontalLayout { alignment: end; Bouton { texte: @tr("Fermer"); genre: GenreBouton.lien; active => { AutoEq.fermer(); } } }
+        }
+    }
+    Paragraphe {
+        font-size: 15px;
+        text: @tr("AutoEQ propose un réglage pour de nombreux casques, calculé à partir de mesures faites par d’autres personnes, sur des bancs différents. C’est un point de départ à juger à l’oreille, pas une vérité : au-delà d’environ 8 kHz, une mesure est peu fiable.");
+    }
+
+    if AutoEq.erreur != "": Rectangle {
+        background: Theme.fond-erreur;
+        border-radius: 14px;
+        border-width: 1.5px;
+        border-color: Theme.erreur;
+        min-height: message.preferred-height + 24px;
+        message := Text {
+            x: 16px;
+            y: 12px;
+            width: parent.width - 32px;
+            text: AutoEq.erreur;
+            font-family: Theme.courant;
+            font-size: 15px;
+            color: Theme.texte;
+            wrap: word-wrap;
+        }
+    }
+
+    // La base n'a jamais été téléchargée (ou est illisible).
+    if AutoEq.etat == 0: VerticalLayout {
+        spacing: 12px;
+        Paragraphe { text: @tr("La base des casques n’est pas encore sur ce PC. Elle se télécharge une seule fois, depuis le dépôt public d’AutoEQ (environ 0,9 Mo), puis elle est gardée ici : la recherche marche ensuite sans connexion."); }
+        HorizontalLayout {
+            alignment: start;
+            Bouton { texte: @tr("Télécharger la base"); genre: GenreBouton.principal; active => { AutoEq.mettre-a-jour(); } }
+        }
+    }
+
+    // L'index est en cours de téléchargement : pas de pourcentage, on n'en connaît pas.
+    if AutoEq.etat == 2: Paragraphe { text: @tr("Téléchargement de la base en cours…"); color: Theme.texte; }
+
+    if AutoEq.etat == 1: VerticalLayout {
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 16px;
+            ChampTexte {
+                texte <=> AutoEq.requete;
+                indication: @tr("Nom de ton casque, par exemple INZONE H9");
+                modifie(t) => { AutoEq.chercher(t); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            Paragraphe { text: AutoEq.resume; font-size: 14px; vertical-alignment: center; }
+            VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                HorizontalLayout { alignment: end; Bouton { texte: @tr("Mettre à jour la base"); genre: GenreBouton.lien; active => { AutoEq.mettre-a-jour(); } } }
+            }
+        }
+        if AutoEq.import-en-cours: Paragraphe { text: @tr("Téléchargement des réglages de ce casque…"); color: Theme.texte; }
+        if AutoEq.requete == "": Paragraphe { text: @tr("Tape le nom de ton casque. Si plusieurs sources l’ont mesuré, elles apparaissent toutes : à toi de choisir."); }
+        if AutoEq.requete != "" && AutoEq.resultats.length == 0: Paragraphe { text: @tr("Aucun casque ne correspond. Essaie moins de mots ou une autre orthographe ; ton casque n’est peut-être pas dans AutoEQ."); }
+        if AutoEq.resultats.length > 0: ScrollView {
+            height: min(AutoEq.resultats.length * 65px, 330px);
+            content-height: AutoEq.resultats.length * 65px;
+            VerticalLayout {
+                for r[i] in AutoEq.resultats: VerticalLayout {
+                    Separateur { }
+                    LigneResultat { r: r; occupe: AutoEq.import-en-cours; choisit => { AutoEq.choisir(i); } }
+                }
+            }
+        }
+    }
+}

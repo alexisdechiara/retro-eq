@@ -174,3 +174,24 @@ export global Reglages {
     callback exporter(string);
     callback rendre-son-origine();
 }
+
+// ----- Base AutoEQ (ADR-0013) -----
+
+export struct LigneAutoEq { nom: string, source: string, detail: string, hors-ligne: bool }
+
+export global AutoEq {
+    in-out property <bool> ouvert: false;
+    in property <int> etat: 0;                   // 0 base absente, 1 prête, 2 mise à jour en cours
+    in property <bool> import-en-cours: false;
+    in property <string> resume: "";             // « 8 850 casques · mise à jour le 25/11 »
+    in property <string> erreur: "";
+    in property <[LigneAutoEq]> resultats;
+    in-out property <string> requete: "";
+    callback ouvrir();
+    callback fermer();
+    callback mettre-a-jour();
+    callback chercher(string);
+    callback choisir(int);
+    ouvrir => { self.ouvert = true; }
+    fermer => { self.ouvert = false; }
+}

@@ -13,6 +13,8 @@
 //! fonction, chaque `match` à compléter. Aucune bibliothèque de traduction.
 
 use crate::controleur::{ActionFichier, ErreurControleur};
+use crate::reseau::ErreurReseau;
+use retro_core::autoeq_base::ErreurBase;
 use retro_core::formats::{ErreurFormat, RaisonIgnoree};
 use retro_core::{
     BilanControles, BilanDuels, ComptesSens, Confiance, Cote, DuelFini, ErreurDepot, ErreurProfil,
@@ -827,7 +829,11 @@ pub fn preference_appli(preference: Preference, l: Langue) -> &'static str {
 pub fn origine(origine: &Origine, l: Langue) -> String {
     match origine {
         Origine::Preset => choisir(l, "Preset de départ", "Starting preset").to_string(),
-        Origine::Import { format } => format!("Import {}", nom_format(format, l)),
+        Origine::Import { format } => format!(
+            "Import {}{}",
+            nom_format(format, l),
+            mesures_autoeq(format, l)
+        ),
         Origine::Manuel => choisir(
             l,
             "Réglée à la main dans l’égaliseur",
@@ -843,8 +849,16 @@ pub fn resume_profil(origine_active: &Origine, l: Langue) -> String {
     match origine_active {
         Origine::Preset => choisir(l, "Parti d’un preset", "Started from a preset").to_string(),
         Origine::Import { format } => match l {
-            Langue::Fr => format!("Importé de {}", nom_format(format, l)),
-            Langue::En => format!("Imported from {}", nom_format(format, l)),
+            Langue::Fr => format!(
+                "Importé de {}{}",
+                nom_format(format, l),
+                mesures_autoeq(format, l)
+            ),
+            Langue::En => format!(
+                "Imported from {}{}",
+                nom_format(format, l),
+                mesures_autoeq(format, l)
+            ),
         },
         Origine::Manuel => choisir(l, "Réglé à la main", "Set by hand").to_string(),
         Origine::Test { .. } => choisir(l, "Issu d’un test", "From a test").to_string(),
@@ -857,6 +871,7 @@ pub fn nom_format(format: &str, l: Langue) -> &'static str {
         "peace" => "Peace",
         "apo" | "equalizer_apo" => "Equalizer APO",
         "autoeq" => "AutoEQ",
+        f if f.starts_with("autoeq|") => "AutoEQ",
         "wavelet" => "Wavelet",
         _ => choisir(l, "fichier", "file"),
     }
@@ -1228,6 +1243,77 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
                 (ActionFichier::Ecriture, Langue::En) => "Writing",
             };
             format!("{verbe} {} : {source}", chemin.display())
+        }
+        ErreurControleur::BaseAutoEqReseau(e) => match l {
+            Langue::Fr => format!(
+                "Impossible de télécharger la base AutoEQ : {}. Ta base actuelle reste en place.",
+                erreur_reseau(e, l)
+            ),
+            Langue::En => format!(
+                "Couldn’t download the AutoEQ database: {}. Your current database is kept.",
+                erreur_reseau(e, l)
+            ),
+        },
+        ErreurControleur::CasqueAutoEqReseau(e) => {
+            let hors_ligne = matches!(e, ErreurReseau::Connexion(_));
+            let suite = match (hors_ligne, l) {
+                (true, Langue::Fr) => {
+                    " Sans connexion, seuls les casques déjà téléchargés peuvent être importés."
+                }
+                (true, Langue::En) => {
+                    " Without a connection, only headphones already downloaded can be imported."
+                }
+                (false, _) => "",
+            };
+            match l {
+                Langue::Fr => format!(
+                    "Impossible de télécharger les réglages de ce casque : {}.{suite}",
+                    erreur_reseau(e, l)
+                ),
+                Langue::En => format!(
+                    "Couldn’t download this headphone’s settings: {}.{suite}",
+                    erreur_reseau(e, l)
+                ),
+            }
+        }
+        ErreurControleur::BaseAutoEq(e) => match (e, l) {
+            (ErreurBase::IndexVide, Langue::Fr) => "La base téléchargée ne contient aucun casque lisible : AutoEQ a peut-être changé de forme. Ta base actuelle reste en place.".to_string(),
+            (ErreurBase::IndexVide, Langue::En) => "The downloaded database has no readable headphone: AutoEQ may have changed its layout. Your current database is kept.".to_string(),
+            (_, Langue::Fr) => "La base AutoEQ gardée sur ce PC est illisible : télécharge-la de nouveau.".to_string(),
+            (_, Langue::En) => "The AutoEQ database stored on this PC is unreadable: download it again.".to_string(),
+        },
+        ErreurControleur::ResultatAutoEqInconnu => choisir(
+            l,
+            "Ce résultat n’est plus dans la base : refais la recherche.",
+            "This result is no longer in the database: search again.",
+        )
+        .to_string(),
+    }
+}
+
+fn erreur_reseau(e: &ErreurReseau, l: Langue) -> String {
+    match (e, l) {
+        (ErreurReseau::Connexion(_), Langue::Fr) => {
+            "pas de connexion ou serveur injoignable".to_string()
+        }
+        (ErreurReseau::Connexion(_), Langue::En) => {
+            "no connection, or the server can’t be reached".to_string()
+        }
+        (ErreurReseau::Http(404), Langue::Fr) => {
+            "ce fichier n’existe plus chez AutoEQ (erreur 404)".to_string()
+        }
+        (ErreurReseau::Http(404), Langue::En) => {
+            "this file no longer exists at AutoEQ (error 404)".to_string()
+        }
+        (ErreurReseau::Http(code), Langue::Fr) => {
+            format!("le serveur a répondu par l’erreur {code}")
+        }
+        (ErreurReseau::Http(code), Langue::En) => format!("the server answered with error {code}"),
+        (ErreurReseau::TropVolumineuse, Langue::Fr) => {
+            "réponse anormalement volumineuse, abandonnée".to_string()
+        }
+        (ErreurReseau::TropVolumineuse, Langue::En) => {
+            "unusually large response, dropped".to_string()
         }
     }
 }
@@ -1690,4 +1776,87 @@ pub fn bilan_autotest(bons: usize, a_verifier: usize, erreurs: usize, l: Langue)
         });
     }
     morceaux.join(" · ")
+}
+
+// ----- Base AutoEQ -----
+
+/// La source et le banc d'un format d'origine `autoeq|source|banc` (ADR-0013).
+pub fn source_autoeq(format: &str) -> Option<(&str, Option<&str>)> {
+    let mut morceaux = format.strip_prefix("autoeq|")?.splitn(2, '|');
+    let source = morceaux.next().filter(|s| !s.is_empty())?;
+    let banc = morceaux.next().filter(|b| !b.is_empty());
+    Some((source, banc))
+}
+
+/// « source (banc) », ou seulement la source quand le banc n'est pas connu.
+fn source_et_banc(source: &str, banc: Option<&str>) -> String {
+    match banc {
+        Some(banc) => format!("{source} ({banc})"),
+        None => source.to_string(),
+    }
+}
+
+/// Ce qu'on ajoute à « Import AutoEQ » : qui a mesuré le casque. Vide pour les autres formats.
+fn mesures_autoeq(format: &str, l: Langue) -> String {
+    match source_autoeq(format) {
+        Some((source, banc)) => match l {
+            Langue::Fr => format!(" · mesures {}", source_et_banc(source, banc)),
+            Langue::En => format!(" · measurements by {}", source_et_banc(source, banc)),
+        },
+        None => String::new(),
+    }
+}
+
+/// Le nom du profil créé depuis la base : « Sony INZONE H9 (Rtings) ». La source distingue
+/// deux mesures du même casque.
+pub fn nom_profil_autoeq(casque: &str, source: &str) -> String {
+    format!("{casque} ({source})")
+}
+
+/// Le compte rendu d'un import depuis la base : celui d'un import de fichier, puis d'où
+/// viennent les mesures et le rappel qu'un réglage AutoEQ est un point de départ.
+pub fn annonce_autoeq(compte_rendu: &str, source: &str, banc: Option<&str>, l: Langue) -> String {
+    let origine = source_et_banc(source, banc);
+    match l {
+        Langue::Fr => format!(
+            "{compte_rendu} Mesures de {origine} : un point de départ, à juger à l’oreille."
+        ),
+        Langue::En => format!(
+            "{compte_rendu} Measurements by {origine}: a starting point, to be judged by ear."
+        ),
+    }
+}
+
+/// « 8 850 casques · mise à jour le 25/11 » : ce que contient la base gardée.
+pub fn resume_base_autoeq(nombre: usize, date: &str, l: Langue) -> String {
+    let n = milliers(nombre, l);
+    match l {
+        Langue::Fr => format!("{n} casques · mise à jour le {date}"),
+        Langue::En => format!("{n} headphones · updated {date}"),
+    }
+}
+
+fn milliers(n: usize, l: Langue) -> String {
+    let chiffres = n.to_string();
+    let separateur = match l {
+        Langue::Fr => '\u{202f}',
+        Langue::En => ',',
+    };
+    let mut sortie = String::new();
+    for (i, c) in chiffres.chars().enumerate() {
+        if i > 0 && (chiffres.len() - i) % 3 == 0 {
+            sortie.push(separateur);
+        }
+        sortie.push(c);
+    }
+    sortie
+}
+
+/// La ligne sous un résultat : « HMS II.3 · over-ear ».
+pub fn detail_resultat_autoeq(banc: Option<&str>, type_casque: Option<&str>) -> String {
+    [banc, type_casque]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ")
 }

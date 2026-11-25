@@ -1,6 +1,6 @@
 # Recherche du casque dans la base AutoEQ
 
-Status: needs-triage
+Status: resolved
 Type: task
 Blocked by: 03
 

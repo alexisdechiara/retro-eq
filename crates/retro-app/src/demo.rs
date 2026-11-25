@@ -349,4 +349,52 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
             })
             .collect(),
     ));
+
+    remplir_autoeq(fenetre, l);
+}
+
+/// Le panneau de recherche AutoEQ. Les résultats sont de vraies entrées de la base (relevées
+/// le 25/11/2026) ; `RETRO_EQ_DEMO_AUTOEQ` (« absente », « vide », « erreur », « import »)
+/// montre les autres états pour les captures.
+fn remplir_autoeq(fenetre: &FenetrePrincipale, l: Langue) {
+    let autoeq = fenetre.global::<AutoEq>();
+    let etat = std::env::var("RETRO_EQ_DEMO_AUTOEQ").unwrap_or_default();
+    let ligne = |nom: &str, hors_ligne: bool| LigneAutoEq {
+        nom: nom.into(),
+        source: "Rtings".into(),
+        detail: textes::detail_resultat_autoeq(Some("HMS II.3"), Some("over-ear")).into(),
+        hors_ligne,
+    };
+    autoeq.set_requete(
+        match etat.as_str() {
+            "absente" => "",
+            "vide" => "inzone h9 ii",
+            _ => "inzone",
+        }
+        .into(),
+    );
+    autoeq.set_etat(if etat == "absente" { 0 } else { 1 });
+    autoeq.set_import_en_cours(etat == "import");
+    autoeq.set_resume(textes::resume_base_autoeq(8850, "25/11", l).into());
+    if etat == "erreur" {
+        autoeq.set_erreur(
+            textes::erreur(
+                &crate::controleur::ErreurControleur::CasqueAutoEqReseau(
+                    crate::reseau::ErreurReseau::Connexion(String::new()),
+                ),
+                l,
+            )
+            .into(),
+        );
+    }
+    let resultats = if etat == "vide" || etat == "absente" {
+        Vec::new()
+    } else {
+        vec![
+            ligne("Sony INZONE H9", true),
+            ligne("Sony INZONE H7", false),
+            ligne("Sony INZONE H3", false),
+        ]
+    };
+    autoeq.set_resultats(modele(resultats));
 }

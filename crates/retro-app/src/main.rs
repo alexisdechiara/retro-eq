@@ -35,6 +35,7 @@ mod fenetre;
 mod mini;
 mod pont;
 mod raccourcis;
+mod reseau;
 mod textes;
 mod traductions;
 
@@ -54,7 +55,7 @@ fn ecran_depuis(nom: &str) -> Option<Ecran> {
         "nouveau-test" => Ecran::NouveauTest,
         "duels" => Ecran::Duels,
         "resultat" => Ecran::Resultat,
-        "profils" => Ecran::Profils,
+        "profils" | "autoeq" => Ecran::Profils,
         "egaliseur" => Ecran::Egaliseur,
         "visualiseur" => Ecran::Visualiseur,
         "reglages" => Ecran::Reglages,
@@ -194,6 +195,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(ecran) = ecran {
         fenetre.global::<Appli>().set_ecran(ecran);
+    }
+    // `--ecran autoeq` : l'écran Mes profils, panneau de recherche AutoEQ ouvert (captures).
+    if argument(&arguments, "--ecran").as_deref() == Some("autoeq") {
+        fenetre.global::<AutoEq>().set_ouvert(true);
     }
     if arguments.iter().any(|a| a == "--rail") {
         fenetre.global::<Appli>().set_rail(true);
