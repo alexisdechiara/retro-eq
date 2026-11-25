@@ -39,7 +39,9 @@ component Reponse inherits Rectangle {
         mouse-cursor: pointer;
         clicked => { portee.focus(); root.choisit(); }
     }
+    // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
     portee := FocusScope {
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.choisit(); return accept; }
             return reject;

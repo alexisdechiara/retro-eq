@@ -28,6 +28,8 @@ pub use ui::*;
 
 mod autotest;
 mod barre;
+#[cfg(test)]
+mod clics_tests;
 mod controleur;
 mod courbes;
 mod demo;

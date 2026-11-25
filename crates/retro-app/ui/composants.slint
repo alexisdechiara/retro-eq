@@ -142,9 +142,13 @@ export component Bouton {
     zone := TouchArea {
         enabled: actif;
         mouse-cursor: pointer;
-        clicked => { root.active(); }
+        clicked => { portee.focus(); root.active(); }
     }
+    // Posé après la TouchArea, donc au-dessus d'elle : avec `focus-on-click` (vrai par défaut),
+    // il prendrait le focus au premier appui ET garderait l'événement, et la TouchArea ne
+    // verrait que le deuxième clic. C'est le `clicked` ci-dessus qui donne le focus.
     portee := FocusScope {
+        focus-on-click: false;
         enabled: actif;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) {
@@ -346,9 +350,11 @@ export component Interrupteur {
     }
     TouchArea {
         mouse-cursor: pointer;
-        clicked => { root.bascule(!coche); }
+        clicked => { portee.focus(); root.bascule(!coche); }
     }
+    // `focus-on-click: false` : voir le commentaire de `Bouton`.
     portee := FocusScope {
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) {
                 root.bascule(!coche);
@@ -566,7 +572,9 @@ export component Fader {
             horizontal-alignment: center;
         }
     }
+    // `focus-on-click: false` : le Fader prend le focus lui-même à l'appui (voir `prise`).
     portee := FocusScope {
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == Key.UpArrow) { root.regle(min(maxi, valeur + 0.5)); return accept; }
             if (e.text == Key.DownArrow) { root.regle(max(mini, valeur - 0.5)); return accept; }

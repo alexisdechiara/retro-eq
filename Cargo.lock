@@ -3936,6 +3936,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "global-hotkey",
+ "i-slint-backend-testing",
  "i-slint-backend-winit",
  "image",
  "open",
