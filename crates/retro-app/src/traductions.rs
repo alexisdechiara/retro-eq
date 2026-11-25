@@ -156,7 +156,9 @@ fn cles_de_l_interface() -> BTreeMap<Cle, Vec<String>> {
     assert!(!fichiers.is_empty(), "aucun fichier .slint trouvé");
     let mut cles: BTreeMap<Cle, Vec<String>> = BTreeMap::new();
     for fichier in fichiers {
-        let source = fs::read_to_string(&fichier).expect("fichier .slint lisible");
+        let source = fs::read_to_string(&fichier)
+            .expect("fichier .slint lisible")
+            .replace("\r\n", "\n");
         let nom = fichier
             .strip_prefix(racine)
             .unwrap_or(&fichier)
@@ -255,8 +257,9 @@ fn chemin_po() -> PathBuf {
 }
 
 fn po_anglais() -> BTreeMap<Cle, Formes> {
-    let contenu =
-        fs::read_to_string(chemin_po()).expect("lang/en/LC_MESSAGES/retro-app.po lisible");
+    let contenu = fs::read_to_string(chemin_po())
+        .expect("lang/en/LC_MESSAGES/retro-app.po lisible")
+        .replace("\r\n", "\n");
     lire_po(&contenu)
 }
 
@@ -351,7 +354,9 @@ fn le_separateur_decimal_anglais_est_le_point() {
 
 #[test]
 fn l_en_tete_du_po_annonce_deux_formes_de_pluriel() {
-    let contenu = fs::read_to_string(chemin_po()).expect("fichier .po lisible");
+    let contenu = fs::read_to_string(chemin_po())
+        .expect("fichier .po lisible")
+        .replace("\r\n", "\n");
     assert!(contenu.contains("Plural-Forms: nplurals=2; plural=(n != 1);"));
     assert!(contenu.contains("Language: en"));
 }
