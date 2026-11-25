@@ -1,0 +1,65 @@
+name: Publication
+
+# Se déclenche quand on pousse une étiquette « v* » (ex. v0.1.0). Construit l'appli et
+# l'installateur, puis crée un brouillon de publication GitHub : rien n'est visible du public
+# tant qu'Alexis ne l'a pas relu et publié à la main.
+on:
+  push:
+    tags: ["v*"]
+
+# Le strict nécessaire : créer la publication et y joindre des fichiers.
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publier:
+    name: Installateur et publication (brouillon)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: L'étiquette doit correspondre à la version de Cargo.toml
+        shell: pwsh
+        run: |
+          $ligne = Select-String -Path Cargo.toml -Pattern '^\s*version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $version = $ligne.Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "L'étiquette $env:GITHUB_REF_NAME ne correspond pas à la version $version de Cargo.toml"
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - run: cargo test --workspace --locked
+      - run: cargo build --release -p retro-app --locked
+
+      # Point d'accroche de la signature : voir docs/signature-signpath.md. Quand le projet
+      # aura son certificat, c'est ici qu'on enverra target/release/retro-eq.exe à SignPath
+      # AVANT de construire l'installateur, puis l'installateur lui-même une fois construit.
+
+      - name: Installateur (Inno Setup)
+        shell: pwsh
+        run: ./installateur/construire.ps1
+
+      - name: Fichiers de la publication
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item "installateur/sortie/retro-eq-$env:VERSION-installateur-x64.exe" dist/
+          Compress-Archive -Path target/release/retro-eq.exe, LICENSE -DestinationPath "dist/retro-eq-$env:VERSION-windows-x64.zip"
+          # Empreintes SHA-256, au format de « sha256sum -c » : « empreinte  nom ».
+          $lignes = Get-ChildItem dist -File | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          }
+          Set-Content -Path dist/SHA256SUMS.txt -Value $lignes -Encoding ascii
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Brouillon de publication GitHub
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --draft --verify-tag --title "Retro EQ $env:VERSION" --generate-notes (Get-ChildItem dist -File | ForEach-Object { $_.FullName })
