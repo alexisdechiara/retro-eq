@@ -7,6 +7,7 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod autoeq_base;
 pub mod confiance;
 pub mod depot;
 pub mod deroulement;

@@ -12,7 +12,7 @@
 
 use crate::autotest::{self, Cible};
 use crate::barre::{Barre, EvenementBarre};
-use crate::controleur::{ChoixTest, Controleur, EtatTestVue, VueDuels};
+use crate::controleur::{ChoixTest, Controleur, EtatBaseAutoEq, EtatTestVue, VueDuels};
 use crate::courbes::chemin_svg;
 use crate::mini::Mini;
 use crate::niveaux::SuiviNiveau;
@@ -76,6 +76,7 @@ struct Modeles {
     applis: Rc<VecModel<LigneAppli>>,
     controles: Rc<VecModel<LigneControle>>,
     raccourcis: Rc<VecModel<LigneRaccourci>>,
+    autoeq: Rc<VecModel<LigneAutoEq>>,
 }
 
 fn maj<T: Clone + PartialEq + 'static>(modele: &Rc<VecModel<T>>, lignes: Vec<T>) {
@@ -179,6 +180,7 @@ impl Pont {
                 applis: Rc::new(VecModel::default()),
                 controles: Rc::new(VecModel::default()),
                 raccourcis: Rc::new(VecModel::default()),
+                autoeq: Rc::new(VecModel::default()),
             },
             mesure: Mesure::new(BANDES),
             // 30 images par seconde pendant 30 secondes.
@@ -272,6 +274,8 @@ impl Pont {
                 })
                 .collect(),
         );
+
+        self.synchroniser_autoeq(fenetre);
 
         let resultat = fenetre.global::<Resultat>();
         match c.vue_resultat() {
@@ -372,6 +376,52 @@ impl Pont {
             return;
         }
         self.autotester(fenetre);
+    }
+
+    /// Le panneau « Chercher mon casque » : l'état de la base et les résultats.
+    fn synchroniser_autoeq(&self, fenetre: &FenetrePrincipale) {
+        let vue = self.controleur.vue_autoeq();
+        let autoeq = fenetre.global::<AutoEq>();
+        autoeq.set_etat(match vue.etat {
+            EtatBaseAutoEq::Absente => 0,
+            EtatBaseAutoEq::Prete => 1,
+            EtatBaseAutoEq::MiseAJour => 2,
+        });
+        autoeq.set_import_en_cours(vue.import_en_cours);
+        autoeq.set_resume(vue.resume.into());
+        autoeq.set_erreur(vue.erreur.into());
+        maj(
+            &self.modeles.autoeq,
+            vue.resultats
+                .into_iter()
+                .map(|r| LigneAutoEq {
+                    detail: textes::detail_resultat_autoeq(
+                        r.plateforme.as_deref(),
+                        r.type_casque.as_deref(),
+                    )
+                    .into(),
+                    nom: r.nom.into(),
+                    source: r.source.into(),
+                    hors_ligne: r.hors_ligne,
+                })
+                .collect(),
+        );
+    }
+
+    /// Prend la réponse d'un téléchargement AutoEQ terminé, s'il y en a une. Rend vrai quand
+    /// l'écran doit être remis à jour.
+    fn relever_autoeq(&mut self, fenetre: &FenetrePrincipale, t: u64) -> bool {
+        if !self.controleur.autoeq_occupe() {
+            return false;
+        }
+        let id = self.controleur.autoeq_relever(t);
+        if self.controleur.autoeq_occupe() {
+            return false;
+        }
+        if let Some(id) = id {
+            fenetre.global::<Profils>().set_choisi(id.into());
+        }
+        true
     }
 
     fn synchroniser_nouveau_test(&self, fenetre: &FenetrePrincipale) {
@@ -567,7 +617,8 @@ impl Pont {
         }
 
         self.relever_choix(fenetre);
-        if agi {
+        let autoeq_fini = self.relever_autoeq(fenetre, t);
+        if agi || autoeq_fini {
             self.synchroniser(fenetre);
         } else if self.controleur.test_en_cours() {
             self.controleur.tic(t);
@@ -928,6 +979,9 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         if let Some(actif) = pont.controleur.vue_profils().into_iter().find(|p| p.actif) {
             profils.set_choisi(actif.id.into());
         }
+        fenetre
+            .global::<AutoEq>()
+            .set_resultats(m.autoeq.clone().into());
         let resultat = fenetre.global::<Resultat>();
         resultat.set_zones(m.zones.clone().into());
         resultat.set_applis(m.applis.clone().into());
@@ -1049,6 +1103,29 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     }));
     profils.on_importer(agir!(|p, f| {
         importer(p, f);
+    }));
+
+    // Base AutoEQ : le panneau « Chercher mon casque » (ADR-0013). Le réseau tourne sur un
+    // fil de travail ; la réponse est relevée à chaque image (`relever_autoeq`).
+    let autoeq = fenetre.global::<AutoEq>();
+    autoeq.on_ouvrir(agir!(|p, f| {
+        p.controleur.autoeq_ouvrir();
+        f.global::<AutoEq>().set_ouvert(true);
+    }));
+    autoeq.on_fermer(agir!(|p, f| {
+        f.global::<AutoEq>().set_ouvert(false);
+    }));
+    autoeq.on_mettre_a_jour(agir!(|p, f| {
+        p.controleur.autoeq_mettre_a_jour();
+    }));
+    autoeq.on_chercher(agir!(|p, f, requete| {
+        p.controleur.autoeq_chercher(&requete);
+    }));
+    autoeq.on_choisir(agir!(|p, f, rang| {
+        let t = p.maintenant();
+        if let Some(id) = p.controleur.autoeq_choisir(rang.max(0) as usize, t) {
+            f.global::<Profils>().set_choisi(id.into());
+        }
     }));
     profils.on_exporter(agir!(|p, f, id, format| {
         p.controleur.exporter_profil(&id, &format);

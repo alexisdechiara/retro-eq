@@ -9,14 +9,18 @@
 //! Aucune méthode ne panique ni ne rend d'erreur à l'appelant : un échec devient une
 //! [`Annonce`] (le message en bas de la fenêtre), que le pont vient chercher.
 
+mod autoeq;
 mod dates;
 #[cfg(test)]
 mod tests;
 mod vues;
 
+pub use autoeq::EtatBaseAutoEq;
 pub use vues::*;
 
+use crate::reseau::ErreurReseau;
 use crate::textes;
+use retro_core::autoeq_base::ErreurBase;
 use retro_core::formats::{self, ErreurFormat, Format};
 use retro_core::{
     duel_verification, plan_avec_historique, ContexteReprise, Cote, Depot, Deroulement, Effet,
@@ -82,6 +86,14 @@ pub enum ErreurControleur {
         #[source]
         source: std::io::Error,
     },
+    #[error("Téléchargement de la base AutoEQ impossible : {0}")]
+    BaseAutoEqReseau(ErreurReseau),
+    #[error("Téléchargement des réglages de ce casque impossible : {0}")]
+    CasqueAutoEqReseau(ErreurReseau),
+    #[error("Base AutoEQ inutilisable : {0}")]
+    BaseAutoEq(#[from] ErreurBase),
+    #[error("Ce résultat n’est plus dans la base : refais la recherche.")]
+    ResultatAutoEqInconnu,
 }
 
 /// Ce que l'appli faisait d'un fichier quand une erreur est survenue.
@@ -210,6 +222,8 @@ pub struct Controleur {
     annonce: Option<Annonce>,
     bips: u32,
     tirages: u64,
+    /// La base AutoEQ : l'index gardé en local, la recherche et les téléchargements.
+    autoeq: autoeq::Etat,
 }
 
 impl Controleur {
@@ -277,6 +291,7 @@ impl Controleur {
             annonce,
             bips: 0,
             tirages: 0,
+            autoeq: autoeq::Etat::default(),
         };
         c.retrouver_profil_actif(maintenant_ms)?;
         // La référence d'abord, quoi qu'il se soit passé avant.
@@ -981,41 +996,56 @@ impl Controleur {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| textes::profil_importe(l).to_string())
             });
-            // Préampli automatique : un fichier venu d'ailleurs ne doit pas pouvoir saturer.
-            let (fichier, auto) = (import.courbe.preampli_db, import.courbe.preampli_auto_db());
-            let profil = Profil::nouveau(
-                c.nouvel_id(t),
-                nom.clone(),
-                import.courbe.avec_preampli_auto(),
-                Origine::Import {
-                    format: nom_format.to_string(),
-                },
-                c.date(t),
-            );
-            nouveau = Some(profil.id().to_string());
-            c.ajouter_profil(profil)?;
-            // Les commentaires et les lignes éteintes ne sont pas une perte : le résumé ne
-            // compte que ce qui change le son, et à part ce qui a été repris de façon approchée.
-            let mut laissees: Vec<(&'static str, usize)> = Vec::new();
-            for ligne in import.ignores.iter().filter(|l| l.raison.change_le_son()) {
-                let raison = textes::raison_ignoree(&ligne.raison, l);
-                match laissees.iter_mut().find(|(r, _)| *r == raison) {
-                    Some((_, n)) => *n += 1,
-                    None => laissees.push((raison, 1)),
-                }
-            }
-            let approchees = import
-                .ignores
-                .iter()
-                .filter(|l| l.raison == formats::RaisonIgnoree::Approximation)
-                .count();
-            // Le préampli du fichier n'est pas repris : on dit quand l'écart s'entend.
-            let preampli = ((fichier - auto).abs() > 0.5).then_some((fichier, auto));
-            Ok(Some(textes::annonce_import(
-                &nom, nom_format, &laissees, approchees, preampli, l,
-            )))
+            let (id, annonce) = c.creer_profil_importe(import, nom, nom_format, t)?;
+            nouveau = Some(id);
+            Ok(Some(annonce))
         });
         nouveau
+    }
+
+    /// Crée le profil d'un fichier lu (préampli automatique, origine « import ») et rend son
+    /// identifiant avec le compte rendu honnête de l'import. Commun à l'import d'un fichier
+    /// et à celui de la base AutoEQ : même chemin, même résumé.
+    fn creer_profil_importe(
+        &mut self,
+        import: formats::Import,
+        nom: String,
+        format: &str,
+        t: u64,
+    ) -> Issue<(String, String)> {
+        let l = self.reglages.langue;
+        // Préampli automatique : un fichier venu d'ailleurs ne doit pas pouvoir saturer.
+        let (fichier, auto) = (import.courbe.preampli_db, import.courbe.preampli_auto_db());
+        let profil = Profil::nouveau(
+            self.nouvel_id(t),
+            nom.clone(),
+            import.courbe.avec_preampli_auto(),
+            Origine::Import {
+                format: format.to_string(),
+            },
+            self.date(t),
+        );
+        let id = profil.id().to_string();
+        self.ajouter_profil(profil)?;
+        // Les commentaires et les lignes éteintes ne sont pas une perte : le résumé ne
+        // compte que ce qui change le son, et à part ce qui a été repris de façon approchée.
+        let mut laissees: Vec<(&'static str, usize)> = Vec::new();
+        for ligne in import.ignores.iter().filter(|l| l.raison.change_le_son()) {
+            let raison = textes::raison_ignoree(&ligne.raison, l);
+            match laissees.iter_mut().find(|(r, _)| *r == raison) {
+                Some((_, n)) => *n += 1,
+                None => laissees.push((raison, 1)),
+            }
+        }
+        let approchees = import
+            .ignores
+            .iter()
+            .filter(|l| l.raison == formats::RaisonIgnoree::Approximation)
+            .count();
+        // Le préampli du fichier n'est pas repris : on dit quand l'écart s'entend.
+        let preampli = ((fichier - auto).abs() > 0.5).then_some((fichier, auto));
+        let annonce = textes::annonce_import(&nom, format, &laissees, approchees, preampli, l);
+        Ok((id, annonce))
     }
 
     fn ecrire_export(&mut self, nom: &str, courbe: &Courbe, format: &str) -> Issue<Option<String>> {

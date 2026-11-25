@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
-import { Appli, Ecran, Profils, LigneProfil } from "../etat.slint";
+import { Appli, Ecran, Profils, LigneProfil, AutoEq } from "../etat.slint";
+import { PanneauAutoEq } from "autoeq.slint";
 import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Separateur, EcranCourbe } from "../composants.slint";
 
 // Une cassette : un profil. Cliquable et activable au clavier.
@@ -119,9 +120,15 @@ export component EcranProfils inherits VerticalLayout {
         VerticalLayout {
             alignment: start;
             horizontal-stretch: 0;
-            Bouton { texte: @tr("Importer un fichier…"); prefixe: "⇧"; active => { Profils.importer(); } }
+            HorizontalLayout {
+                spacing: 10px;
+                Bouton { texte: @tr("Chercher mon casque (AutoEQ)"); prefixe: "⌕"; genre: AutoEq.ouvert ? GenreBouton.choisi : GenreBouton.secondaire; active => { AutoEq.ouvrir(); } }
+                Bouton { texte: @tr("Importer un fichier…"); prefixe: "⇧"; active => { Profils.importer(); } }
+            }
         }
     }
+
+    if AutoEq.ouvert: PanneauAutoEq { }
 
     if Profils.liste.length == 0: Carte {
         TitreSection { contenu: @tr("Aucun profil pour l’instant"); }

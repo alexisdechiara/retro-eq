@@ -901,3 +901,42 @@ msgstr "{} dB of headroom left before clipping (0 dB). Light mark: the average. 
 
 msgid "Remettre à zéro"
 msgstr "Reset"
+
+msgid "Chercher mon casque (AutoEQ)"
+msgstr "Find my headphones (AutoEQ)"
+
+msgid "AutoEQ propose un réglage pour de nombreux casques, calculé à partir de mesures faites par d’autres personnes, sur des bancs différents. C’est un point de départ à juger à l’oreille, pas une vérité : au-delà d’environ 8 kHz, une mesure est peu fiable."
+msgstr "AutoEQ offers a setting for many headphones, calculated from measurements made by other people, on different rigs. It is a starting point to judge by ear, not the truth: above about 8 kHz, a measurement is unreliable."
+
+msgid "La base des casques n’est pas encore sur ce PC. Elle se télécharge une seule fois, depuis le dépôt public d’AutoEQ (environ 0,9 Mo), puis elle est gardée ici : la recherche marche ensuite sans connexion."
+msgstr "The headphone database isn’t on this PC yet. It is downloaded once, from AutoEQ’s public repository (about 0.9 MB), then kept here: searching then works without a connection."
+
+msgid "Télécharger la base"
+msgstr "Download the database"
+
+msgid "Téléchargement de la base en cours…"
+msgstr "Downloading the database…"
+
+msgid "Nom de ton casque, par exemple INZONE H9"
+msgstr "Your headphones’ name, for example INZONE H9"
+
+msgid "Mettre à jour la base"
+msgstr "Update the database"
+
+msgid "Téléchargement des réglages de ce casque…"
+msgstr "Downloading this headphone’s settings…"
+
+msgid "Tape le nom de ton casque. Si plusieurs sources l’ont mesuré, elles apparaissent toutes : à toi de choisir."
+msgstr "Type your headphones’ name. If several sources measured them, they all appear: you choose."
+
+msgid "Aucun casque ne correspond. Essaie moins de mots ou une autre orthographe ; ton casque n’est peut-être pas dans AutoEQ."
+msgstr "No headphones match. Try fewer words or another spelling; yours may not be in AutoEQ."
+
+msgid "Mesuré par {}"
+msgstr "Measured by {}"
+
+msgid "✓ Déjà sur ce PC"
+msgstr "✓ Already on this PC"
+
+msgid "Créer un profil"
+msgstr "Create a profile"

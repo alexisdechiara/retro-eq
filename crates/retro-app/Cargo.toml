@@ -29,6 +29,8 @@ open = "5"
 sys-locale = "0.3"
 # Sert seulement à connaître le décalage horaire local, pour dater les versions (MIT ou Apache 2.0).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Client HTTP pour la base AutoEQ (MIT ou Apache 2.0). TLS par rustls : pas d'OpenSSL à livrer.
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 
 # Ce qui n'existe que sous Windows : icône de la barre des tâches, boîte « Ouvrir un fichier »,
 # styles de la mini-fenêtre.
