@@ -230,7 +230,7 @@ impl Pont {
         if let Err(e) = lance {
             // Pas de fil disponible : on le dit comme un échec de réseau, sans planter.
             self.controleur
-                .recevoir_verification(Err(ErreurHttp(e.to_string())), t);
+                .recevoir_verification(Err(ErreurHttp::Connexion(e.to_string())), t);
         }
     }
 

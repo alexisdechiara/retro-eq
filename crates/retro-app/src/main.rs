@@ -43,7 +43,6 @@ mod mini;
 mod niveaux;
 mod pont;
 mod raccourcis;
-mod reseau;
 mod sans_fenetre;
 mod textes;
 mod traductions;

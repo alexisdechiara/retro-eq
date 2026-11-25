@@ -384,7 +384,7 @@ fn remplir_autoeq(fenetre: &FenetrePrincipale, l: Langue) {
         autoeq.set_erreur(
             textes::erreur(
                 &crate::controleur::ErreurControleur::CasqueAutoEqReseau(
-                    crate::reseau::ErreurReseau::Connexion(String::new()),
+                    crate::http::ErreurReseau::Connexion(String::new()),
                 ),
                 l,
             )

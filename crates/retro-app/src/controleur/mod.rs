@@ -24,7 +24,7 @@ pub use autoeq::EtatBaseAutoEq;
 pub use mises_a_jour::DemandeVerification;
 pub use vues::*;
 
-use crate::reseau::ErreurReseau;
+use crate::http::ErreurReseau;
 use crate::textes;
 use retro_core::autoeq_base::ErreurBase;
 use retro_core::formats::{self, ErreurFormat, Format};

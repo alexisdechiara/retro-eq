@@ -5,8 +5,8 @@
 
 use super::*;
 use crate::http::factice::ClientFactice;
-use crate::http::ErreurHttp;
-use retro_core::mises_a_jour::{ReponseApi, DELAI_ENTRE_VERIFICATIONS_MS as JOUR, PAGE_VERSIONS};
+use crate::http::{ErreurHttp, ReponseHttp};
+use retro_core::mises_a_jour::{DELAI_ENTRE_VERIFICATIONS_MS as JOUR, PAGE_VERSIONS};
 use retro_engine::MoteurSimule;
 use tempfile::TempDir;
 
@@ -46,18 +46,18 @@ fn verifier(c: &mut Controleur, client: &ClientFactice, automatique: bool, t: u6
     }
 }
 
-fn reponse(statut: u16, entetes: &[(&str, &str)], corps: &str) -> Result<ReponseApi, ErreurHttp> {
-    Ok(ReponseApi {
+fn reponse(statut: u16, entetes: &[(&str, &str)], corps: &str) -> Result<ReponseHttp, ErreurHttp> {
+    Ok(ReponseHttp {
         statut,
         entetes: entetes
             .iter()
             .map(|(n, v)| (n.to_string(), v.to_string()))
             .collect(),
-        corps: corps.to_string(),
+        corps: corps.as_bytes().to_vec(),
     })
 }
 
-fn publiee(tag: &str) -> Result<ReponseApi, ErreurHttp> {
+fn publiee(tag: &str) -> Result<ReponseHttp, ErreurHttp> {
     reponse(
         200,
         &[("x-ratelimit-remaining", "58")],
@@ -281,7 +281,7 @@ fn une_erreur_reseau_laisse_l_etat_connu_visible() {
     let mut c = ouvrir(&dossier, T0);
     let client = ClientFactice::nouveau();
     client.repondre(publiee("v0.2.0"));
-    client.repondre(Err(ErreurHttp("dns error".into())));
+    client.repondre(Err(ErreurHttp::Connexion("dns error".into())));
     verifier(&mut c, &client, true, T0);
     let avant = c.vue_mise_a_jour(T0);
     assert_eq!(avant.etat, 2);
@@ -311,7 +311,7 @@ fn une_erreur_au_tout_premier_essai_laisse_pas_encore_verifie() {
     let dossier = TempDir::new().unwrap();
     let mut c = ouvrir(&dossier, T0);
     let client = ClientFactice::nouveau();
-    client.repondre(Err(ErreurHttp("timeout".into())));
+    client.repondre(Err(ErreurHttp::Connexion("timeout".into())));
     verifier(&mut c, &client, true, T0);
     let vue = c.vue_mise_a_jour(T0);
     assert_eq!(vue.etat, 0);
@@ -321,7 +321,7 @@ fn une_erreur_au_tout_premier_essai_laisse_pas_encore_verifie() {
 
 #[test]
 fn limite_de_requetes_et_pannes_sont_dites_calmement_et_pas_reessayees_a_chaque_lancement() {
-    let cas: [(Result<ReponseApi, ErreurHttp>, &str); 4] = [
+    let cas: [(Result<ReponseHttp, ErreurHttp>, &str); 4] = [
         (
             reponse(403, &[("x-ratelimit-remaining", "0")], "{}"),
             "trop de demandes",

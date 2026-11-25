@@ -29,22 +29,16 @@ open = "5"
 sys-locale = "0.3"
 # Sert seulement à connaître le décalage horaire local, pour dater les versions (MIT ou Apache 2.0).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-# Client HTTP pour la base AutoEQ (MIT ou Apache 2.0). TLS par rustls : pas d'OpenSSL à livrer.
-ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
-
-# Requête HTTP vers l'API de GitHub pour la vérification des mises à jour (MIT ou Apache 2.0).
-# Ailleurs que sous Windows (développement et tests sous Linux) : rustls. Sous Windows, voir
-# plus bas : rustls (via `ring`) obligerait à compiler du C, ce que la vérification croisée
-# depuis Linux (`clippy --target x86_64-pc-windows-msvc`) ne sait pas faire.
-[target.'cfg(not(windows))'.dependencies]
-ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
+# Client HTTP, utilisé par la base AutoEQ et la vérification des mises à jour (MIT ou Apache 2.0).
+# TLS du système, partout : Schannel sous Windows, OpenSSL sous Linux (développement et CI
+# seulement, l'appli n'est livrée que sous Windows). `native-tls-no-default` : surtout pas
+# `native-tls` ni `rustls`, qui embarquent la liste de certificats `webpki-roots` (licence
+# CDLA-Permissive-2.0, hors de la liste de la règle de licences) et `ring` (code C).
+ureq = { version = "3", default-features = false, features = ["native-tls-no-default", "gzip", "json"] }
 
 # Ce qui n'existe que sous Windows : icône de la barre des tâches, boîte « Ouvrir un fichier »,
 # styles de la mini-fenêtre.
 [target.'cfg(windows)'.dependencies]
-# Sous Windows : Schannel, le TLS du système (certificats de Windows, aucun code C à compiler,
-# aucune liste de certificats embarquée). ureq veut qu'on le choisisse dans `http.rs`.
-ureq = { version = "3", default-features = false, features = ["native-tls-no-default", "gzip", "json"] }
 tray-icon = { version = "0.21", default-features = false }
 rfd = { version = "0.15", default-features = false }
 raw-window-handle = "0.6"

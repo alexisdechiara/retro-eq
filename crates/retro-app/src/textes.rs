@@ -13,7 +13,7 @@
 //! fonction, chaque `match` à compléter. Aucune bibliothèque de traduction.
 
 use crate::controleur::{ActionFichier, ErreurControleur};
-use crate::reseau::ErreurReseau;
+use crate::http::ErreurReseau;
 use retro_core::autoeq_base::ErreurBase;
 use retro_core::formats::{ErreurFormat, RaisonIgnoree};
 use retro_core::{

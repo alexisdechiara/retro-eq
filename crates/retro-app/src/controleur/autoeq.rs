@@ -8,7 +8,7 @@
 //! fait en mémoire et ne demande aucune attente.
 
 use super::*;
-use crate::reseau::{Telechargeur, TelechargeurUreq};
+use crate::http::{telecharger, ClientHttp, ClientUreq};
 use retro_core::autoeq_base::{self, BaseAutoEq, EntreeBase, Resultat, URL_INDEX};
 use std::collections::HashSet;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -78,7 +78,7 @@ pub(super) struct Etat {
     telecharges: HashSet<String>,
     tache: Option<Tache>,
     erreur: String,
-    telechargeur: Arc<dyn Telechargeur>,
+    telechargeur: Arc<dyn ClientHttp>,
     envoi: Sender<Reponse>,
     reception: Receiver<Reponse>,
 }
@@ -94,7 +94,7 @@ impl Default for Etat {
             telecharges: HashSet::new(),
             tache: None,
             erreur: String::new(),
-            telechargeur: Arc::new(TelechargeurUreq::nouveau()),
+            telechargeur: Arc::new(ClientUreq::nouveau()),
             envoi,
             reception,
         }
@@ -104,7 +104,7 @@ impl Default for Etat {
 impl Controleur {
     /// Remplace le téléchargeur (les tests donnent un faux : jamais de vrai réseau).
     #[cfg(test)]
-    pub fn regler_telechargeur(&mut self, telechargeur: Arc<dyn Telechargeur>) {
+    pub fn regler_telechargeur(&mut self, telechargeur: Arc<dyn ClientHttp>) {
         self.autoeq.telechargeur = telechargeur;
     }
 
@@ -172,9 +172,11 @@ impl Controleur {
         }
         self.autoeq.erreur.clear();
         self.lancer(Tache::Index, move |telechargeur, envoi| {
-            let _ = envoi.send(Reponse::Index(
-                telechargeur.obtenir(URL_INDEX, LIMITE_INDEX),
-            ));
+            let _ = envoi.send(Reponse::Index(telecharger(
+                &*telechargeur,
+                URL_INDEX,
+                LIMITE_INDEX,
+            )));
         });
     }
 
@@ -204,7 +206,7 @@ impl Controleur {
         self.lancer(Tache::Casque, move |telechargeur, envoi| {
             let _ = envoi.send(Reponse::Casque(
                 entree,
-                telechargeur.obtenir(&url, LIMITE_REGLAGE),
+                telecharger(&*telechargeur, &url, LIMITE_REGLAGE),
             ));
         });
         None
@@ -236,7 +238,7 @@ impl Controleur {
     fn lancer(
         &mut self,
         tache: Tache,
-        travail: impl FnOnce(Arc<dyn Telechargeur>, Sender<Reponse>) + Send + 'static,
+        travail: impl FnOnce(Arc<dyn ClientHttp>, Sender<Reponse>) + Send + 'static,
     ) {
         let telechargeur = self.autoeq.telechargeur.clone();
         let envoi = self.autoeq.envoi.clone();
@@ -416,7 +418,8 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use crate::reseau::FauxTelechargeur;
+    use crate::http::factice::ClientFactice;
+    use crate::http::{ErreurHttp, ReponseHttp};
     use retro_engine::MoteurSimule;
     use tempfile::TempDir;
 
@@ -440,12 +443,12 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
 
     struct Banc {
         dossier: TempDir,
-        faux: Arc<FauxTelechargeur>,
+        faux: Arc<ClientFactice>,
     }
 
     impl Banc {
         fn nouveau() -> Banc {
-            let faux = Arc::new(FauxTelechargeur::default());
+            let faux = Arc::new(ClientFactice::nouveau());
             faux.texte(URL_INDEX, INDEX);
             Banc {
                 dossier: TempDir::new().unwrap(),
@@ -640,9 +643,9 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
         let banc = Banc::nouveau();
         let mut c = avec_base(&banc);
         banc.faux.couper_le_reseau();
-        banc.faux.repondre(
+        banc.faux.repondre_a(
             &banc.url_reglage_apres_recherche(&mut c),
-            Err(ErreurReseau::Connexion("coupé".into())),
+            Err(ErreurHttp::Connexion("coupé".into())),
         );
         let profils = c.profils.len();
         c.autoeq_choisir(0, T0);
@@ -705,7 +708,14 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
     fn echec_du_telechargement_de_l_index_garde_l_ancien_et_le_dit() {
         let banc = Banc::nouveau();
         let mut c = avec_base(&banc);
-        banc.faux.repondre(URL_INDEX, Err(ErreurReseau::Http(503)));
+        banc.faux.repondre_a(
+            URL_INDEX,
+            Ok(ReponseHttp {
+                statut: 503,
+                entetes: vec![],
+                corps: Vec::new(),
+            }),
+        );
         c.autoeq_mettre_a_jour();
         c.autoeq_attendre(T0);
         let vue = c.vue_autoeq();
@@ -719,7 +729,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
     fn premiere_base_impossible_a_telecharger_reste_absente() {
         let banc = Banc::nouveau();
         banc.faux
-            .repondre(URL_INDEX, Err(ErreurReseau::Connexion("hors ligne".into())));
+            .repondre_a(URL_INDEX, Err(ErreurHttp::Connexion("hors ligne".into())));
         let mut c = banc.ouvrir();
         c.autoeq_ouvrir();
         c.autoeq_mettre_a_jour();
@@ -823,7 +833,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
     fn reel_index_recherche_et_import_de_l_inzone_h9() {
         let banc = Banc::nouveau();
         let mut c = banc.ouvrir();
-        c.regler_telechargeur(Arc::new(TelechargeurUreq::nouveau()));
+        c.regler_telechargeur(Arc::new(ClientUreq::nouveau()));
         c.autoeq_ouvrir();
         c.autoeq_mettre_a_jour();
         c.autoeq_attendre(T0);

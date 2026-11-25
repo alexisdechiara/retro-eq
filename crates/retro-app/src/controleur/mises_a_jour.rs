@@ -81,9 +81,20 @@ impl DemandeVerification {
             .iter()
             .map(|(n, v)| (n.as_str(), v.as_str()))
             .collect();
-        client.obtenir(&self.url, &entetes)
+        let reponse = client.obtenir(&self.url, &entetes, TAILLE_MAX_REPONSE)?;
+        Ok(ReponseApi {
+            statut: reponse.statut,
+            entetes: reponse.entetes,
+            // Du JSON de GitHub : de l'UTF-8. Un octet invalide sera refusé plus loin par
+            // l'analyse du JSON, comme n'importe quelle réponse illisible.
+            corps: String::from_utf8_lossy(&reponse.corps).into_owned(),
+        })
     }
 }
+
+/// Taille maximale de la réponse lue : celle de GitHub fait quelques ko, tout ce qui est
+/// plus gros n'est pas ce qu'on attend.
+const TAILLE_MAX_REPONSE: u64 = 1024 * 1024;
 
 impl Controleur {
     /// Relit `mises-a-jour.json`. Un fichier illisible n'est pas une raison d'alarmer
