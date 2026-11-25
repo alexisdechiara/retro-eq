@@ -108,7 +108,10 @@ fn moteur() -> (Box<dyn Moteur>, Option<PathBuf>) {
         .filter(|d| d.is_dir())
         .or_else(EqualizerApo::detecter);
     match dossier {
-        Some(dossier) => (Box::new(EqualizerApo::nouveau(dossier.clone())), Some(dossier)),
+        Some(dossier) => (
+            Box::new(EqualizerApo::nouveau(dossier.clone())),
+            Some(dossier),
+        ),
         None => (Box::new(MoteurSimule::nouveau()), None),
     }
 }

@@ -64,7 +64,11 @@ fn ligne(texte: TexteControle, etat: Etat, cible: Option<Cible>) -> Controle {
         titre: texte.titre,
         detail: texte.detail,
         etat,
-        action: if cible.is_some() { texte.action } else { String::new() },
+        action: if cible.is_some() {
+            texte.action
+        } else {
+            String::new()
+        },
         cible,
     }
 }
@@ -75,7 +79,11 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
 
     liste.push(ligne(
         textes::controle_sortie(contexte.sortie),
-        if contexte.sortie.is_some() { Etat::Ok } else { Etat::Erreur },
+        if contexte.sortie.is_some() {
+            Etat::Ok
+        } else {
+            Etat::Erreur
+        },
         None,
     ));
 
@@ -89,7 +97,9 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
         (0, _, _) => (Etat::Erreur, Some(Cible::Lien(LIEN_EQUALIZER_APO))),
         (_, _, Some(false)) => (
             Etat::Erreur,
-            contexte.dossier_moteur.map(|d| Cible::Dossier(d.to_path_buf())),
+            contexte
+                .dossier_moteur
+                .map(|d| Cible::Dossier(d.to_path_buf())),
         ),
         (2, true, _) => (Etat::Ok, None),
         _ => (Etat::Attention, None),
@@ -100,7 +110,10 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
         cible,
     ));
 
-    for (i, texte) in textes::controles_a_verifier_soi_meme().into_iter().enumerate() {
+    for (i, texte) in textes::controles_a_verifier_soi_meme()
+        .into_iter()
+        .enumerate()
+    {
         let cible = (i > 0).then_some(Cible::Lien(LIEN_REGLAGES_SON));
         liste.push(ligne(texte, Etat::Attention, cible));
     }
@@ -108,12 +121,20 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
     let raccourcis_bons = contexte.raccourcis_disponibles && contexte.conflits.is_empty();
     liste.push(ligne(
         textes::controle_raccourcis(contexte.conflits, contexte.raccourcis_disponibles),
-        if raccourcis_bons { Etat::Ok } else { Etat::Erreur },
+        if raccourcis_bons {
+            Etat::Ok
+        } else {
+            Etat::Erreur
+        },
         None,
     ));
 
     let compte = |etat| liste.iter().filter(|c| c.etat == etat).count();
-    let bilan = textes::bilan_autotest(compte(Etat::Ok), compte(Etat::Attention), compte(Etat::Erreur));
+    let bilan = textes::bilan_autotest(
+        compte(Etat::Ok),
+        compte(Etat::Attention),
+        compte(Etat::Erreur),
+    );
     (liste, bilan)
 }
 
@@ -220,7 +241,10 @@ mod tests {
             nom: "x".to_string(),
             moteur_installe: true,
         }];
-        assert_eq!(nouvelle_sortie(Some(&sortie("{0.0.0}.{abc-1}")), &moteur), None);
+        assert_eq!(
+            nouvelle_sortie(Some(&sortie("{0.0.0}.{abc-1}")), &moteur),
+            None
+        );
         assert_eq!(
             nouvelle_sortie(Some(&sortie("{0.0.0}.{def-2}")), &moteur),
             Some("Dongle".to_string())

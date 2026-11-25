@@ -379,7 +379,9 @@ pub fn detail_zone(z: &ResultatZone, rien_retenu: bool) -> String {
     if rien_retenu {
         format!("Non retenu pour ce test (voir les duels de contrôle) · {comptes}")
     } else if z.contradictoire {
-        format!("Réponses contradictoires (préférée en plus et en moins) : rien ne change · {comptes}")
+        format!(
+            "Réponses contradictoires (préférée en plus et en moins) : rien ne change · {comptes}"
+        )
     } else if z.est_changee() {
         format!(
             "Changement retenu · {comptes} · {}",
@@ -602,7 +604,11 @@ fn controle(titre: &str, detail: impl Into<String>, action: &str) -> TexteContro
 
 pub fn controle_sortie(nom: Option<&str>) -> TexteControle {
     match nom {
-        Some(nom) => controle("Sortie audio détectée", format!("Sortie par défaut : « {nom} »"), ""),
+        Some(nom) => controle(
+            "Sortie audio détectée",
+            format!("Sortie par défaut : « {nom} »"),
+            "",
+        ),
         None => controle(
             "Aucune sortie audio détectée",
             "Branche ton casque, puis relance l’autotest.",
@@ -758,8 +764,14 @@ mod tests {
 
     #[test]
     fn le_resume_accorde_le_singulier_et_le_pluriel() {
-        assert_eq!(resume_zones(2, 3, false), "2 zones changent, 3 restent comme avant.");
-        assert_eq!(resume_zones(1, 1, false), "1 zone change, 1 reste comme avant.");
+        assert_eq!(
+            resume_zones(2, 3, false),
+            "2 zones changent, 3 restent comme avant."
+        );
+        assert_eq!(
+            resume_zones(1, 1, false),
+            "1 zone change, 1 reste comme avant."
+        );
         assert!(resume_zones(0, 4, false).starts_with("Aucune zone"));
     }
 }

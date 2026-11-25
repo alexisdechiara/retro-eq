@@ -18,7 +18,9 @@ use crate::mini::Mini;
 use crate::raccourcis::{Action, Raccourcis};
 use crate::textes;
 use crate::*;
-use retro_audio::{Bip, Capture, DetecteurAppel, Mesure, PleinEcran, PremierPlan, SortiesAudio, Trame};
+use retro_audio::{
+    Bip, Capture, DetecteurAppel, Mesure, PleinEcran, PremierPlan, SortiesAudio, Trame,
+};
 use retro_core::Reponse;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
@@ -89,7 +91,10 @@ fn maj<T: Clone + PartialEq + 'static>(modele: &Rc<VecModel<T>>, lignes: Vec<T>)
 
 fn textes_modele(lignes: Vec<String>) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
-        lignes.into_iter().map(SharedString::from).collect::<Vec<_>>(),
+        lignes
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -194,7 +199,10 @@ impl Pont {
 
         let vue = c.vue_egaliseur();
         let egaliseur = fenetre.global::<Egaliseur>();
-        maj(&self.modeles.gains, vue.gains.iter().map(|&g| g as f32).collect());
+        maj(
+            &self.modeles.gains,
+            vue.gains.iter().map(|&g| g as f32).collect(),
+        );
         egaliseur.set_preampli_db(vue.preampli_db as f32);
         egaliseur.set_preampli_auto(vue.preampli_auto);
         let chemin: SharedString = chemin_svg(&vue.courbe).into();
@@ -372,7 +380,13 @@ impl Pont {
                 .unwrap_or_default()
                 .into(),
         );
-        diagnostic.set_dossier_donnees(self.controleur.dossier_donnees().display().to_string().into());
+        diagnostic.set_dossier_donnees(
+            self.controleur
+                .dossier_donnees()
+                .display()
+                .to_string()
+                .into(),
+        );
         maj(
             &self.modeles.controles,
             controles
@@ -401,10 +415,14 @@ impl Pont {
         let appli = fenetre.global::<Appli>();
         if appli.get_sortie_audio() != nom.as_str() {
             appli.set_sortie_audio(nom.as_str().into());
-            fenetre.global::<Visualiseur>().set_source(nom.as_str().into());
+            fenetre
+                .global::<Visualiseur>()
+                .set_source(nom.as_str().into());
             let reglages = fenetre.global::<Reglages>();
             reglages.set_sortie(nom.as_str().into());
-            reglages.set_sorties(textes_modele(sorties.iter().map(|s| s.nom.clone()).collect()));
+            reglages.set_sorties(textes_modele(
+                sorties.iter().map(|s| s.nom.clone()).collect(),
+            ));
         }
         // Une sortie par défaut où le moteur n'est pas installé : on le dit une fois.
         let nouvelle = autotest::nouvelle_sortie(defaut, &self.controleur.sorties_moteur());
@@ -420,7 +438,11 @@ impl Pont {
         let appli = fenetre.global::<Appli>();
         appli.set_annonce(texte.into());
         appli.set_annonce_erreur(erreur);
-        let duree = if erreur { DUREE_ERREUR_MS } else { DUREE_ANNONCE_MS };
+        let duree = if erreur {
+            DUREE_ERREUR_MS
+        } else {
+            DUREE_ANNONCE_MS
+        };
         self.annonce_jusqua_ms = horloge_systeme() + duree;
     }
 
@@ -458,7 +480,11 @@ impl Pont {
         }
 
         // L'icône de la barre des tâches.
-        let demandes = self.barre.as_ref().map(Barre::evenements).unwrap_or_default();
+        let demandes = self
+            .barre
+            .as_ref()
+            .map(Barre::evenements)
+            .unwrap_or_default();
         for demande in demandes {
             match demande {
                 EvenementBarre::Ouvrir => montrer_fenetre(fenetre),
@@ -772,6 +798,7 @@ fn pousser_duels(test: &Test, vue: &VueDuels) {
     test.set_compte_a_rebours(vue.compte_a_rebours.as_str().into());
     test.set_suite(vue.suite.as_str().into());
     test.set_pause_conseillee(vue.pause_conseillee);
+    test.set_pause_sans_reponse(vue.pause_sans_reponse);
 }
 
 /// Ramène la fenêtre principale devant, depuis l'icône de la barre des tâches.
@@ -800,7 +827,10 @@ fn choisir_fichier() -> Option<PathBuf> {
     #[cfg(windows)]
     {
         rfd::FileDialog::new()
-            .add_filter("Égaliseur (Peace, Equalizer APO, AutoEQ)", &["peace", "txt"])
+            .add_filter(
+                "Égaliseur (Peace, Equalizer APO, AutoEQ)",
+                &["peace", "txt"],
+            )
             .pick_file()
     }
     #[cfg(not(windows))]
@@ -816,8 +846,12 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     // Les modèles sont donnés une fois pour toutes à l'interface.
     {
         let m = &pont.modeles;
-        fenetre.global::<Egaliseur>().set_gains(m.gains.clone().into());
-        fenetre.global::<Visualiseur>().set_bandes(m.bandes.clone().into());
+        fenetre
+            .global::<Egaliseur>()
+            .set_gains(m.gains.clone().into());
+        fenetre
+            .global::<Visualiseur>()
+            .set_bandes(m.bandes.clone().into());
         let test = fenetre.global::<Test>();
         test.set_journal(m.journal.clone().into());
         test.set_modes(ModelRc::new(VecModel::from(
@@ -845,11 +879,17 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         let resultat = fenetre.global::<Resultat>();
         resultat.set_zones(m.zones.clone().into());
         resultat.set_applis(m.applis.clone().into());
-        fenetre.global::<Diagnostic>().set_controles(m.controles.clone().into());
-        fenetre.global::<Reglages>().set_raccourcis(m.raccourcis.clone().into());
+        fenetre
+            .global::<Diagnostic>()
+            .set_controles(m.controles.clone().into());
+        fenetre
+            .global::<Reglages>()
+            .set_raccourcis(m.raccourcis.clone().into());
         let vue = pont.controleur.vue_reglages();
         fenetre.global::<Appli>().set_rail(vue.rail);
-        fenetre.global::<Test>().set_intervalle_s(vue.intervalle_s as i32);
+        fenetre
+            .global::<Test>()
+            .set_intervalle_s(vue.intervalle_s as i32);
     }
 
     let pont = Rc::new(RefCell::new(pont));
@@ -891,7 +931,10 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         let pont = pont.clone();
         let faible = fenetre.as_weak();
         fenetre.window().on_close_requested(move || {
-            let reduire = pont.try_borrow().map(|p| p.peut_se_reduire()).unwrap_or(false);
+            let reduire = pont
+                .try_borrow()
+                .map(|p| p.peut_se_reduire())
+                .unwrap_or(false);
             if !reduire {
                 let _ = slint::quit_event_loop();
             }
@@ -902,7 +945,8 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
 
     let egaliseur = fenetre.global::<Egaliseur>();
     egaliseur.on_regler(agir!(|p, f, bande, gain| {
-        p.controleur.regler_bande(bande.max(0) as usize, f64::from(gain));
+        p.controleur
+            .regler_bande(bande.max(0) as usize, f64::from(gain));
     }));
     egaliseur.on_regler_preampli(agir!(|p, f, db| {
         p.controleur.regler_preampli(f64::from(db));
@@ -954,7 +998,11 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     }));
     profils.on_tester(agir!(|p, f, id| {
         // La référence d'un test est le profil actif : on l'active d'abord s'il ne l'est pas.
-        let deja = p.controleur.vue_profils().iter().any(|v| v.actif && v.id == id.as_str());
+        let deja = p
+            .controleur
+            .vue_profils()
+            .iter()
+            .any(|v| v.actif && v.id == id.as_str());
         if !deja {
             p.controleur.activer_profil(&id);
         }
@@ -1027,7 +1075,11 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         p.autotester(f);
     }));
     diagnostic.on_agir(agir!(|p, f, rang| {
-        match p.controles.get(rang.max(0) as usize).and_then(|c| c.cible.clone()) {
+        match p
+            .controles
+            .get(rang.max(0) as usize)
+            .and_then(|c| c.cible.clone())
+        {
             Some(Cible::Lien(lien)) => ouvrir_lien(lien),
             Some(Cible::Dossier(dossier)) => {
                 let _ = open::that_detached(dossier);
@@ -1065,7 +1117,8 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     }));
     reglages.on_regler_intervalle(agir!(|p, f, secondes| {
         p.controleur.regler_intervalle(secondes.max(0) as u32);
-        f.global::<Test>().set_intervalle_s(p.controleur.vue_reglages().intervalle_s as i32);
+        f.global::<Test>()
+            .set_intervalle_s(p.controleur.vue_reglages().intervalle_s as i32);
     }));
     reglages.on_importer(agir!(|p, f| {
         importer(p, f);

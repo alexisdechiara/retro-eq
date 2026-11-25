@@ -65,6 +65,7 @@ export global Test {
     in property <[string]> zones;
     in property <[string]> profils;
     in property <bool> pause-conseillee: false;
+    in property <bool> pause-sans-reponse: false; // la pause vient d'un délai de réponse dépassé
     callback demarrer();
     callback pause();
     callback reprendre();

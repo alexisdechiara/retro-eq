@@ -19,10 +19,10 @@ pub use vues::*;
 use crate::textes;
 use retro_core::formats::{self, ErreurFormat, Format};
 use retro_core::{
-    duel_verification, plan_avec_historique, ContexteReprise, HistoriquePlan, Cote, Depot, Deroulement, Effet, Entree,
-    ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
-    FadersEtSupplementaires, HasardGraine, HasardReel, Journal, Langue, Mode, Navigation, Origine,
-    ParametresTest, Profil, RaisonPause, ReglagesAppli, ReglagesTest,
+    duel_verification, plan_avec_historique, ContexteReprise, Cote, Depot, Deroulement, Effet,
+    Entree, ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
+    FadersEtSupplementaires, HasardGraine, HasardReel, HistoriquePlan, Journal, Langue, Mode,
+    Navigation, Origine, ParametresTest, Profil, RaisonPause, ReglagesAppli, ReglagesTest,
     ReglagesVariantes, Reponse, ResultatTest, Sujet, Version, Zone,
 };
 use retro_dsp::{Courbe, Spectre};
@@ -304,9 +304,10 @@ impl Controleur {
     }
 
     fn noter_abandon(&mut self, test_id: &str, t: u64) {
-        let ecriture = self.depot.ouvrir_journal(test_id).and_then(|mut journal| {
-            journal.ajouter(&Entree::TestAbandonne { horodatage_ms: t })
-        });
+        let ecriture = self
+            .depot
+            .ouvrir_journal(test_id)
+            .and_then(|mut journal| journal.ajouter(&Entree::TestAbandonne { horodatage_ms: t }));
         if let Err(e) = ecriture {
             self.signaler(e.into());
         }
@@ -375,7 +376,9 @@ impl Controleur {
     fn hasard(&mut self) -> HasardSource {
         self.tirages += 1;
         match self.options.graine {
-            Some(graine) => HasardSource::Graine(HasardGraine::new(graine.wrapping_add(self.tirages))),
+            Some(graine) => {
+                HasardSource::Graine(HasardGraine::new(graine.wrapping_add(self.tirages)))
+            }
             None => HasardSource::Reel(HasardReel::new()),
         }
     }
@@ -485,7 +488,10 @@ impl Controleur {
     fn courbe_du_jour(&self) -> Option<Courbe> {
         match &self.brouillon {
             Some(b) => Some(b.courbe()),
-            None => self.profil_actif().ok().map(|p| p.version_active().courbe.clone()),
+            None => self
+                .profil_actif()
+                .ok()
+                .map(|p| p.version_active().courbe.clone()),
         }
     }
 
@@ -805,8 +811,8 @@ impl Controleur {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let format =
-                formats::detecter_format(&texte, &nom_fichier).ok_or(ErreurControleur::FormatInconnu)?;
+            let format = formats::detecter_format(&texte, &nom_fichier)
+                .ok_or(ErreurControleur::FormatInconnu)?;
             let (import, nom_format) = match format {
                 Format::EqualizerApo => (formats::equalizer_apo::lire(&texte)?, "equalizer_apo"),
                 Format::AutoEq => (formats::autoeq::lire(&texte, &nom_fichier)?, "autoeq"),
@@ -847,10 +853,7 @@ impl Controleur {
                 .filter(|l| l.raison == formats::RaisonIgnoree::Approximation)
                 .count();
             Ok(Some(textes::annonce_import(
-                &nom,
-                nom_format,
-                &laissees,
-                approchees,
+                &nom, nom_format, &laissees, approchees,
             )))
         });
         nouveau
@@ -870,7 +873,13 @@ impl Controleur {
         // Le nom du profil devient un nom de fichier : on retire ce que Windows refuse.
         let propre: String = nom
             .chars()
-            .map(|c| if c.is_alphanumeric() || " -_".contains(c) { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || " -_".contains(c) {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let dossier = self.options.dossier_export.clone();
         let chemin = dossier.join(format!("{}{suffixe}", propre.trim()));
@@ -1232,7 +1241,9 @@ impl Controleur {
         // On garde le message précis du moteur s'il y en a un, complété par ce qu'on a fait.
         let cause = self.annonce.take().map(|a| a.texte).unwrap_or_default();
         self.annonce = Some(Annonce {
-            texte: format!("{} {cause}", textes::ANNONCE_PAUSE_ERREUR).trim().to_string(),
+            texte: format!("{} {cause}", textes::ANNONCE_PAUSE_ERREUR)
+                .trim()
+                .to_string(),
             erreur: true,
         });
     }
@@ -1592,6 +1603,10 @@ impl Controleur {
                 })
                 .collect(),
             pause_conseillee: vue.pause_conseillee && !fini,
+            pause_sans_reponse: vue.etat
+                == EtatTest::EnPause {
+                    raison: RaisonPause::SansReponse,
+                },
         }
     }
 
@@ -1618,7 +1633,9 @@ impl Controleur {
             }
             (None, _) => {
                 let changees = r.zones.iter().filter(|z| z.est_changee()).count() as u32;
-                let numero = dernier.version_nouvelle.unwrap_or(dernier.version_reference);
+                let numero = dernier
+                    .version_nouvelle
+                    .unwrap_or(dernier.version_reference);
                 (
                     format!("{} · version {numero}", profil.nom()),
                     textes::resume_zones(
@@ -1662,7 +1679,10 @@ impl Controleur {
             courbe_reference: dernier.courbe_reference.clone(),
             courbe_nouvelle,
             active,
-            recommandee: r.recommandee || r.autre_profil.as_ref().is_some_and(|b| b.preference == retro_core::Preference::Variante),
+            recommandee: r.recommandee
+                || r.autre_profil
+                    .as_ref()
+                    .is_some_and(|b| b.preference == retro_core::Preference::Variante),
         })
     }
 

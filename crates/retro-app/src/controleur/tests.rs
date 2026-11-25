@@ -298,7 +298,14 @@ fn enregistrer_ajoute_une_version_sans_rien_effacer() {
     // Revenir à la version d'avant est toujours possible.
     c.activer_version("mon-profil", 1);
     assert!(banc.derniere_courbe().filtres.is_empty());
-    assert_eq!(banc.depot().charger_profil("mon-profil").unwrap().versions().len(), 2);
+    assert_eq!(
+        banc.depot()
+            .charger_profil("mon-profil")
+            .unwrap()
+            .versions()
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -404,7 +411,11 @@ fn creer_dupliquer_renommer_et_activer_un_profil() {
     assert!(banc.derniere_courbe().filtres.is_empty());
     assert_eq!(c.vue_appli().profil_actif, "À plat");
     assert_eq!(
-        banc.depot().charger_etat_moteur().unwrap().unwrap().profil_id,
+        banc.depot()
+            .charger_etat_moteur()
+            .unwrap()
+            .unwrap()
+            .profil_id,
         Some(plat.clone())
     );
 
@@ -568,7 +579,10 @@ fn un_test_complet_de_demarrer_a_activer() {
     );
     // Les zones sans changement retenu passent à un pas de 2 dB ; les graves gardent 4 dB.
     assert_eq!(profil.versions()[1].pas_par_zone[Zone::Graves.index()], 4.0);
-    assert_eq!(profil.versions()[1].pas_par_zone[Zone::SubGraves.index()], 2.0);
+    assert_eq!(
+        profil.versions()[1].pas_par_zone[Zone::SubGraves.index()],
+        2.0
+    );
     // 12 duels ne couvrent que 5 couples (zone, sens) : une zone pas encore testée garde son pas.
     assert_eq!(profil.versions()[1].pas_par_zone[Zone::Air.index()], 4.0);
 
@@ -582,7 +596,11 @@ fn un_test_complet_de_demarrer_a_activer() {
     assert!(!c.vue_resultat().unwrap().active);
     assert!(banc.derniere_courbe().filtres.is_empty());
     assert_eq!(
-        banc.depot().charger_profil("mon-profil").unwrap().versions().len(),
+        banc.depot()
+            .charger_profil("mon-profil")
+            .unwrap()
+            .versions()
+            .len(),
         2
     );
 }
@@ -599,7 +617,16 @@ fn chaque_reponse_est_sur_le_disque_des_qu_elle_est_donnee() {
     let entrees = banc.journal(&identifiant(T0)).entrees;
     let position = entrees
         .iter()
-        .position(|e| matches!(e, Entree::ReponseDonnee { duel: 0, reponse: Reponse::B, .. }))
+        .position(|e| {
+            matches!(
+                e,
+                Entree::ReponseDonnee {
+                    duel: 0,
+                    reponse: Reponse::B,
+                    ..
+                }
+            )
+        })
         .unwrap();
     // Elle précède tout ce qui concerne le duel suivant.
     assert!(matches!(
@@ -672,7 +699,10 @@ fn une_seule_zone_ne_teste_que_cette_zone() {
     });
     let vue = c.vue_nouveau_test();
     assert!(vue.mode.contains("Aigus"));
-    assert_eq!(vue.duree, "6 duels · environ 6 min · bascule toutes les 10 s");
+    assert_eq!(
+        vue.duree,
+        "6 duels · environ 6 min · bascule toutes les 10 s"
+    );
     assert_eq!(vue.reference, "Mon profil · version 1");
 
     c.demarrer_test(T0);
@@ -720,7 +750,11 @@ fn profil_contre_profil_propose_d_activer_le_gagnant() {
     assert!(!resultat.active);
     // Aucune version n'est ajoutée dans ce mode.
     assert_eq!(
-        banc.depot().charger_profil("mon-profil").unwrap().versions().len(),
+        banc.depot()
+            .charger_profil("mon-profil")
+            .unwrap()
+            .versions()
+            .len(),
         1
     );
 
@@ -754,7 +788,10 @@ fn pause_plus_tard_annuler_passer_et_arreter() {
     assert_eq!(c.vue_duels(T0 + 4_000).duel, 1);
     c.passer_duel(T0 + 5_000);
     assert_eq!(c.vue_duels(T0 + 5_000).duel, 2);
-    assert_eq!(c.vue_duels(T0 + 5_000).journal[0].detail, "passé, sans réponse");
+    assert_eq!(
+        c.vue_duels(T0 + 5_000).journal[0].detail,
+        "passé, sans réponse"
+    );
     c.plus_tard(T0 + 6_000);
     assert_eq!(c.vue_duels(T0 + 6_000).etat, EtatTestVue::Pause);
 
@@ -799,7 +836,11 @@ fn un_test_ne_demarre_pas_sans_accord_ni_avec_un_brouillon() {
     let mut c = banc.ouvrir(T0);
     c.choisir_test(choix("duels-en-jeu"));
     assert!(!c.demarrer_test(T0));
-    assert!(c.prendre_annonce().unwrap().texte.contains("pas encore activé"));
+    assert!(c
+        .prendre_annonce()
+        .unwrap()
+        .texte
+        .contains("pas encore activé"));
 
     c.autoriser_moteur();
     c.regler_bande(0, 1.0);
@@ -952,7 +993,12 @@ fn apres_un_arret_brutal_la_reference_revient_et_le_test_se_reprend() {
     assert!(c.vue_resultat().is_some());
     assert!(banc2.depot().tests_interrompus().unwrap().is_empty());
     assert_eq!(
-        banc2.depot().charger_profil("mon-profil").unwrap().versions().len(),
+        banc2
+            .depot()
+            .charger_profil("mon-profil")
+            .unwrap()
+            .versions()
+            .len(),
         3
     );
 }
@@ -1025,7 +1071,11 @@ fn une_panne_du_moteur_au_demarrage_n_empeche_pas_d_ouvrir() {
     drop(banc.ouvrir_autorise());
     banc.moteur.echouer_au_prochain_appel("dossier protégé");
     let mut c = banc.ouvrir(T0 + 10);
-    assert!(c.prendre_annonce().unwrap().texte.contains("dossier protégé"));
+    assert!(c
+        .prendre_annonce()
+        .unwrap()
+        .texte
+        .contains("dossier protégé"));
     assert_eq!(c.vue_appli().profil_actif, "Mon profil");
 }
 
@@ -1071,7 +1121,11 @@ fn un_journal_impossible_a_ouvrir_empeche_le_test_et_le_dit() {
 fn des_reglages_illisibles_sont_remplaces_par_les_valeurs_par_defaut() {
     let banc = Banc::nouveau();
     drop(banc.ouvrir(T0));
-    std::fs::write(banc.dossier.path().join("donnees/reglages.json"), "{ pas du json").unwrap();
+    std::fs::write(
+        banc.dossier.path().join("donnees/reglages.json"),
+        "{ pas du json",
+    )
+    .unwrap();
     let mut c = banc.ouvrir(T0 + 1);
     assert!(c.prendre_annonce().unwrap().erreur);
     assert_eq!(c.vue_reglages().intervalle_s, 20);
@@ -1137,6 +1191,7 @@ fn sans_reponse_le_test_se_met_en_pause_sur_la_reference_et_le_dit() {
         c.tic(t);
     }
     assert_eq!(c.vue_duels(t).etat, EtatTestVue::Pause);
+    assert!(c.vue_duels(t).pause_sans_reponse);
     assert!(banc.derniere_courbe().filtres.is_empty());
     assert!(!c.touches_de_test_actives());
     let annonce = c.prendre_annonce().unwrap();
@@ -1174,7 +1229,11 @@ fn si_la_verification_prefere_la_reference_l_activation_n_est_pas_mise_en_avant(
     assert!(resultat.verification.contains("préféré ta référence"));
     // La version existe quand même, et l'utilisateur garde la main.
     assert_eq!(
-        banc.depot().charger_profil("mon-profil").unwrap().versions().len(),
+        banc.depot()
+            .charger_profil("mon-profil")
+            .unwrap()
+            .versions()
+            .len(),
         2
     );
     c.activer_resultat();
@@ -1219,7 +1278,11 @@ fn une_seule_victoire_est_un_indice_rejoue_en_tete_du_test_suivant() {
     let resultat = c.vue_resultat().unwrap();
     let graves = resultat.zones.iter().find(|z| z.nom == "Graves").unwrap();
     assert!(!graves.change);
-    assert!(graves.detail.starts_with("Un indice seulement"), "{}", graves.detail);
+    assert!(
+        graves.detail.starts_with("Un indice seulement"),
+        "{}",
+        graves.detail
+    );
 
     let suivant = fin + 60_000;
     assert!(c.demarrer_test(suivant));
@@ -1234,7 +1297,10 @@ fn une_seule_victoire_est_un_indice_rejoue_en_tete_du_test_suivant() {
                 }
         })
         .count();
-    assert_eq!(graves_plus, 2, "l'indice est rejoué, deux fois, au test suivant");
+    assert_eq!(
+        graves_plus, 2,
+        "l'indice est rejoué, deux fois, au test suivant"
+    );
 }
 
 #[test]
@@ -1250,7 +1316,19 @@ fn un_import_partiel_dit_ce_qui_a_ete_laisse_de_cote() {
     assert!(c.importer(&fichier, T0).is_some());
     let annonce = c.prendre_annonce().unwrap();
     assert!(!annonce.erreur);
-    assert!(annonce.texte.contains("en partie seulement"), "{}", annonce.texte);
-    assert!(annonce.texte.contains("1 ligne laissée de côté"), "{}", annonce.texte);
-    assert!(annonce.texte.contains("type de filtre non géré"), "{}", annonce.texte);
+    assert!(
+        annonce.texte.contains("en partie seulement"),
+        "{}",
+        annonce.texte
+    );
+    assert!(
+        annonce.texte.contains("1 ligne laissée de côté"),
+        "{}",
+        annonce.texte
+    );
+    assert!(
+        annonce.texte.contains("type de filtre non géré"),
+        "{}",
+        annonce.texte
+    );
 }

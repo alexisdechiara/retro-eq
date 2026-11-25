@@ -64,7 +64,9 @@ mod tests {
 
     #[test]
     fn une_courbe_trop_forte_reste_dans_la_boite() {
-        let courbe = courbe_10_bandes([12.0, 12.0, 12.0, 12.0, -12.0, -12.0, -12.0, -12.0, 12.0, 12.0]);
+        let courbe = courbe_10_bandes([
+            12.0, 12.0, 12.0, 12.0, -12.0, -12.0, -12.0, -12.0, 12.0, 12.0,
+        ]);
         assert!(points(&chemin_svg(&courbe))
             .iter()
             .all(|&(x, y)| (0.0..=1000.0).contains(&x) && (0.0..=240.0).contains(&y)));

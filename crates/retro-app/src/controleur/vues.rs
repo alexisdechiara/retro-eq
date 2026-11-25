@@ -108,6 +108,8 @@ pub struct VueDuels {
     /// Du duel le plus récent au plus ancien.
     pub journal: Vec<VueLigneJournal>,
     pub pause_conseillee: bool,
+    /// La pause vient d'un délai de réponse dépassé (ADR-0012).
+    pub pause_sans_reponse: bool,
 }
 
 impl Default for VueDuels {
@@ -125,6 +127,7 @@ impl Default for VueDuels {
             suite: String::new(),
             journal: Vec::new(),
             pause_conseillee: false,
+            pause_sans_reponse: false,
         }
     }
 }

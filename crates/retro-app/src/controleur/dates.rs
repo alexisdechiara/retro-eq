@@ -38,7 +38,9 @@ pub fn rfc3339(ms: u64, decalage_minutes: i32) -> String {
 /// (un fichier de profil modifié à la main, par exemple).
 pub fn jour_mois(rfc: &str) -> String {
     match (rfc.get(8..10), rfc.get(5..7)) {
-        (Some(jour), Some(mois)) if rfc.as_bytes().get(4) == Some(&b'-') => format!("{jour}/{mois}"),
+        (Some(jour), Some(mois)) if rfc.as_bytes().get(4) == Some(&b'-') => {
+            format!("{jour}/{mois}")
+        }
         _ => rfc.to_string(),
     }
 }

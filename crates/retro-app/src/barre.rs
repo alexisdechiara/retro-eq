@@ -61,8 +61,13 @@ mod systeme {
             let egaliseur = CheckMenuItem::new("Égaliseur actif", true, egaliseur_actif, None);
             let quitter = MenuItem::new("Quitter", true, None);
             let menu = Menu::new();
-            menu.append_items(&[&ouvrir, &egaliseur, &PredefinedMenuItem::separator(), &quitter])
-                .ok()?;
+            menu.append_items(&[
+                &ouvrir,
+                &egaliseur,
+                &PredefinedMenuItem::separator(),
+                &quitter,
+            ])
+            .ok()?;
             let icone = TrayIconBuilder::new()
                 .with_tooltip("Retro EQ")
                 .with_icon(Icon::from_rgba(pixels(), COTE, COTE).ok()?)

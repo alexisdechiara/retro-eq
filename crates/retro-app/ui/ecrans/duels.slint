@@ -179,13 +179,12 @@ export component Duels inherits VerticalLayout {
         if Test.etat == EtatTest.pause-appel: Bandeau {
             signe: "II";
             titre: @tr("En pause · appel Discord");
-            texte: @tr("Ton profil reste actif. Le test reprend tout seul 10 s après la fin de l’appel, au même passage.");
-            Bouton { texte: @tr("Reprendre maintenant"); prefixe: "▶"; active => { Test.reprendre(); } }
+            texte: @tr("Ta référence est remise pendant l’appel. Le test reprend tout seul à la fin de l’appel ; le duel en cours est alors rejoué depuis son premier passage.");
         }
         if Test.etat == EtatTest.pause: Bandeau {
             signe: "II";
-            titre: @tr("Test en pause");
-            texte: @tr("Rien ne bascule tant que tu ne reprends pas. Le test repart au même passage.");
+            titre: Test.pause-sans-reponse ? @tr("En pause : pas de réponse") : @tr("Test en pause");
+            texte: @tr("Ta référence est remise et rien ne bascule tant que tu ne reprends pas. À la reprise, ce duel est rejoué depuis son premier passage, avec un nouveau tirage de A et B.");
             Bouton { texte: @tr("Reprendre"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.reprendre(); } }
         }
         if Test.etat == EtatTest.pret: Bandeau {
