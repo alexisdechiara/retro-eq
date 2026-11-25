@@ -349,4 +349,59 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
             })
             .collect(),
     ));
+    remplir_mise_a_jour(fenetre, l);
+}
+
+/// La section « Mises à jour » de l'écran À propos. Le scénario se choisit avec la variable
+/// `RETRO_EQ_DEMO_MAJ` : `a-jour` (par défaut, comme la maquette), `disponible`, `aucune`
+/// (aucune version publiée), `echec` (hors ligne, mise à jour connue), `jamais` (pas encore
+/// vérifié) ou `en-cours`.
+fn remplir_mise_a_jour(fenetre: &FenetrePrincipale, l: Langue) {
+    use retro_core::mises_a_jour::RaisonInconnue;
+    let scenario = std::env::var("RETRO_EQ_DEMO_MAJ").unwrap_or_default();
+    let maj = fenetre.global::<MiseAJour>();
+    let verification = || {
+        textes::verification_faite(true, "24/11", "19:40", l)
+            .as_str()
+            .into()
+    };
+    match scenario.as_str() {
+        "jamais" => {}
+        "en-cours" => maj.set_en_cours(true),
+        "aucune" => {
+            maj.set_etat(3);
+            maj.set_verification(verification());
+        }
+        "disponible" | "echec" => {
+            maj.set_etat(2);
+            maj.set_verification(verification());
+            maj.set_version("0.2.0".into());
+            maj.set_date(textes::date_de_version("2026-01-02", l).as_str().into());
+            maj.set_notes(
+                match l {
+                    Langue::Fr => "Duels en conditions réelles, bascule automatique\nÉgaliseur 10 bandes et visualiseur\nImport Peace, Equalizer APO, AutoEQ",
+                    Langue::En => "Real-conditions duels, automatic switching\n10-band equaliser and visualiser\nPeace, Equalizer APO and AutoEQ import",
+                }
+                .into(),
+            );
+            maj.set_page("https://github.com/alexisdechiara/retro-eq/releases/tag/v0.2.0".into());
+            maj.set_installateur(
+                textes::installateur("Retro-EQ-Installateur-0.2.0.exe", 12_345_678, l)
+                    .as_str()
+                    .into(),
+            );
+            maj.set_disponible(true);
+            if scenario == "echec" {
+                maj.set_probleme(
+                    textes::probleme_de_verification(&RaisonInconnue::Reseau, l)
+                        .as_str()
+                        .into(),
+                );
+            }
+        }
+        _ => {
+            maj.set_etat(1);
+            maj.set_verification(verification());
+        }
+    }
 }

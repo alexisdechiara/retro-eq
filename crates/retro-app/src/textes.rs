@@ -1691,3 +1691,6 @@ pub fn bilan_autotest(bons: usize, a_verifier: usize, erreurs: usize, l: Langue)
     }
     morceaux.join(" · ")
 }
+
+mod mises_a_jour;
+pub use mises_a_jour::*;

@@ -183,6 +183,9 @@ pub struct ReglagesAppli {
     pub egaliseur_coupe: bool,
     /// Met le test en pause tout seul pendant un appel vocal.
     pub pause_appels: bool,
+    /// Vérifie une fois par jour, au démarrage, si une version plus récente existe sur
+    /// GitHub. Coupé : l'appli ne contacte jamais le réseau de son propre chef.
+    pub verifier_mises_a_jour: bool,
 }
 
 impl Default for ReglagesAppli {
@@ -198,6 +201,7 @@ impl Default for ReglagesAppli {
             moteur_autorise: false,
             egaliseur_coupe: false,
             pause_appels: vrai(),
+            verifier_mises_a_jour: vrai(),
         }
     }
 }
@@ -293,6 +297,10 @@ mod tests {
         assert_eq!(a.navigation, Navigation::Onglets);
         assert_eq!(a.intervalle_ms, 20_000);
         assert!(a.fermer_reduit);
+        // La vérification des mises à jour est active par défaut, même pour un vieux fichier.
+        assert!(a.verifier_mises_a_jour);
+        let a: ReglagesAppli = serde_json::from_str(r#"{"verifier_mises_a_jour":false}"#).unwrap();
+        assert!(!a.verifier_mises_a_jour);
     }
 
     #[test]

@@ -14,6 +14,7 @@ pub mod egaliseur;
 pub mod formats;
 pub mod hasard;
 pub mod journal;
+pub mod mises_a_jour;
 pub mod plan;
 pub mod presets;
 pub mod profil;

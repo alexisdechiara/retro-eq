@@ -193,6 +193,38 @@ pub struct VueReglages {
     pub bip: bool,
     pub pause_appels: bool,
     pub intervalle_s: u32,
+    pub verifier_mises_a_jour: bool,
+}
+
+/// La section « Mises à jour » de l'écran À propos, et la pastille de la barre de titre.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VueMiseAJour {
+    /// Une vérification est partie et n'a pas encore répondu.
+    pub en_cours: bool,
+    /// 0 pas encore vérifié, 1 à jour, 2 mise à jour disponible, 3 aucune version publiée.
+    pub etat: i32,
+    /// « vérifié aujourd’hui à 19:40 » ; vide si aucune vérification n'a réussi.
+    pub verification: String,
+    /// La version proposée (état 2), sinon vide.
+    pub version: String,
+    /// Sa date, en toutes lettres, vide si GitHub ne l'a pas donnée.
+    pub date: String,
+    /// Ses notes, en texte brut tronqué.
+    pub notes: String,
+    /// La page de la version, à ouvrir dans le navigateur.
+    pub page: String,
+    /// « Retro-EQ-Installateur-0.2.0.exe · 11,8 Mo », vide s'il n'y en a pas.
+    pub installateur: String,
+    /// La dernière vérification a échoué : pourquoi, en une phrase. Vide sinon. L'état
+    /// précédemment connu reste affiché à côté.
+    pub probleme: String,
+}
+
+impl VueMiseAJour {
+    /// Une mise à jour est à proposer : la pastille s'allume.
+    pub fn disponible(&self) -> bool {
+        self.etat == 2
+    }
 }
 
 /// Le message court affiché en bas de la fenêtre.
