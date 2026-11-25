@@ -7,4 +7,5 @@ On ne règle pas le volume par une boucle de mesure en direct (mesurer A, mesure
 ## Conséquences
 
 - Le calcul est pur et vit dans `retro-dsp` ; il se teste sans Windows.
-- Reste à vérifier sur le PC : la capture loopback se fait-elle avant ou après Equalizer APO ? Si elle est après, le spectre capté est divisé par la courbe active avant le calcul.
+- Vérifié sur le PC (ticket 16, 25/11/2026) : la capture loopback se fait **après** Equalizer APO (un préampli de −12 dB baisse le niveau capté de 12 dB). Le contrôleur retient donc la courbe qu'il a envoyée au moteur et divise le spectre capté par elle (`Spectre::divise_par`) avant de s'en servir. Une mesure prise pendant un changement de courbe pourrait mêler les deux : le spectre n'est retenu que si la courbe n'a pas changé depuis la mesure précédente (une seconde plus tôt).
+- Le visualiseur, lui, montre le son capté tel quel : c'est ce qu'on entend.

@@ -1618,3 +1618,92 @@ fn un_preset_se_cree_sous_son_nom_traduit() {
     // Le nom d'origine marche aussi.
     assert!(c.creer_depuis_preset("À plat", T0 + 1).is_some());
 }
+
+// ----- Spectre capté (ADR-0006, ticket 16) -----
+
+/// Un plateau bas marqué et un préampli : de quoi voir si la courbe est bien retirée.
+fn courbe_marquee() -> Courbe {
+    Courbe {
+        preampli_db: -4.0,
+        filtres: vec![retro_dsp::Filtre {
+            type_filtre: TypeFiltre::PlateauBas,
+            frequence_hz: 100.0,
+            gain_db: 8.0,
+            q: 0.71,
+        }],
+    }
+}
+
+/// Ce que la capture entend quand `courbe` joue sur un son au spectre `2 × rose`.
+fn capte_a_travers(courbe: &Courbe) -> Spectre {
+    let rose = Spectre::rose(POINTS_SPECTRE);
+    let puissances = rose
+        .frequences_hz
+        .iter()
+        .map(|&f| 2.0 * 10f64.powf(courbe.reponse_totale_db(f) / 10.0))
+        .collect();
+    Spectre {
+        frequences_hz: rose.frequences_hz,
+        puissances,
+    }
+}
+
+fn est_le_son_d_origine(spectre: &Spectre) -> bool {
+    spectre.puissances.iter().all(|&p| (p - 2.0).abs() < 1e-9)
+}
+
+#[test]
+fn le_spectre_capte_est_debarrasse_de_la_courbe_qui_joue() {
+    // La capture loopback se fait après Equalizer APO (mesuré sur le PC) : sans division,
+    // la compensation de volume serait calculée sur un son déjà égalisé.
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let courbe = courbe_marquee();
+    c.appliquer_au_moteur(&courbe).unwrap();
+    let capte = capte_a_travers(&courbe);
+    // Juste après un changement de courbe, la mesure peut mêler l'ancienne et la nouvelle.
+    c.maj_spectre(capte.clone());
+    assert_eq!(
+        c.spectre,
+        Spectre::rose(POINTS_SPECTRE),
+        "première mesure ignorée"
+    );
+    // La courbe n'a pas bougé depuis : le spectre est retenu, sans l'effet de la courbe.
+    c.maj_spectre(capte);
+    assert!(
+        est_le_son_d_origine(&c.spectre),
+        "{:?}",
+        &c.spectre.puissances[..5]
+    );
+}
+
+#[test]
+fn une_mesure_a_cheval_sur_un_changement_de_courbe_est_ignoree() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.maj_spectre(capte_a_travers(&Courbe::default()));
+    c.maj_spectre(capte_a_travers(&Courbe::default()));
+    assert!(est_le_son_d_origine(&c.spectre));
+    // Une nouvelle courbe arrive entre deux mesures : la suivante est mise de côté…
+    c.appliquer_au_moteur(&courbe_marquee()).unwrap();
+    let melange = capte_a_travers(&Courbe::default());
+    c.maj_spectre(Spectre {
+        puissances: melange.puissances.iter().map(|p| p * 10.0).collect(),
+        ..melange
+    });
+    assert!(est_le_son_d_origine(&c.spectre), "mesure à cheval ignorée");
+    // …et la suivante, stable, est retenue.
+    c.maj_spectre(capte_a_travers(&courbe_marquee()));
+    assert!(est_le_son_d_origine(&c.spectre));
+}
+
+#[test]
+fn egaliseur_coupe_ou_son_rendu_le_spectre_capte_est_pris_tel_quel() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.appliquer_au_moteur(&courbe_marquee()).unwrap();
+    c.rendre_son_origine(T0);
+    c.maj_spectre(capte_a_travers(&Courbe::default()));
+    c.maj_spectre(capte_a_travers(&Courbe::default()));
+    assert!(est_le_son_d_origine(&c.spectre));
+}

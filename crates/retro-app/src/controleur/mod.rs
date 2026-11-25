@@ -222,7 +222,16 @@ pub struct Controleur {
     brouillon: Option<Brouillon>,
     test: Option<TestEnCours>,
     resultat: Option<DernierResultat>,
+    /// Le spectre de ce qui joue, **sans** l'effet de notre égaliseur (ADR-0006).
     spectre: Spectre,
+    /// La courbe que le moteur fait entendre en ce moment (à plat si rien n'est écrit).
+    /// La capture se fait après Equalizer APO (mesuré sur le PC, ticket 16) : il faut retirer
+    /// cette courbe du son capté avant de s'en servir pour la compensation.
+    courbe_moteur: Courbe,
+    /// Augmente à chaque courbe envoyée au moteur.
+    generation_moteur: u64,
+    /// `generation_moteur` au moment du dernier spectre reçu.
+    generation_spectre: u64,
     choix: ChoixTest,
     plein_ecran: bool,
     annonce: Option<Annonce>,
@@ -294,6 +303,9 @@ impl Controleur {
             test: None,
             resultat: None,
             spectre: Spectre::rose(POINTS_SPECTRE),
+            courbe_moteur: Courbe::default(),
+            generation_moteur: 0,
+            generation_spectre: 0,
             choix,
             plein_ecran: false,
             annonce,
@@ -636,8 +648,15 @@ impl Controleur {
     fn appliquer_au_moteur(&mut self, courbe: &Courbe) -> Issue<()> {
         if self.moteur_utilisable() {
             self.moteur.appliquer(courbe)?;
+            self.noter_courbe_moteur(courbe.clone());
         }
         Ok(())
+    }
+
+    /// Retient ce que le moteur fait entendre, pour le retirer du son capté.
+    fn noter_courbe_moteur(&mut self, courbe: Courbe) {
+        self.courbe_moteur = courbe;
+        self.generation_moteur += 1;
     }
 
     /// La courbe de tous les jours : le brouillon de l'égaliseur s'il y en a un, sinon la
@@ -659,8 +678,10 @@ impl Controleur {
         }
         if self.reglages.egaliseur_coupe {
             self.moteur.couper()?;
+            self.noter_courbe_moteur(Courbe::default());
         } else if let Some(courbe) = self.courbe_du_jour() {
             self.moteur.appliquer(&courbe)?;
+            self.noter_courbe_moteur(courbe);
         }
         Ok(())
     }
@@ -704,6 +725,7 @@ impl Controleur {
         self.tenter(|c| {
             if !c.options.moteur_absent {
                 c.moteur.retirer()?;
+                c.noter_courbe_moteur(Courbe::default());
             }
             c.reglages.moteur_autorise = false;
             c.sauver_reglages();
@@ -1575,8 +1597,18 @@ impl Controleur {
         self.plein_ecran = exclusif;
     }
 
-    /// Le spectre de ce qui joue, pour mettre A et B au même volume. Sert au prochain duel.
-    pub fn maj_spectre(&mut self, spectre: Spectre) {
+    /// Le spectre capté sur la sortie, pour mettre A et B au même volume. Sert au prochain duel.
+    ///
+    /// La capture entend notre égaliseur : on divise donc par la courbe qui joue (ADR-0006).
+    /// À appeler régulièrement (le pont le fait chaque seconde) : un spectre est ignoré si la
+    /// courbe a changé depuis l'appel précédent, car il peut mêler l'ancienne et la nouvelle.
+    pub fn maj_spectre(&mut self, capte: Spectre) {
+        let courbe_stable = self.generation_spectre == self.generation_moteur;
+        self.generation_spectre = self.generation_moteur;
+        if !courbe_stable {
+            return;
+        }
+        let spectre = capte.divise_par(&self.courbe_moteur);
         if let Some(test) = self.test.as_mut() {
             test.deroulement.maj_spectre(spectre.clone());
         }
