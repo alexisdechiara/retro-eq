@@ -199,7 +199,7 @@ export component FenetrePrincipale inherits Window {
                         Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Appli.egaliseur-actif && Appli.etat-moteur == 2 ? Theme.ok : Theme.discret; }
                     }
                     Text {
-                        text: Appli.etat-moteur != 2 ? @tr("Moteur audio absent") : !Appli.egaliseur-actif ? @tr("Égaliseur coupé") : @tr("{} · {}", Appli.profil-actif, Format.db(round(Appli.niveau-db)));
+                        text: Appli.etat-moteur == 0 ? @tr("Moteur audio absent") : !Appli.moteur-autorise ? @tr("Égaliseur pas encore activé") : Appli.etat-moteur != 2 ? @tr("Moteur audio inactif") : !Appli.egaliseur-actif ? @tr("Égaliseur coupé") : @tr("{} · {}", Appli.profil-actif, Format.db(round(Appli.niveau-db)));
                         font-size: 13px;
                         color: Theme.discret;
                         vertical-alignment: center;

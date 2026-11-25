@@ -21,6 +21,7 @@ export global Appli {
     in property <bool> egaliseur-actif: true;
     in property <float> niveau-db: -60;
     in property <int> etat-moteur: 0;            // 0 absent, 1 inactif, 2 actif
+    in property <bool> moteur-autorise: true;    // faux tant que l'utilisateur n'a pas accepté l'écriture dans la config audio
     in property <string> sortie-audio: "";
     in property <bool> rail: false;
     in property <string> langue: "fr";
@@ -34,6 +35,7 @@ export global Appli {
     callback agrandir();
     callback fermer();
     callback basculer-egaliseur();
+    callback autoriser-moteur();                 // « Continuer » du premier lancement : l'accord pour écrire dans la config audio
     callback ouvrir-lien(string);
     aller(e) => { self.ecran = e; }
 }

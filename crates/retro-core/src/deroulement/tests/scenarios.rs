@@ -75,6 +75,7 @@ fn demarrer_journalise_le_test_puis_lance_le_premier_passage() {
             mode: Mode::DuelsEnJeu { precis: false },
             plan: vec![graves_plus(true), controle()],
             reglages: ReglagesTest::nouveau(10_000, true),
+            variantes: ReglagesVariantes::default(),
             horodatage_ms: T0,
         })
     );
@@ -133,11 +134,18 @@ fn un_duel_joue_ses_6_passages_dans_l_ordre_puis_pose_la_question() {
         );
         assert_eq!(b.etat(), en_ecoute(0, p));
     }
+    // Après le 6ᵉ passage, la question est posée et le dernier côté reste en place :
+    // remettre la référence ici dirait si ce côté était la variante.
     let e = b.ecouter_un_passage();
-    assert_eq!(e, vec![remise(&b), Effet::DemanderReponse]);
+    assert_eq!(e, vec![Effet::DemanderReponse]);
     assert_eq!(b.etat(), EtatTest::AttenteReponse);
-    // En attente, le temps qui passe ne change rien.
-    assert!(b.tic_apres(10 * INTERVALLE).is_empty());
+    assert_eq!(
+        b.appliquee,
+        Some((Some(ORDRE[5]), courbe_de(ORDRE[5]).clone()))
+    );
+    assert_eq!(b.vue().cote_actif, Some(ORDRE[5]));
+    // Tant que le délai de réponse court, le temps qui passe ne change rien.
+    assert!(b.tic_apres(INTERVALLE).is_empty());
 }
 
 #[test]
@@ -276,23 +284,13 @@ fn le_temps_passe_en_pause_ne_compte_pas() {
     b.ecouter_un_passage();
     b.avancer(4_000);
     b.envoyer(E::Pause);
-    assert!(
-        b.tic_apres(3_600_000).is_empty(),
-        "un tic en pause ne fait rien"
-    );
+    assert!(b.tic_apres(3_600_000).is_empty(), "un tic en pause ne fait rien");
     let e = b.envoyer(E::Reprendre);
-    assert_eq!(
-        e[0],
-        Effet::Journaliser(Entree::Reprise { horodatage_ms: b.t })
-    );
-    assert_eq!(e[1], passage(0, 1, Cote::B, None, b.t));
-    assert_eq!(b.etat(), en_ecoute(0, 1));
-    assert!(
-        b.tic_apres(INTERVALLE - 1).is_empty(),
-        "le passage repart de zéro"
-    );
+    assert_eq!(e[0], Effet::Journaliser(Entree::Reprise { horodatage_ms: b.t }));
+    assert_eq!(b.etat(), en_ecoute(0, 0), "le duel repart de son premier passage");
+    assert!(b.tic_apres(INTERVALLE - 1).is_empty(), "le passage repart de zéro");
     b.tic_apres(1);
-    assert_eq!(b.etat(), en_ecoute(0, 2));
+    assert_eq!(b.etat(), en_ecoute(0, 1));
 }
 
 // ----- Réponse -----
@@ -378,53 +376,53 @@ fn une_reponse_en_pause_est_ignoree() {
 // ----- Réécoute -----
 
 #[test]
-fn maintenir_une_touche_fait_reecouter_ce_cote_et_la_relacher_remet_la_reference() {
+fn reecouter_fait_entendre_un_cote_qui_reste_en_place_au_relachement() {
+    // La référence est B. Le dernier passage (ORDRE[5]) est A : la variante est en place.
     let mut b = Banc::nouveau(vec![graves_plus(false), controle()]);
     let (cote_ref, cote_var) = cotes_zone(Zone::Graves, Sens::Plus, &spectre());
     b.demarrer();
     b.ecouter_un_duel();
 
     let appui = |cote| E::Reecouter { cote, appuye: true };
-    let relache = |cote| E::Reecouter {
-        cote,
-        appuye: false,
-    };
+    let relache = |cote| E::Reecouter { cote, appuye: false };
 
-    let e = b.envoyer(appui(Cote::A));
-    assert_eq!(
-        e,
-        vec![Effet::Appliquer {
-            cote: Some(Cote::A),
-            courbe: cote_var.clone()
-        }]
-    );
+    // A est déjà en place : rien à appliquer.
+    assert!(b.envoyer(appui(Cote::A)).is_empty());
     assert_eq!(b.vue().cote_actif, Some(Cote::A));
-    assert!(b.envoyer(appui(Cote::A)).is_empty(), "répétition de touche");
-    assert_eq!(b.envoyer(relache(Cote::A)), vec![remise(&b)]);
-    assert_eq!(b.vue().cote_actif, None);
 
     let e = b.envoyer(appui(Cote::B));
     assert_eq!(
         e,
         vec![Effet::Appliquer {
             cote: Some(Cote::B),
-            courbe: cote_ref
+            courbe: cote_ref.clone()
         }]
     );
-    // Relâcher l'autre touche ne coupe pas la réécoute en cours.
-    assert!(b.envoyer(relache(Cote::A)).is_empty());
-    assert_eq!(b.vue().cote_actif, Some(Cote::B));
-    // Passer d'une touche à l'autre sans relâcher.
-    b.envoyer(appui(Cote::A));
+    assert!(b.envoyer(appui(Cote::B)).is_empty(), "répétition de touche");
+    // Au relâchement, B reste : on ne repasse pas par la référence.
     assert!(b.envoyer(relache(Cote::B)).is_empty());
-    assert_eq!(b.envoyer(relache(Cote::A)), vec![remise(&b)]);
+    assert_eq!(b.vue().cote_actif, Some(Cote::B));
+    assert_eq!(b.appliquee, Some((Some(Cote::B), cote_ref)));
 
-    // Rien de tout cela n'est une réponse.
+    let e = b.envoyer(appui(Cote::A));
+    assert_eq!(
+        e,
+        vec![Effet::Appliquer {
+            cote: Some(Cote::A),
+            courbe: cote_var
+        }]
+    );
+    assert!(b.envoyer(relache(Cote::B)).is_empty());
+    assert!(b.envoyer(relache(Cote::A)).is_empty());
+    assert_eq!(b.vue().cote_actif, Some(Cote::A));
+
+    // Rien de tout cela n'est une réponse, et la référence n'a jamais été entendue.
     assert_eq!(b.etat(), EtatTest::AttenteReponse);
     assert!(b.vue().historique.is_empty());
     assert!(!journalisees(&b.tous)
         .iter()
         .any(|e| matches!(e, Entree::ReponseDonnee { .. })));
+    assert!(appliquees(&b.tous).iter().all(|(cote, _)| cote.is_some()));
 }
 
 #[test]
@@ -541,25 +539,28 @@ fn annuler_remonte_a_la_derniere_reponse_meme_par_dessus_un_duel_passe() {
 
 #[test]
 fn annuler_pendant_la_verification_retire_le_duel_de_verification() {
-    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    let mut b = Banc::nouveau(plan_gagnant());
     b.demarrer();
     b.repondre(Reponse::B);
+    b.repondre(Reponse::A);
     assert!(b.vue().est_verification);
-    assert_eq!(b.vue().total, 2);
+    assert_eq!(b.vue().total, 3);
     b.envoyer(E::Annuler);
-    assert_eq!(b.etat(), en_ecoute(0, 0));
-    assert_eq!(b.vue().total, 1);
+    assert_eq!(b.etat(), en_ecoute(1, 0));
+    assert_eq!(b.vue().total, 2);
     assert!(!b.vue().est_verification);
-    // Cette fois « Pareil » : plus de changement, donc plus de vérification.
+    // Cette fois « Pareil » : une seule victoire, donc un indice et plus de vérification.
     b.repondre(Reponse::Pareil);
     assert_eq!(b.etat(), EtatTest::Termine);
-    assert_eq!(b.resultat().unwrap().verification, None);
+    let r = b.resultat().unwrap();
+    assert_eq!(r.verification, None);
+    assert_eq!(r.indices, vec![(Zone::Graves, Sens::Plus)]);
 }
 
 // ----- Plus tard, pause, appel -----
 
 #[test]
-fn plus_tard_met_en_pause_et_le_duel_est_rejoue_depuis_son_premier_passage() {
+fn plus_tard_met_en_pause_et_le_duel_est_rejoue_avec_un_nouveau_tirage() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.ecouter_un_passage();
@@ -579,10 +580,20 @@ fn plus_tard_met_en_pause_et_le_duel_est_rejoue_depuis_son_premier_passage() {
     assert_eq!((b.vue().passages_a, b.vue().passages_b), (0, 0));
     b.avancer(60_000);
     let e = b.envoyer(E::Reprendre);
+    // Le nouveau tirage est écrit avant le démarrage du duel rejoué.
+    let (duel, prevu) = tirage_de(&e).unwrap();
+    assert_eq!(duel, 0);
+    assert_eq!(prevu.sujet, graves_plus(true).sujet, "même sujet");
+    assert_eq!(b.prevu(0), prevu);
     assert_eq!(
         journalisees(&e),
         vec![
             Entree::Reprise { horodatage_ms: b.t },
+            Entree::DuelRetire {
+                duel: 0,
+                prevu,
+                horodatage_ms: b.t
+            },
             Entree::DuelDemarre {
                 duel: 0,
                 horodatage_ms: b.t
@@ -590,7 +601,7 @@ fn plus_tard_met_en_pause_et_le_duel_est_rejoue_depuis_son_premier_passage() {
             Entree::PassageDemarre {
                 duel: 0,
                 passage: 0,
-                cote: Cote::A,
+                cote: prevu.ordre_passages[0],
                 appli_premier_plan: None,
                 horodatage_ms: b.t
             }
@@ -611,7 +622,7 @@ fn plus_tard_pendant_la_question_masque_la_question_et_rejoue_le_duel() {
 }
 
 #[test]
-fn la_pause_manuelle_remet_la_reference_et_reprend_au_debut_du_passage_interrompu() {
+fn la_pause_manuelle_remet_la_reference_et_le_duel_est_rejoue_avec_un_nouveau_tirage() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.ecouter_un_passage();
@@ -630,36 +641,29 @@ fn la_pause_manuelle_remet_la_reference_et_reprend_au_debut_du_passage_interromp
     assert!(b.envoyer(E::Pause).is_empty(), "déjà en pause");
     assert!(b.envoyer(E::PlusTard).is_empty());
     let e = b.envoyer(E::Reprendre);
-    assert_eq!(e[1], passage(0, 2, Cote::B, None, b.t));
-    assert_eq!(b.etat(), en_ecoute(0, 2));
-    assert!(
-        b.envoyer(E::Reprendre).is_empty(),
-        "reprendre en écoute est ignoré"
-    );
+    let (_, prevu) = tirage_de(&e).unwrap();
+    assert_eq!(e[3], passage(0, 0, prevu.ordre_passages[0], None, b.t));
+    assert_eq!(b.etat(), en_ecoute(0, 0));
+    assert!(b.envoyer(E::Reprendre).is_empty(), "reprendre en écoute est ignoré");
 }
 
 #[test]
-fn une_pause_pendant_la_question_revient_a_la_question() {
+fn une_pause_pendant_la_question_fait_rejouer_le_duel() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.ecouter_un_duel();
     let e = b.envoyer(E::Pause);
+    assert_eq!(e[0], remise(&b));
     assert!(e.contains(&Effet::MasquerQuestion));
-    assert_eq!((b.vue().passages_a, b.vue().passages_b), (3, 3));
+    assert_eq!((b.vue().passages_a, b.vue().passages_b), (0, 0));
     let e = b.envoyer(E::Reprendre);
-    assert_eq!(
-        e,
-        vec![
-            Effet::Journaliser(Entree::Reprise { horodatage_ms: b.t }),
-            Effet::DemanderReponse
-        ]
-    );
-    assert_eq!(b.etat(), EtatTest::AttenteReponse);
-    assert!(b.reference_remise());
+    assert!(tirage_de(&e).is_some());
+    assert!(!e.contains(&Effet::DemanderReponse));
+    assert_eq!(b.etat(), en_ecoute(0, 0));
 }
 
 #[test]
-fn un_appel_met_en_pause_et_sa_fin_reprend_au_debut_du_passage() {
+fn un_appel_met_en_pause_et_sa_fin_rejoue_le_duel() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.ecouter_un_passage();
@@ -676,18 +680,12 @@ fn un_appel_met_en_pause_et_sa_fin_reprend_au_debut_du_passage() {
         ]
     );
     assert_eq!(b.etat(), en_pause(RaisonPause::Appel));
-    assert!(
-        b.envoyer(E::AppelEnCours(true)).is_empty(),
-        "valeur répétée"
-    );
+    assert!(b.envoyer(E::AppelEnCours(true)).is_empty(), "valeur répétée");
     b.avancer(600_000);
     let e = b.envoyer(E::AppelEnCours(false));
-    assert_eq!(
-        e[0],
-        Effet::Journaliser(Entree::Reprise { horodatage_ms: b.t })
-    );
-    assert_eq!(e[1], passage(0, 1, Cote::B, None, b.t));
-    assert_eq!(b.etat(), en_ecoute(0, 1));
+    assert_eq!(e[0], Effet::Journaliser(Entree::Reprise { horodatage_ms: b.t }));
+    assert!(tirage_de(&e).is_some());
+    assert_eq!(b.etat(), en_ecoute(0, 0));
     assert!(b.envoyer(E::AppelEnCours(false)).is_empty());
 }
 
@@ -721,23 +719,23 @@ fn demander_la_pause_pendant_un_appel_la_rend_manuelle() {
     assert!(b.envoyer(E::AppelEnCours(false)).is_empty());
     assert_eq!(b.etat(), en_pause(RaisonPause::Manuelle));
     b.envoyer(E::Reprendre);
-    assert_eq!(b.etat(), en_ecoute(0, 1));
+    assert_eq!(b.etat(), en_ecoute(0, 0));
 }
 
 #[test]
-fn reprendre_a_la_main_pendant_un_appel_est_respecte() {
+fn reprendre_pendant_un_appel_est_ignore() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.envoyer(E::AppelEnCours(true));
+    assert!(b.envoyer(E::Reprendre).is_empty());
+    assert_eq!(b.etat(), en_pause(RaisonPause::Appel));
+    // Même une pause devenue manuelle ne se lève pas tant que l'appel dure.
+    b.envoyer(E::Pause);
+    assert!(b.envoyer(E::Reprendre).is_empty());
+    assert_eq!(b.etat(), en_pause(RaisonPause::Manuelle));
+    assert!(b.envoyer(E::AppelEnCours(false)).is_empty());
     b.envoyer(E::Reprendre);
     assert_eq!(b.etat(), en_ecoute(0, 0));
-    // L'appli qui répète « appel en cours » ne remet pas en pause.
-    assert!(b.envoyer(E::AppelEnCours(true)).is_empty());
-    assert!(b.envoyer(E::AppelEnCours(false)).is_empty());
-    assert_eq!(b.etat(), en_ecoute(0, 0));
-    // Un nouvel appel, lui, remet en pause.
-    b.envoyer(E::AppelEnCours(true));
-    assert_eq!(b.etat(), en_pause(RaisonPause::Appel));
 }
 
 #[test]
@@ -745,10 +743,7 @@ fn demarrer_pendant_un_appel_attend_la_fin_de_l_appel() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     assert!(b.envoyer(E::AppelEnCours(true)).is_empty());
     let e = b.demarrer();
-    assert!(matches!(
-        e[0],
-        Effet::Journaliser(Entree::TestDemarre { .. })
-    ));
+    assert!(matches!(e[0], Effet::Journaliser(Entree::TestDemarre { .. })));
     assert_eq!(b.etat(), en_pause(RaisonPause::Appel));
     assert!(b.reference_remise());
     let e = b.envoyer(E::AppelEnCours(false));
@@ -756,6 +751,9 @@ fn demarrer_pendant_un_appel_attend_la_fin_de_l_appel() {
         duel: 0,
         horodatage_ms: b.t
     }));
+    // Rien n'avait encore été entendu : pas besoin d'un nouveau tirage.
+    assert!(tirage_de(&e).is_none());
+    assert_eq!(b.prevu(0), graves_plus(true));
     assert_eq!(b.etat(), en_ecoute(0, 0));
 }
 
@@ -785,20 +783,40 @@ fn passer_un_duel_le_note_passe_sans_reponse() {
 }
 
 #[test]
-fn recommencer_un_duel_repart_de_son_premier_passage() {
+fn recommencer_un_duel_repart_de_son_premier_passage_avec_un_nouveau_tirage() {
     let mut b = Banc::nouveau(vec![graves_plus(true)]);
     b.demarrer();
     b.ecouter_un_passage();
     b.ecouter_un_passage();
     let e = b.envoyer(E::RecommencerDuel);
+    let (_, prevu) = tirage_de(&e).unwrap();
     assert_eq!(
-        e[0],
-        Effet::Journaliser(Entree::DuelRecommence {
-            duel: 0,
-            horodatage_ms: b.t
-        })
+        journalisees(&e),
+        vec![
+            Entree::DuelRecommence {
+                duel: 0,
+                horodatage_ms: b.t
+            },
+            Entree::DuelRetire {
+                duel: 0,
+                prevu,
+                horodatage_ms: b.t
+            },
+            Entree::DuelDemarre {
+                duel: 0,
+                horodatage_ms: b.t
+            },
+            Entree::PassageDemarre {
+                duel: 0,
+                passage: 0,
+                cote: prevu.ordre_passages[0],
+                appli_premier_plan: None,
+                horodatage_ms: b.t
+            }
+        ]
     );
-    assert_eq!(e[1], passage(0, 0, Cote::A, None, b.t));
+    // Sans pause : on passe d'un côté à l'autre sans entendre la référence.
+    assert!(appliquees(&e).iter().all(|(cote, _)| cote.is_some()));
     assert_eq!(b.etat(), en_ecoute(0, 0));
     b.ecouter_un_duel();
     let e = b.envoyer(E::RecommencerDuel);
@@ -897,10 +915,11 @@ fn sans_changement_le_test_se_termine_apres_le_dernier_duel() {
 
 #[test]
 fn avec_un_changement_un_duel_de_verification_est_ajoute_et_joue() {
-    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    let mut b = Banc::nouveau(plan_gagnant());
     b.demarrer();
-    assert_eq!(b.vue().total, 1);
-    let e = b.repondre(Reponse::B); // la variante gagne : Graves change
+    assert_eq!(b.vue().total, 2);
+    b.repondre(Reponse::B);
+    let e = b.repondre(Reponse::A); // deux victoires de la variante : Graves change
     assert_eq!(
         journalisees(&e)[1..],
         [
@@ -909,11 +928,11 @@ fn avec_un_changement_un_duel_de_verification_est_ajoute_et_joue() {
                 horodatage_ms: b.t
             },
             Entree::DuelDemarre {
-                duel: 1,
+                duel: 2,
                 horodatage_ms: b.t
             },
             Entree::PassageDemarre {
-                duel: 1,
+                duel: 2,
                 passage: 0,
                 cote: Cote::A,
                 appli_premier_plan: None,
@@ -923,7 +942,7 @@ fn avec_un_changement_un_duel_de_verification_est_ajoute_et_joue() {
     );
     assert!(resultat_de(&e).is_none());
     let v = b.vue();
-    assert_eq!((v.duel, v.total), (2, 2), "le total grandit d'un duel");
+    assert_eq!((v.duel, v.total), (3, 3), "le total grandit d'un duel");
     assert!(v.est_verification);
 
     // Dans la vérification, la référence est B : A fait entendre la nouvelle courbe.
@@ -931,12 +950,13 @@ fn avec_un_changement_un_duel_de_verification_est_ajoute_et_joue() {
         &reference(),
         &version(),
         &ReglagesVariantes::default(),
-        &[graves_plus(true)],
-        &[Some(Reponse::B)],
+        &plan_gagnant(),
+        &[Some(Reponse::B), Some(Reponse::A)],
         None,
-        &[None],
+        &[None, None],
     )
     .nouvelle_courbe;
+    assert_ne!(nouvelle.filtres, reference().filtres);
     let (cote_ref, cote_nouvelle) = egaliser_volumes(&reference(), &nouvelle, &spectre());
     assert_eq!(appliquees(&e), vec![(Some(Cote::A), cote_nouvelle)]);
     let e = b.ecouter_un_passage();
@@ -947,18 +967,44 @@ fn avec_un_changement_un_duel_de_verification_est_ajoute_et_joue() {
     let r = resultat_de(&e).unwrap();
     assert_eq!(r.verification, Some(Reponse::A));
     assert_eq!(r.verification_preference, Some(Preference::Variante));
+    assert!(r.recommandee);
     assert_eq!(r.nouvelle_courbe, nouvelle);
     assert_eq!(b.etat(), EtatTest::Termine);
     assert!(b.reference_remise());
-    assert_eq!(b.vue().historique.len(), 2);
-    assert_eq!(b.vue().historique[1].sujet, Sujet::Verification);
+    assert_eq!(b.vue().historique.len(), 3);
+    assert_eq!(b.vue().historique[2].sujet, Sujet::Verification);
+}
+
+#[test]
+fn une_verification_qui_prefere_la_reference_ne_recommande_pas_la_nouvelle_version() {
+    let mut b = Banc::nouveau(plan_gagnant());
+    b.demarrer();
+    b.repondre(Reponse::B);
+    b.repondre(Reponse::A);
+    b.repondre(Reponse::B); // dans la vérification, B est la référence
+    let r = b.resultat().unwrap();
+    assert!(r.a_des_changements());
+    assert_eq!(r.verification_preference, Some(Preference::Reference));
+    assert!(!r.recommandee);
+}
+
+#[test]
+fn une_seule_victoire_ne_declenche_pas_de_verification() {
+    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    b.demarrer();
+    b.repondre(Reponse::B);
+    assert_eq!(b.etat(), EtatTest::Termine);
+    let r = b.resultat().unwrap();
+    assert!(!r.a_des_changements());
+    assert_eq!(r.indices, vec![(Zone::Graves, Sens::Plus)]);
 }
 
 #[test]
 fn passer_le_duel_de_verification_termine_le_test_sans_verification() {
-    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    let mut b = Banc::nouveau(plan_gagnant());
     b.demarrer();
     b.repondre(Reponse::B);
+    b.repondre(Reponse::A);
     b.envoyer(E::PasserDuel);
     assert_eq!(b.etat(), EtatTest::Termine);
     let r = b.resultat().unwrap();
@@ -970,11 +1016,12 @@ fn passer_le_duel_de_verification_termine_le_test_sans_verification() {
 fn le_mode_une_seule_zone_a_aussi_sa_verification_mais_pas_profil_contre_profil() {
     let mode = Mode::UneSeuleZone {
         zone: Zone::Graves,
-        duels: 1,
+        duels: 2,
     };
-    let mut b = Banc::avec(parametres(mode, vec![graves_plus(true)]));
+    let mut b = Banc::avec(parametres(mode, plan_gagnant()));
     b.demarrer();
     b.repondre(Reponse::B);
+    b.repondre(Reponse::A);
     assert!(b.vue().est_verification);
 
     let mode = Mode::ProfilContreProfil {
@@ -1057,7 +1104,7 @@ fn la_pause_est_conseillee_une_seule_fois_apres_le_temps_d_ecoute_cumule() {
     b.ecouter_un_passage(); // 20 s
     b.avancer(3_000);
     b.envoyer(E::Pause); // 23 s d'écoute
-    b.tic_apres(3_600_000); // une heure de pause ne compte pas
+    b.tic_apres(60_000); // une minute de pause : elle ne compte pas, et ne repose pas
     b.envoyer(E::Reprendre);
     assert!(b.tic_apres(1_999).is_empty());
     assert!(!b.vue().pause_conseillee);
@@ -1074,17 +1121,180 @@ fn la_pause_est_conseillee_une_seule_fois_apres_le_temps_d_ecoute_cumule() {
 }
 
 #[test]
+fn une_pause_de_plus_de_5_minutes_remet_le_compteur_d_ecoute_a_zero() {
+    let mut p = parametres(Mode::DuelsEnJeu { precis: false }, vec![controle(); 4]);
+    p.reglages = p.reglages.avec_pause_conseillee_apres_ms(25_000);
+    let mut b = Banc::avec(p);
+    b.demarrer();
+    b.ecouter_un_passage();
+    b.ecouter_un_passage();
+    b.avancer(3_000);
+    b.envoyer(E::Pause); // 23 s d'écoute
+    b.avancer(PAUSE_QUI_REPOSE_MS + 1);
+    b.envoyer(E::Reprendre);
+    // « 40 minutes d'écoute sans pause » : après une vraie pause, on repart de zéro.
+    b.ecouter_un_passage();
+    b.ecouter_un_passage();
+    assert!(b.tic_apres(4_999).is_empty());
+    assert_eq!(b.compte(&Effet::ConseillerPause), 0);
+    assert_eq!(b.tic_apres(1), vec![Effet::ConseillerPause]);
+}
+
+#[test]
 fn le_temps_passe_devant_la_question_ou_pc_endormi_ne_compte_pas_comme_ecoute() {
     let mut p = parametres(Mode::DuelsEnJeu { precis: false }, vec![controle(); 2]);
     p.reglages = p.reglages.avec_pause_conseillee_apres_ms(65_000);
     let mut b = Banc::avec(p);
     b.demarrer();
     b.ecouter_un_duel(); // 60 s
-    b.tic_apres(3_600_000); // devant la question
+    b.tic_apres(100_000); // devant la question
     b.repondre(Reponse::Pareil);
     b.tic_apres(3_600_000); // PC endormi : le passage recommence, rien n'est compté
     assert_eq!(b.compte(&Effet::ConseillerPause), 0);
     assert_eq!(b.tic_apres(5_000), vec![Effet::ConseillerPause]);
+}
+
+// ----- Délai de réponse (ADR-0012) -----
+
+#[test]
+fn sans_reponse_au_bout_du_delai_le_test_se_met_en_pause_tout_seul() {
+    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    b.demarrer();
+    b.ecouter_un_duel();
+    assert_eq!(b.vue().ms_avant_pause_sans_reponse, Some(120_000));
+    assert!(b.tic_apres(119_999).is_empty());
+    assert_eq!(b.vue().ms_avant_pause_sans_reponse, Some(1));
+    let e = b.tic_apres(1);
+    assert_eq!(
+        e,
+        vec![
+            remise(&b),
+            Effet::MasquerQuestion,
+            Effet::Journaliser(Entree::Pause {
+                raison: RaisonPause::SansReponse,
+                horodatage_ms: b.t
+            })
+        ]
+    );
+    assert_eq!(b.etat(), en_pause(RaisonPause::SansReponse));
+    assert_eq!(b.vue().ms_avant_pause_sans_reponse, None);
+    assert!(b.repondre(Reponse::A).is_empty(), "trop tard pour ce tirage");
+    // À la reprise, le duel est rejoué avec un nouveau tirage.
+    let e = b.envoyer(E::Reprendre);
+    assert!(tirage_de(&e).is_some());
+    assert_eq!(b.etat(), en_ecoute(0, 0));
+}
+
+#[test]
+fn chaque_reecoute_relance_le_delai_de_reponse() {
+    let mut b = Banc::nouveau(vec![graves_plus(true)]);
+    b.demarrer();
+    b.ecouter_un_duel();
+    b.avancer(100_000);
+    b.envoyer(E::Reecouter {
+        cote: Cote::B,
+        appuye: true,
+    });
+    // Relâcher ne relance rien.
+    b.avancer(50_000);
+    b.envoyer(E::Reecouter {
+        cote: Cote::B,
+        appuye: false,
+    });
+    assert!(b.tic_apres(69_999).is_empty());
+    assert_eq!(b.etat(), EtatTest::AttenteReponse);
+    b.tic_apres(1);
+    assert_eq!(b.etat(), en_pause(RaisonPause::SansReponse));
+}
+
+#[test]
+fn le_delai_de_reponse_est_reglable() {
+    let mut p = parametres(Mode::DuelsEnJeu { precis: false }, vec![controle()]);
+    p.reglages = p.reglages.avec_delai_reponse_ms(30_000);
+    let mut b = Banc::avec(p);
+    b.demarrer();
+    b.ecouter_un_duel();
+    assert!(b.tic_apres(29_999).is_empty());
+    b.tic_apres(1);
+    assert_eq!(b.etat(), en_pause(RaisonPause::SansReponse));
+}
+
+// ----- Nouveau tirage d'un duel interrompu (ADR-0012) -----
+
+#[test]
+fn un_duel_rejoue_est_compte_selon_son_nouveau_tirage() {
+    use crate::plan::Preference as P;
+    let mut orientations_changees = 0;
+    let mut ordres = std::collections::HashSet::new();
+    for n in 0..40 {
+        let mut p = parametres(Mode::DuelsEnJeu { precis: false }, plan_gagnant());
+        p.test_id = format!("t{n}");
+        let mut b = Banc::avec(p);
+        b.demarrer();
+        for i in 0..2 {
+            // Chaque duel est interrompu une fois avant d'être répondu.
+            b.ecouter_un_passage();
+            let raison = [E::Pause, E::PlusTard][i];
+            b.envoyer(raison);
+            let e = b.envoyer(E::Reprendre);
+            let (duel, prevu) = tirage_de(&e).unwrap();
+            assert_eq!(duel as usize, i);
+            assert_eq!(prevu.sujet, plan_gagnant()[i].sujet);
+            if prevu.reference_est_a != plan_gagnant()[i].reference_est_a {
+                orientations_changees += 1;
+            }
+            ordres.insert(prevu.ordre_passages);
+            // La première courbe entendue est bien celle du nouveau tirage.
+            assert_eq!(appliquees(&e)[0].0, Some(prevu.ordre_passages[0]));
+            b.repondre_selon(P::Variante);
+            let fini = b.vue().historique[i];
+            assert_eq!(fini.reference, prevu.cote_reference());
+            assert_eq!(fini.preference, Some(P::Variante));
+        }
+        // Deux victoires de la variante, quel que soit le tirage : le changement est retenu.
+        assert!(b.vue().est_verification, "test {n}");
+        b.repondre_selon(P::Variante);
+        let r = b.resultat().unwrap();
+        assert_eq!(r.zones[0].pour_variante, 2);
+        assert!(r.recommandee);
+    }
+    // Le tirage est un vrai tirage : parfois l'orientation change, parfois non.
+    assert!((15..=65).contains(&orientations_changees), "{orientations_changees}");
+    assert!(ordres.len() >= 10, "{}", ordres.len());
+}
+
+#[test]
+fn le_meme_test_retire_toujours_les_memes_duels() {
+    let jouer = |id: &str| {
+        let mut p = parametres(Mode::DuelsEnJeu { precis: false }, plan_gagnant());
+        p.test_id = id.into();
+        let mut b = Banc::avec(p);
+        b.demarrer();
+        let mut tirages = Vec::new();
+        for _ in 0..6 {
+            b.ecouter_un_passage();
+            b.envoyer(E::Pause);
+            tirages.push(tirage_de(&b.envoyer(E::Reprendre)).unwrap());
+        }
+        tirages
+    };
+    assert_eq!(jouer("a"), jouer("a"));
+    assert_ne!(jouer("a"), jouer("b"));
+    // D'un tirage au suivant, le résultat change.
+    let t = jouer("a");
+    assert!(t.windows(2).any(|w| w[0] != w[1]));
+}
+
+#[test]
+fn annuler_rejoue_le_duel_sans_nouveau_tirage_car_la_reference_n_a_pas_ete_entendue() {
+    let mut b = Banc::nouveau(vec![graves_plus(true), controle()]);
+    b.demarrer();
+    b.repondre(Reponse::A);
+    b.ecouter_un_passage();
+    let e = b.envoyer(E::Annuler);
+    assert!(tirage_de(&e).is_none());
+    assert_eq!(b.prevu(0), graves_plus(true));
+    assert!(appliquees(&e).iter().all(|(cote, _)| cote.is_some()));
 }
 
 #[test]
@@ -1121,6 +1331,7 @@ fn la_vue_suit_le_duel_passage_par_passage() {
     assert_eq!((v.passages_a, v.passages_b), (0, 0));
     assert_eq!(v.progression, 0.25);
     assert_eq!(v.ms_avant_bascule, Some(7_500));
+    assert_eq!(v.ms_avant_pause_sans_reponse, None);
     assert!(!v.est_verification);
     assert!(!v.pause_conseillee);
 
@@ -1129,33 +1340,21 @@ fn la_vue_suit_le_duel_passage_par_passage() {
     b.ecouter_un_passage();
     // ORDRE = A B B A B A : trois passages finis, le quatrième (A) joue.
     let v = b.vue();
-    assert_eq!(
-        v.etat,
-        EtatTest::EnEcoute {
-            duel: 0,
-            passage: 3
-        }
-    );
+    assert_eq!(v.etat, EtatTest::EnEcoute { duel: 0, passage: 3 });
     assert_eq!(v.cote_actif, Some(Cote::A));
     assert_eq!((v.passages_a, v.passages_b), (1, 2));
     // Très en retard : la vue reste dans ses bornes.
-    b.avancer(50_000);
+    b.avancer(15_000);
     assert_eq!(b.vue().progression, 1.0);
     assert_eq!(b.vue().ms_avant_bascule, Some(0));
-
-    b.envoyer(E::Pause);
-    let v = b.vue();
-    assert_eq!((v.passages_a, v.passages_b), (1, 2));
-    assert_eq!(
-        (v.cote_actif, v.progression, v.ms_avant_bascule),
-        (None, 0.0, None)
-    );
-    b.envoyer(E::Reprendre);
 
     b.ecouter_un_duel();
     let v = b.vue();
     assert_eq!((v.passages_a, v.passages_b), (3, 3));
-    assert_eq!(v.cote_actif, None);
+    assert_eq!(v.cote_actif, Some(ORDRE[5]), "le dernier côté reste en place");
+    assert_eq!((v.progression, v.ms_avant_bascule), (0.0, None));
+    b.avancer(20_000);
+    assert_eq!(b.vue().ms_avant_pause_sans_reponse, Some(100_000));
 
     b.repondre(Reponse::B);
     let v = b.vue();
@@ -1174,6 +1373,14 @@ fn la_vue_suit_le_duel_passage_par_passage() {
             preference: Some(Preference::Variante),
         }]
     );
+
+    // En pause, le duel sera rejoué en entier : rien n'est acquis.
+    b.ecouter_un_passage();
+    b.ecouter_un_passage();
+    b.envoyer(E::Pause);
+    let v = b.vue();
+    assert_eq!((v.passages_a, v.passages_b), (0, 0));
+    assert_eq!((v.cote_actif, v.progression, v.ms_avant_bascule), (None, 0.0, None));
 }
 
 #[test]
@@ -1218,6 +1425,5 @@ fn la_vue_ne_trahit_ni_le_sujet_ni_la_reference_du_duel_en_cours() {
         b.envoyer(E::Reprendre);
         b.repondre(Reponse::A);
     }
-    assert_ne!(x.vue().historique[1], y.vue().historique[1]);
-    assert_eq!(y.vue().historique[1].reference, Cote::B);
+    assert_ne!(x.vue().historique[1].sujet, y.vue().historique[1].sujet);
 }

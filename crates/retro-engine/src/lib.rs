@@ -84,4 +84,11 @@ pub trait Moteur: Send {
     fn sorties(&self) -> Result<Vec<SortieAudio>, ErreurMoteur>;
     /// Rend la configuration d'origine.
     fn retirer(&mut self) -> Result<(), ErreurMoteur>;
+    /// Après `retirer` : l'ancienne copie de la configuration que le moteur a
+    /// gardée sur le disque parce qu'elle ne correspondait plus à la
+    /// configuration de l'utilisateur, pour que l'appli lui dise où elle est.
+    /// `None` quand il n'y en a pas (cas général, et moteurs sans fichiers).
+    fn copie_de_securite(&self) -> Option<PathBuf> {
+        None
+    }
 }

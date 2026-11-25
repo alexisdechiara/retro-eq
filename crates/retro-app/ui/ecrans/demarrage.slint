@@ -76,10 +76,15 @@ export component Demarrage inherits VerticalLayout {
         }
         }
         Separateur { }
+        // « Continuer » vaut accord : on le dit avant, et on dit que c'est réversible.
+        if !Appli.moteur-autorise && Appli.etat-moteur != 0: Paragraphe {
+            text: @tr("En continuant, tu autorises Retro EQ à écrire sa courbe dans la configuration d’Equalizer APO. Rien n’y est écrit avant. Ta configuration actuelle est sauvegardée : « Rendre le son d’origine », dans les Réglages, la remet telle quelle.");
+            color: Theme.texte;
+        }
         HorizontalLayout {
             spacing: 14px;
             alignment: start;
-            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
+            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.autoriser-moteur(); Appli.aller(Ecran.accueil); } }
             Bouton {
                 texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
                 actif: !Diagnostic.en-cours;

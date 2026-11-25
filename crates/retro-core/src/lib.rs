@@ -30,7 +30,10 @@ pub use deroulement::{
 pub use egaliseur::{courbe_10_bandes, FadersEtSupplementaires, BANDES_HZ, Q_BANDES};
 pub use hasard::{Hasard, HasardGraine, HasardReel};
 pub use journal::{Entree, Journal, LectureJournal, RaisonPause};
-pub use plan::{duel_verification, plan, Cote, DuelPrevu, Mode, Preference, Reponse, Sujet};
+pub use plan::{
+    duel_verification, plan, plan_avec_historique, retirer_duel, Cote, Couple, DuelPrevu,
+    HistoriquePlan, Mode, Preference, Reponse, Sujet,
+};
 pub use presets::{presets, Preset};
 pub use profil::{ErreurProfil, Origine, Profil, Version};
 pub use reglages::{Langue, Navigation, ReglagesAppli, ReglagesTest};

@@ -461,6 +461,7 @@ mod tests {
             mode: crate::plan::Mode::DuelsEnJeu { precis: false },
             plan: vec![],
             reglages: Default::default(),
+            variantes: Default::default(),
             horodatage_ms: 1,
         }
     }

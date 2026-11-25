@@ -8,10 +8,18 @@
 //! logique se teste sans casque, sans Windows et sans attendre 20 secondes par passage, et
 //! la même suite d'événements donne toujours la même suite d'effets.
 //!
-//! La règle qui compte le plus : **une variante ne reste jamais active**. Dès que le test
-//! n'est plus en écoute (pause, attente de la réponse, fin, abandon), le dernier
-//! [`Effet::Appliquer`] émis porte la référence telle qu'elle a été donnée au constructeur,
-//! avec son propre préampli (pas la copie mise au volume de la variante).
+//! Deux règles se tiennent l'une l'autre (ADR-0012) :
+//!
+//! - **À l'aveugle** : pendant un duel (écoute et attente de la réponse), on n'entend que
+//!   les deux côtés mis au même volume, jamais la référence telle quelle. Sinon le son
+//!   qui change, ou pas, au moment de la question trahirait qui est qui.
+//! - **Réversible** : hors d'un duel (pause, fin, abandon), le dernier
+//!   [`Effet::Appliquer`] émis porte la référence donnée au constructeur, avec son propre
+//!   préampli. Un côté ne reste donc actif sans rien faire que le temps du délai de
+//!   réponse (2 minutes par défaut), après quoi le test se met en pause tout seul.
+//!
+//! Remettre la référence pendant un duel peut trahir un côté : tout duel interrompu par
+//! une pause est donc rejoué avec un **nouveau tirage** (qui est A, ordre des passages).
 
 mod reprise;
 mod vue;
@@ -23,7 +31,8 @@ pub use reprise::{ContexteReprise, ErreurReprise};
 pub use vue::{DuelFini, EtatTest, VueTest};
 
 use crate::journal::{Entree, RaisonPause};
-use crate::plan::{Cote, DuelPrevu, Mode, Reponse, Sujet};
+use crate::hasard::HasardGraine;
+use crate::plan::{retirer_duel, Cote, DuelPrevu, Mode, Reponse, Sujet};
 use crate::profil::Version;
 use crate::reglages::ReglagesTest;
 use crate::resultat::{calculer_resultat, ResultatTest};
@@ -43,19 +52,26 @@ pub enum Evenement {
     Reponse(Reponse),
     /// « Plus tard » : pause, et le duel en cours sera rejoué depuis son premier passage.
     PlusTard,
-    /// Annule la dernière réponse donnée et rejoue ce duel.
+    /// Annule la dernière réponse donnée et rejoue ce duel depuis son premier passage.
+    ///
+    /// Deux limites voulues, pour garder un plan linéaire : la toute dernière réponse d'un
+    /// test ne peut pas être annulée quand aucun duel de vérification ne suit (le test
+    /// est déjà terminé) ; et les duels *passés* après la réponse annulée redeviennent à
+    /// jouer, puisqu'on revient en arrière jusqu'à elle.
     Annuler,
-    /// Pause demandée par l'utilisateur.
+    /// Pause demandée par l'utilisateur. Le duel en cours sera rejoué, avec un nouveau tirage.
     Pause,
-    /// Fin de la pause, quelle qu'en soit la raison.
+    /// Fin de la pause, quelle qu'en soit la raison. Ignoré tant qu'un appel est en cours.
     Reprendre,
     /// Le duel en cours est noté « passé », sans réponse.
     PasserDuel,
-    /// Le duel en cours recommence depuis son premier passage.
+    /// Le duel en cours recommence depuis son premier passage, avec un nouveau tirage.
     RecommencerDuel,
     /// Touche de réécoute enfoncée (`appuye: true`) ou relâchée, pendant l'attente de la
-    /// réponse. Ce n'est jamais une réponse : l'appli distingue l'appui court (elle envoie
-    /// `Reponse`) de l'appui long (elle envoie `Reecouter`).
+    /// réponse. L'appui fait entendre ce côté, qui **reste** en place au relâchement (on
+    /// ne repasse pas par la référence). Chaque appui relance le délai de réponse. Ce
+    /// n'est jamais une réponse : l'appli distingue l'appui court (elle envoie `Reponse`)
+    /// de l'appui long (elle envoie `Reecouter`).
     Reecouter { cote: Cote, appuye: bool },
     /// Un appel vocal commence (`true`) ou se termine (`false`). Seuls les changements
     /// comptent : répéter la même valeur ne fait rien.
@@ -74,7 +90,8 @@ pub enum Effet {
     Appliquer { cote: Option<Cote>, courbe: Courbe },
     /// Ajouter cette ligne au journal du test, sur le disque.
     Journaliser(Entree),
-    /// Les 6 passages sont finis : afficher la question « A, Pareil ou B ? ».
+    /// Les 6 passages sont finis : afficher la question « A, Pareil ou B ? ». Le dernier
+    /// côté entendu reste en place.
     DemanderReponse,
     /// Retirer la question de l'écran.
     MasquerQuestion,
@@ -112,24 +129,20 @@ pub struct ParametresTest {
     pub verification: DuelPrevu,
 }
 
-/// Où reprendre quand une pause se termine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Retour {
-    /// Au début du duel courant (ou à la fin du plan s'il ne reste aucun duel).
-    DebutDuel,
-    /// Au début de ce passage du duel courant.
-    Passage(usize),
-    /// À la question : les 6 passages étaient finis.
-    Attente,
-}
+/// Une pause plus longue que cela repose l'oreille : le compteur d'écoute qui mène au
+/// conseil de pause repart de zéro (« 40 minutes d'écoute sans pause »).
+pub const PAUSE_QUI_REPOSE_MS: u64 = 5 * 60 * 1000;
 
 /// L'état interne. `EtatTest` en est la version publique, sans les détails.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     Pret,
     Ecoute { passage: usize, debut_ms: u64 },
-    Attente { reecoute: Option<Cote> },
-    Pause { raison: RaisonPause, retour: Retour },
+    /// La question est posée. `applique` est le côté en place ; `depuis_ms` le début du
+    /// délai de réponse (relancé par chaque réécoute).
+    Attente { applique: Cote, depuis_ms: u64 },
+    /// À la reprise, le duel courant repart toujours de son premier passage.
+    Pause { raison: RaisonPause, depuis_ms: u64 },
     Termine,
     Abandonne,
 }
@@ -142,8 +155,16 @@ pub struct Deroulement {
     /// La version de référence ; `version.courbe` est la référence du test.
     version: Version,
     mode: Mode,
-    /// Le plan, plus le duel de vérification en dernier quand `verification_ajoutee`.
+    /// Le plan tel qu'il est réellement joué : les duels retirés y remplacent ceux
+    /// d'origine, et le duel de vérification vient en dernier quand `verification_ajoutee`.
     plan: Vec<DuelPrevu>,
+    /// Vrai quand le duel courant a été interrompu : il sera retiré avant d'être rejoué.
+    a_retirer: bool,
+    /// Graine des nouveaux tirages, dérivée de l'identifiant du test.
+    graine: u64,
+    /// Nombre de tirages déjà faits : le n-ième tirage est toujours le même pour un test
+    /// donné, ce qui garde le déroulement déterministe et reconstructible.
+    tirages: u64,
     verification_prevue: DuelPrevu,
     verification_ajoutee: bool,
     reglages: ReglagesTest,
@@ -181,12 +202,16 @@ impl Deroulement {
             spectre,
             verification,
         } = parametres;
+        let graine = graine_de(&test_id);
         Deroulement {
             test_id,
             profil_id,
             version: reference,
             mode,
             plan,
+            a_retirer: false,
+            graine,
+            tirages: 0,
             verification_prevue: verification,
             verification_ajoutee: false,
             reglages,
@@ -225,19 +250,20 @@ impl Deroulement {
             Evenement::Reponse(reponse) => self.repondre(reponse, t, &mut effets),
             Evenement::PlusTard => {
                 if self.en_duel() {
-                    self.mettre_en_pause(RaisonPause::PlusTard, Retour::DebutDuel, t, &mut effets);
+                    self.mettre_en_pause(RaisonPause::PlusTard, t, &mut effets);
                 }
             }
             Evenement::Annuler => self.annuler(t, &mut effets),
             Evenement::Pause => self.pause_manuelle(t, &mut effets),
             Evenement::Reprendre => {
-                if let Phase::Pause { retour, .. } = self.phase {
-                    self.reprendre(retour, t, &mut effets);
+                // Pendant un appel, on ne relance pas l'écoute par-dessus la conversation.
+                if matches!(self.phase, Phase::Pause { .. }) && !self.appel {
+                    self.reprendre(t, &mut effets);
                 }
             }
             Evenement::PasserDuel => self.passer_duel(t, &mut effets),
             Evenement::RecommencerDuel => self.recommencer_duel(t, &mut effets),
-            Evenement::Reecouter { cote, appuye } => self.reecouter(cote, appuye, &mut effets),
+            Evenement::Reecouter { cote, appuye } => self.reecouter(cote, appuye, t, &mut effets),
             Evenement::AppelEnCours(en_cours) => self.appel_en_cours(en_cours, t, &mut effets),
             Evenement::PremierPlan(nom) => {
                 self.premier_plan = Some(nom).filter(|n| !n.is_empty());
@@ -249,6 +275,10 @@ impl Deroulement {
     }
 
     // ----- Petits accès -----
+
+    fn delai_reponse_ms(&self) -> u64 {
+        u64::from(self.reglages.delai_reponse_ms())
+    }
 
     fn intervalle_ms(&self) -> u64 {
         u64::from(self.reglages.intervalle_ms())
@@ -406,8 +436,21 @@ impl Deroulement {
 
     /// Lance le duel courant depuis son premier passage, ou finit le test s'il n'en reste pas.
     fn demarrer_duel(&mut self, t: u64, effets: &mut Vec<Effet>) {
-        if self.duel_courant().is_none() {
+        let Some(duel) = self.duel_courant() else {
             return self.fin_de_plan(t, effets);
+        };
+        if std::mem::take(&mut self.a_retirer) {
+            // Le duel a été interrompu et la référence entendue : ce qu'on a pu deviner
+            // ne doit plus servir. Même sujet, nouveau tirage, noté au journal.
+            let prevu = self.tirer(&duel);
+            if let Some(place) = self.plan.get_mut(self.issues.len()) {
+                *place = prevu;
+            }
+            effets.push(Effet::Journaliser(Entree::DuelRetire {
+                duel: self.indice_courant() as u32,
+                prevu,
+                horodatage_ms: t,
+            }));
         }
         effets.push(Effet::Journaliser(Entree::DuelDemarre {
             duel: self.indice_courant() as u32,
@@ -422,7 +465,7 @@ impl Deroulement {
             return self.fin_de_plan(t, effets);
         };
         let Some(&cote) = duel.ordre_passages.get(passage) else {
-            return self.attendre_reponse(effets);
+            return self.attendre_reponse(t, effets);
         };
         if passage == 0 {
             // Nouveau départ du duel : courbes recalculées avec le spectre du moment.
@@ -448,11 +491,28 @@ impl Deroulement {
         };
     }
 
-    /// Les passages sont finis : référence remise, question posée.
-    fn attendre_reponse(&mut self, effets: &mut Vec<Effet>) {
-        self.phase = Phase::Attente { reecoute: None };
-        self.remettre_reference(effets);
+    /// Les passages sont finis : la question est posée, et le dernier côté entendu reste
+    /// en place. Remettre la référence ici dirait si ce dernier côté était la variante.
+    fn attendre_reponse(&mut self, t: u64, effets: &mut Vec<Effet>) {
+        let dernier = self
+            .duel_courant()
+            .and_then(|d| d.ordre_passages.last().copied())
+            .unwrap_or(Cote::A);
+        self.phase = Phase::Attente {
+            applique: dernier,
+            depuis_ms: t,
+        };
         effets.push(Effet::DemanderReponse);
+    }
+
+    /// Un nouveau tirage pour ce duel : même sujet, orientation et ordre des passages
+    /// retirés. Le n-ième tirage d'un test ne dépend que de sa graine et de n.
+    fn tirer(&mut self, duel: &DuelPrevu) -> DuelPrevu {
+        let graine = self
+            .graine
+            .wrapping_add(self.tirages.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        self.tirages = self.tirages.wrapping_add(1);
+        retirer_duel(duel, &mut HasardGraine::new(graine))
     }
 
     /// Clôt le duel courant avec son issue et passe à la suite.
@@ -461,6 +521,7 @@ impl Deroulement {
         self.issues.push(issue);
         self.applis_duel.clear();
         self.courbes_duel = None;
+        self.a_retirer = false;
         self.demarrer_duel(t, effets);
     }
 
@@ -502,6 +563,7 @@ impl Deroulement {
         self.applis.truncate(duel);
         self.applis_duel.clear();
         self.courbes_duel = None;
+        self.a_retirer = false;
         if self.verification_ajoutee && duel < self.duels_du_plan() {
             self.plan.pop();
             self.verification_ajoutee = false;
@@ -522,11 +584,12 @@ impl Deroulement {
             mode: self.mode.clone(),
             plan: self.plan.clone(),
             reglages: self.reglages.clone(),
+            variantes: self.variantes,
             horodatage_ms: t,
         }));
         if self.appel && !self.plan.is_empty() {
             // Un appel est déjà en cours : le test attend sa fin avant le premier passage.
-            self.mettre_en_pause(RaisonPause::Appel, Retour::DebutDuel, t, effets);
+            self.mettre_en_pause(RaisonPause::Appel, t, effets);
         } else {
             self.demarrer_duel(t, effets);
         }
@@ -541,7 +604,16 @@ impl Deroulement {
     ///   ce qui a été entendu, donc on ne compte rien : le passage en cours recommence.
     ///
     /// Un `Tic` ne fait jamais avancer de plus d'un passage.
+    ///
+    /// Pendant la question, le tic surveille le délai de réponse : dépassé, le test se
+    /// met en pause tout seul et la référence est remise (ADR-0012).
     fn tic(&mut self, t: u64, effets: &mut Vec<Effet>) {
+        if let Phase::Attente { depuis_ms, .. } = self.phase {
+            if t.saturating_sub(depuis_ms) >= self.delai_reponse_ms() {
+                self.mettre_en_pause(RaisonPause::SansReponse, t, effets);
+            }
+            return;
+        }
         let Phase::Ecoute { passage, debut_ms } = self.phase else {
             return;
         };
@@ -577,15 +649,13 @@ impl Deroulement {
         self.clore_duel(Some(reponse), t, effets);
     }
 
-    /// Met le test en pause : la référence est remise *avant* toute écriture.
-    fn mettre_en_pause(
-        &mut self,
-        raison: RaisonPause,
-        retour: Retour,
-        t: u64,
-        effets: &mut Vec<Effet>,
-    ) {
+    /// Met le test en pause : la référence est remise *avant* toute écriture. Si un duel
+    /// était en cours, il sera retiré à la reprise.
+    fn mettre_en_pause(&mut self, raison: RaisonPause, t: u64, effets: &mut Vec<Effet>) {
         let en_attente = self.en_attente();
+        if self.en_duel() {
+            self.a_retirer = true;
+        }
         self.fermer_passage(t);
         self.remettre_reference(effets);
         if en_attente {
@@ -595,31 +665,25 @@ impl Deroulement {
             raison,
             horodatage_ms: t,
         }));
-        self.phase = Phase::Pause { raison, retour };
-    }
-
-    /// Où revenir si on met en pause maintenant, sans rejouer tout le duel.
-    fn retour_ici(&self) -> Option<Retour> {
-        match self.phase {
-            Phase::Ecoute { passage, .. } => Some(Retour::Passage(passage)),
-            Phase::Attente { .. } => Some(Retour::Attente),
-            _ => None,
-        }
+        self.phase = Phase::Pause {
+            raison,
+            depuis_ms: t,
+        };
     }
 
     fn pause_manuelle(&mut self, t: u64, effets: &mut Vec<Effet>) {
-        if let Some(retour) = self.retour_ici() {
-            self.mettre_en_pause(RaisonPause::Manuelle, retour, t, effets);
+        if self.en_duel() {
+            self.mettre_en_pause(RaisonPause::Manuelle, t, effets);
         } else if let Phase::Pause {
             raison: RaisonPause::Appel,
-            retour,
+            depuis_ms,
         } = self.phase
         {
             // Pause demandée pendant une pause d'appel : elle devient manuelle, et la fin
             // de l'appel ne relancera pas le test tout seul.
             self.phase = Phase::Pause {
                 raison: RaisonPause::Manuelle,
-                retour,
+                depuis_ms,
             };
             effets.push(Effet::Journaliser(Entree::Pause {
                 raison: RaisonPause::Manuelle,
@@ -628,17 +692,16 @@ impl Deroulement {
         }
     }
 
-    fn reprendre(&mut self, retour: Retour, t: u64, effets: &mut Vec<Effet>) {
-        effets.push(Effet::Journaliser(Entree::Reprise { horodatage_ms: t }));
-        match retour {
-            Retour::DebutDuel => self.demarrer_duel(t, effets),
-            Retour::Passage(passage) => self.demarrer_passage(passage, t, effets),
-            Retour::Attente => {
-                // La référence est déjà en place depuis la mise en pause.
-                self.phase = Phase::Attente { reecoute: None };
-                effets.push(Effet::DemanderReponse);
+    /// Fin de pause : le duel courant repart de son premier passage (retiré s'il avait
+    /// été interrompu). Après une vraie pause, le compteur d'écoute repart de zéro.
+    fn reprendre(&mut self, t: u64, effets: &mut Vec<Effet>) {
+        if let Phase::Pause { depuis_ms, .. } = self.phase {
+            if t.saturating_sub(depuis_ms) > PAUSE_QUI_REPOSE_MS {
+                self.ecoute_ms = 0;
             }
         }
+        effets.push(Effet::Journaliser(Entree::Reprise { horodatage_ms: t }));
+        self.demarrer_duel(t, effets);
     }
 
     fn appel_en_cours(&mut self, en_cours: bool, t: u64, effets: &mut Vec<Effet>) {
@@ -647,15 +710,17 @@ impl Deroulement {
         }
         self.appel = en_cours;
         if en_cours {
-            if let Some(retour) = self.retour_ici() {
-                self.mettre_en_pause(RaisonPause::Appel, retour, t, effets);
+            if self.en_duel() {
+                self.mettre_en_pause(RaisonPause::Appel, t, effets);
             }
-        } else if let Phase::Pause {
-            raison: RaisonPause::Appel,
-            retour,
-        } = self.phase
-        {
-            self.reprendre(retour, t, effets);
+        } else if matches!(
+            self.phase,
+            Phase::Pause {
+                raison: RaisonPause::Appel,
+                ..
+            }
+        ) {
+            self.reprendre(t, effets);
         }
     }
 
@@ -706,31 +771,32 @@ impl Deroulement {
             effets.push(Effet::MasquerQuestion);
         }
         self.fermer_passage(t);
-        self.demarrer_passage(0, t, effets);
+        // L'utilisateur a pu entendre une bascule entière : on retire aussi.
+        self.a_retirer = true;
+        self.demarrer_duel(t, effets);
     }
 
-    fn reecouter(&mut self, cote: Cote, appuye: bool, effets: &mut Vec<Effet>) {
-        let Phase::Attente { reecoute } = self.phase else {
+    fn reecouter(&mut self, cote: Cote, appuye: bool, t: u64, effets: &mut Vec<Effet>) {
+        let Phase::Attente { applique, .. } = self.phase else {
             return;
         };
         let Some(duel) = self.duel_courant() else {
             return;
         };
-        if appuye {
-            if reecoute == Some(cote) {
-                return; // répétition automatique de la touche
-            }
-            self.phase = Phase::Attente {
-                reecoute: Some(cote),
-            };
+        if !appuye {
+            return; // au relâchement, le côté reste : on ne repasse pas par la référence
+        }
+        // Chaque appui relance le délai de réponse.
+        self.phase = Phase::Attente {
+            applique: cote,
+            depuis_ms: t,
+        };
+        if applique != cote {
             let courbe = self.courbe_du_cote(&duel, cote);
             effets.push(Effet::Appliquer {
                 cote: Some(cote),
                 courbe,
             });
-        } else if reecoute == Some(cote) {
-            self.phase = Phase::Attente { reecoute: None };
-            self.remettre_reference(effets);
         }
     }
 
@@ -755,4 +821,12 @@ impl Deroulement {
         }
         self.phase = Phase::Abandonne;
     }
+}
+
+/// Une graine tirée de l'identifiant du test (hachage FNV-1a) : deux tests différents
+/// n'ont pas les mêmes tirages, et un test reconstruit depuis son journal retrouve les siens.
+fn graine_de(test_id: &str) -> u64 {
+    test_id.bytes().fold(0xCBF2_9CE4_8422_2325, |h, octet| {
+        (h ^ u64::from(octet)).wrapping_mul(0x0000_0100_0000_01B3)
+    })
 }

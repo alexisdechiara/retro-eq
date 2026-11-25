@@ -129,44 +129,87 @@ fn nombre_controles(total: usize) -> usize {
     ((total + 3) / 6).min(total / 2)
 }
 
-/// Les zones, de la moins récemment testée à la plus récente. `historique_zones` va du plus
-/// ancien test au plus récent (une zone peut y figurer plusieurs fois : la dernière
-/// occurrence compte). Les zones jamais testées passent en premier, dans l'ordre du spectre.
-fn zones_par_anciennete(historique_zones: &[Zone]) -> Vec<Zone> {
-    let derniere_fois = |zone: Zone| historique_zones.iter().rposition(|&z| z == zone);
-    let mut jamais: Vec<Zone> = Zone::TOUTES
+/// Un couple (zone, sens) : ce qu'un duel sur une zone compare à la référence.
+pub type Couple = (Zone, Sens);
+
+/// Ce que les tests précédents d'un profil apprennent au plan suivant.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HistoriquePlan {
+    /// Les couples déjà testés, du plus ancien au plus récent (un couple peut y figurer
+    /// plusieurs fois : la dernière fois compte).
+    pub couples: Vec<Couple>,
+    /// Les indices du dernier test (une seule victoire, voir
+    /// [`crate::resultat::ResultatTest::indices`]) : ils passent en tête du plan.
+    pub indices: Vec<Couple>,
+}
+
+impl HistoriquePlan {
+    /// L'historique quand on ne connaît que les zones testées (du plus ancien test au
+    /// plus récent) : chaque zone compte pour ses deux sens, et il n'y a pas d'indice.
+    pub fn depuis_zones(zones: &[Zone]) -> HistoriquePlan {
+        HistoriquePlan {
+            couples: zones
+                .iter()
+                .flat_map(|&z| [(z, Sens::Plus), (z, Sens::Moins)])
+                .collect(),
+            indices: Vec::new(),
+        }
+    }
+
+    /// Ajoute un test terminé : les couples de son plan, et les indices de son résultat
+    /// (`resultat.indices`), qui remplacent ceux du test d'avant.
+    pub fn ajouter_test(&mut self, plan: &[DuelPrevu], indices: &[Couple]) {
+        self.couples.extend(plan.iter().filter_map(|d| match d.sujet {
+            Sujet::Zone { zone, sens } => Some((zone, sens)),
+            _ => None,
+        }));
+        self.indices = indices.to_vec();
+    }
+}
+
+/// Les 14 couples dans l'ordre où le plan les prend : d'abord les indices du dernier test,
+/// puis les couples jamais testés (dans l'ordre du spectre), puis les autres, du testé le
+/// moins récemment au plus récemment.
+fn couples_par_priorite(historique: &HistoriquePlan) -> Vec<Couple> {
+    let tous = Zone::TOUTES
         .into_iter()
-        .filter(|&z| derniere_fois(z).is_none())
+        .flat_map(|z| [(z, Sens::Plus), (z, Sens::Moins)]);
+    let derniere_fois = |c: Couple| historique.couples.iter().rposition(|&x| x == c);
+    let mut ordre: Vec<Couple> = Vec::new();
+    for &c in &historique.indices {
+        if !ordre.contains(&c) {
+            ordre.push(c);
+        }
+    }
+    let mut reste: Vec<(Option<usize>, Couple)> = tous
+        .filter(|c| !ordre.contains(c))
+        .map(|c| (derniere_fois(c), c))
         .collect();
-    let mut testees: Vec<(usize, Zone)> = Zone::TOUTES
-        .into_iter()
-        .filter_map(|z| derniere_fois(z).map(|rang| (rang, z)))
-        .collect();
-    testees.sort();
-    jamais.extend(testees.into_iter().map(|(_, z)| z));
-    jamais
+    // Tri stable : `None` (jamais testé) passe avant tout `Some`, et l'ordre du spectre
+    // départage les jamais testés.
+    reste.sort_by_key(|(rang, _)| *rang);
+    ordre.extend(reste.into_iter().map(|(_, c)| c));
+    ordre
 }
 
 /// Les sujets des duels « réels » (hors contrôle), dans l'ordre de distribution.
 fn sujets_reels(
     mode: &Mode,
     nombre: usize,
-    historique_zones: &[Zone],
+    historique: &HistoriquePlan,
     hasard: &mut impl Hasard,
 ) -> Vec<Sujet> {
     match mode {
         Mode::DuelsEnJeu { .. } => {
-            // Un couple (zone, sens) après l'autre, zone par zone : si le budget ne couvre pas
-            // tout, ce sont les zones les plus récentes qui sont laissées de côté.
-            let couples: Vec<Sujet> = zones_par_anciennete(historique_zones)
-                .into_iter()
-                .flat_map(|zone| {
-                    [Sens::Plus, Sens::Moins]
-                        .into_iter()
-                        .map(move |sens| Sujet::Zone { zone, sens })
-                })
-                .collect();
-            (0..nombre).map(|i| couples[i % couples.len()]).collect()
+            // Les duels vont par paires : chaque couple retenu est joué deux fois (une
+            // seule victoire ne prouve rien, voir ADR-0005). Avec un budget impair, le
+            // premier couple est joué une troisième fois.
+            let couples = couples_par_priorite(historique);
+            let retenus = (nombre / 2).clamp(1, couples.len());
+            (0..nombre)
+                .filter_map(|i| couples.get(i % retenus))
+                .map(|&(zone, sens)| Sujet::Zone { zone, sens })
+                .collect()
         }
         Mode::UneSeuleZone { zone, .. } => {
             let depart = if hasard.pile_ou_face() {
@@ -183,6 +226,24 @@ fn sujets_reels(
         }
         Mode::ProfilContreProfil { .. } => vec![Sujet::AutreProfil; nombre],
     }
+}
+
+/// Mélange les duels réels. En « duels en jeu », on évite que les deux duels d'un même
+/// couple se suivent : on retire jusqu'à trouver un ordre sans voisins identiques, et à
+/// défaut on garde l'ordre de distribution (c0, c1, …, c0, c1, …), qui n'en a jamais.
+fn melanger_reels(mode: &Mode, reels: Vec<Sujet>, hasard: &mut impl Hasard) -> Vec<Sujet> {
+    let mut melange = reels.clone();
+    if !matches!(mode, Mode::DuelsEnJeu { .. }) {
+        hasard.melanger(&mut melange);
+        return melange;
+    }
+    for _ in 0..200 {
+        hasard.melanger(&mut melange);
+        if !melange.windows(2).any(|w| w[0] == w[1]) {
+            return melange;
+        }
+    }
+    reels
 }
 
 /// Insère les contrôles parmi les duels réels : jamais en premier, jamais deux à la suite.
@@ -236,30 +297,51 @@ fn duel(sujet: Sujet, ordres: &[[Cote; 6]], hasard: &mut impl Hasard) -> DuelPre
     }
 }
 
-/// Le plan d'un test.
-///
-/// Règles (ADR-0005) : un duel sur six est un contrôle ; les autres sont distribués à tour de
-/// rôle entre les couples (zone, sens), zones les moins récemment testées d'abord (voir
-/// `historique_zones`, du plus ancien au plus récent) ; l'ordre est mélangé ; `reference_est_a`
-/// et l'ordre des passages sont tirés au hasard.
-///
-/// `_version` est réservé : le plan n'en dépend pas encore (les pas servent au déroulement).
+/// Le plan d'un test, quand on ne connaît des tests précédents que les zones testées
+/// (du plus ancien au plus récent). Voir [`plan_avec_historique`], à préférer : elle sait
+/// aussi remettre en tête les indices du dernier test.
 pub fn plan(
     mode: &Mode,
-    _version: &Version,
+    version: &Version,
     historique_zones: &[Zone],
+    hasard: &mut impl Hasard,
+) -> Vec<DuelPrevu> {
+    let historique = HistoriquePlan::depuis_zones(historique_zones);
+    plan_avec_historique(mode, version, &historique, hasard)
+}
+
+/// Le plan d'un test.
+///
+/// Règles (ADR-0005) : un duel sur six est un contrôle, jamais le premier ni deux à la
+/// suite ; en « duels en jeu », les autres vont par paires, chaque couple (zone, sens)
+/// retenu étant joué deux fois (5 couples en rapide, 12 en précis plus un troisième duel
+/// pour le premier), sans que les deux duels d'un couple se suivent ; les couples sont pris
+/// dans l'ordre de [`HistoriquePlan`] : indices du dernier test, puis les moins récemment
+/// testés ; `reference_est_a` et l'ordre des passages sont tirés au hasard.
+///
+/// `_version` est réservé : le plan n'en dépend pas encore (les pas servent au déroulement).
+pub fn plan_avec_historique(
+    mode: &Mode,
+    _version: &Version,
+    historique: &HistoriquePlan,
     hasard: &mut impl Hasard,
 ) -> Vec<DuelPrevu> {
     let total = mode.nombre_duels() as usize;
     let controles = nombre_controles(total);
-    let mut reels = sujets_reels(mode, total - controles, historique_zones, hasard);
-    hasard.melanger(&mut reels);
+    let reels = sujets_reels(mode, total - controles, historique, hasard);
+    let reels = melanger_reels(mode, reels, hasard);
     let sujets = inserer_controles(reels, controles, hasard);
     let ordres = ordres_possibles();
     sujets
         .into_iter()
         .map(|sujet| duel(sujet, &ordres, hasard))
         .collect()
+}
+
+/// Tire à nouveau l'orientation et l'ordre des passages d'un duel, sans changer son sujet.
+/// Sert quand un duel interrompu est rejoué (ADR-0012).
+pub fn retirer_duel(prevu: &DuelPrevu, hasard: &mut impl Hasard) -> DuelPrevu {
+    duel(prevu.sujet, &ordres_possibles(), hasard)
 }
 
 /// Le duel de vérification, ajouté en fin de test : référence contre nouvelle version.
@@ -392,31 +474,147 @@ mod tests {
         assert!((0.45..0.55).contains(&part), "{part}");
     }
 
+    fn couples_de(p: &[DuelPrevu]) -> Vec<(Zone, Sens)> {
+        p.iter()
+            .filter_map(|d| match d.sujet {
+                Sujet::Zone { zone, sens } => Some((zone, sens)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn comptes_de(p: &[DuelPrevu]) -> std::collections::HashMap<(Zone, Sens), u32> {
+        let mut comptes = std::collections::HashMap::new();
+        for c in couples_de(p) {
+            *comptes.entry(c).or_insert(0u32) += 1;
+        }
+        comptes
+    }
+
     #[test]
-    fn avec_12_duels_les_10_reels_couvrent_5_zones_dans_les_deux_sens() {
+    fn avec_12_duels_les_10_reels_jouent_5_couples_deux_fois_chacun() {
         for graine in 0..200 {
             let p = plan_de(&Mode::DuelsEnJeu { precis: false }, graine, &[]);
-            let couples: std::collections::HashSet<(Zone, Sens)> = p
-                .iter()
-                .filter_map(|d| match d.sujet {
-                    Sujet::Zone { zone, sens } => Some((zone, sens)),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(
-                p.iter()
-                    .filter(|d| matches!(d.sujet, Sujet::Zone { .. }))
-                    .count(),
-                10
-            );
-            assert_eq!(couples.len(), 10, "chaque couple une seule fois");
-            let zones: std::collections::HashSet<Zone> = couples.iter().map(|c| c.0).collect();
-            assert_eq!(zones.len(), 5);
-            for z in &zones {
-                assert!(couples.contains(&(*z, Sens::Plus)));
-                assert!(couples.contains(&(*z, Sens::Moins)));
+            let comptes = comptes_de(&p);
+            assert_eq!(comptes.len(), 5, "5 couples");
+            assert!(comptes.values().all(|&n| n == 2), "{comptes:?}");
+            // Sans historique : les 5 premiers couples dans l'ordre du spectre.
+            for c in [
+                (Zone::SubGraves, Sens::Plus),
+                (Zone::SubGraves, Sens::Moins),
+                (Zone::Graves, Sens::Plus),
+                (Zone::Graves, Sens::Moins),
+                (Zone::BasMediums, Sens::Plus),
+            ] {
+                assert!(comptes.contains_key(&c), "{c:?}");
             }
         }
+    }
+
+    #[test]
+    fn les_deux_duels_d_un_couple_ne_se_suivent_jamais() {
+        for mode in [
+            Mode::DuelsEnJeu { precis: false },
+            Mode::DuelsEnJeu { precis: true },
+        ] {
+            for graine in 0..300 {
+                let p = plan_de(&mode, graine, &[]);
+                assert!(
+                    !p.windows(2)
+                        .any(|w| w[0].sujet == w[1].sujet && !w[0].est_controle()),
+                    "{mode:?} graine {graine}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn les_indices_du_test_precedent_passent_en_tete_puis_les_couples_les_plus_anciens() {
+        let historique = HistoriquePlan {
+            // Du plus ancien au plus récent.
+            couples: vec![
+                (Zone::Graves, Sens::Plus),
+                (Zone::SubGraves, Sens::Plus),
+                (Zone::SubGraves, Sens::Moins),
+                (Zone::Air, Sens::Moins),
+                (Zone::Graves, Sens::Plus),
+            ],
+            indices: vec![(Zone::Air, Sens::Moins), (Zone::Presence, Sens::Plus)],
+        };
+        let ordre = couples_par_priorite(&historique);
+        assert_eq!(ordre.len(), 14);
+        assert_eq!(ordre[0], (Zone::Air, Sens::Moins));
+        assert_eq!(ordre[1], (Zone::Presence, Sens::Plus));
+        // Puis les jamais testés, dans l'ordre du spectre.
+        assert_eq!(ordre[2], (Zone::Graves, Sens::Moins));
+        assert_eq!(ordre[3], (Zone::BasMediums, Sens::Plus));
+        // Et en dernier les testés, du plus ancien au plus récent (dernière fois).
+        assert_eq!(
+            ordre[11..],
+            [
+                (Zone::SubGraves, Sens::Plus),
+                (Zone::SubGraves, Sens::Moins),
+                (Zone::Graves, Sens::Plus)
+            ]
+        );
+        for graine in 0..50 {
+            let p = plan_avec_historique(
+                &Mode::DuelsEnJeu { precis: false },
+                &version(),
+                &historique,
+                &mut HasardGraine::new(graine),
+            );
+            let comptes = comptes_de(&p);
+            assert_eq!(comptes.get(&(Zone::Air, Sens::Moins)), Some(&2));
+            assert_eq!(comptes.get(&(Zone::Presence, Sens::Plus)), Some(&2));
+            assert_eq!(comptes.len(), 5);
+        }
+    }
+
+    #[test]
+    fn l_historique_se_construit_test_apres_test() {
+        let mut h = HistoriquePlan::default();
+        let p1 = plan_avec_historique(
+            &Mode::DuelsEnJeu { precis: false },
+            &version(),
+            &h,
+            &mut HasardGraine::new(1),
+        );
+        h.ajouter_test(&p1, &[(Zone::Graves, Sens::Plus)]);
+        assert_eq!(h.couples.len(), 10);
+        assert_eq!(h.indices, vec![(Zone::Graves, Sens::Plus)]);
+        let p2 = plan_avec_historique(
+            &Mode::DuelsEnJeu { precis: false },
+            &version(),
+            &h,
+            &mut HasardGraine::new(2),
+        );
+        let c2 = comptes_de(&p2);
+        // L'indice est rejoué, puis viennent 4 couples jamais testés.
+        assert!(c2.contains_key(&(Zone::Graves, Sens::Plus)));
+        let c1 = comptes_de(&p1);
+        assert_eq!(c2.keys().filter(|c| c1.contains_key(c)).count(), 1);
+        // Les indices sont ceux du dernier test seulement.
+        h.ajouter_test(&p2, &[]);
+        assert!(h.indices.is_empty());
+        assert_eq!(h.couples.len(), 20);
+        let j = serde_json::to_string(&h).unwrap();
+        assert_eq!(serde_json::from_str::<HistoriquePlan>(&j).unwrap(), h);
+    }
+
+    #[test]
+    fn l_ancienne_signature_par_zones_marche_toujours() {
+        let h = HistoriquePlan::depuis_zones(&[Zone::Graves]);
+        assert_eq!(
+            h.couples,
+            vec![(Zone::Graves, Sens::Plus), (Zone::Graves, Sens::Moins)]
+        );
+        assert!(h.indices.is_empty());
+        let m = Mode::DuelsEnJeu { precis: false };
+        assert_eq!(
+            plan_de(&m, 5, &[Zone::Graves]),
+            plan_avec_historique(&m, &version(), &h, &mut HasardGraine::new(5))
+        );
     }
 
     #[test]
@@ -433,38 +631,15 @@ mod tests {
     }
 
     #[test]
-    fn dans_l_historique_la_zone_testee_le_plus_anciennement_passe_avant() {
-        // Graves testée il y a longtemps, Mediums plus récemment, Air tout récemment, et
-        // Graves encore avant Mediums : la dernière occurrence compte.
-        let histo = [Zone::Graves, Zone::Air, Zone::Mediums, Zone::Graves];
-        let ordre = zones_par_anciennete(&histo);
-        assert_eq!(
-            ordre,
-            vec![
-                Zone::SubGraves,
-                Zone::BasMediums,
-                Zone::Presence,
-                Zone::Aigus,
-                Zone::Air,
-                Zone::Mediums,
-                Zone::Graves
-            ]
-        );
-    }
-
-    #[test]
-    fn avec_30_duels_toutes_les_zones_sont_couvertes_et_repassees() {
-        let p = plan_de(&Mode::DuelsEnJeu { precis: true }, 4, &[]);
-        let mut comptes = std::collections::HashMap::new();
-        for d in &p {
-            if let Sujet::Zone { zone, sens } = d.sujet {
-                *comptes.entry((zone, sens)).or_insert(0u32) += 1;
-            }
+    fn avec_30_duels_12_couples_sont_joues_deux_fois_et_le_premier_trois_fois() {
+        for graine in 0..50 {
+            let p = plan_de(&Mode::DuelsEnJeu { precis: true }, graine, &[]);
+            let comptes = comptes_de(&p);
+            assert_eq!(comptes.len(), 12);
+            assert_eq!(comptes.values().sum::<u32>(), 25);
+            assert_eq!(comptes[&(Zone::SubGraves, Sens::Plus)], 3);
+            assert_eq!(comptes.values().filter(|&&n| n == 2).count(), 11);
         }
-        assert_eq!(comptes.len(), 14);
-        // 25 duels réels sur 14 couples : chacun 1 ou 2 fois.
-        assert!(comptes.values().all(|&c| c == 1 || c == 2));
-        assert_eq!(comptes.values().sum::<u32>(), 25);
     }
 
     #[test]

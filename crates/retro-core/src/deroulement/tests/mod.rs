@@ -55,6 +55,23 @@ pub(super) fn zone(zone: Zone, sens: Sens, reference_est_a: bool) -> DuelPrevu {
     duel(Sujet::Zone { zone, sens }, reference_est_a)
 }
 
+/// Deux duels « plus de graves », un dans chaque orientation : de quoi retenir un
+/// changement (il faut deux victoires) en répondant B puis A.
+pub(super) fn plan_gagnant() -> Vec<DuelPrevu> {
+    vec![
+        zone(Zone::Graves, Sens::Plus, true),
+        zone(Zone::Graves, Sens::Plus, false),
+    ]
+}
+
+/// Le nouveau tirage annoncé dans ces effets, s'il y en a un.
+pub(super) fn tirage_de(effets: &[Effet]) -> Option<(u32, DuelPrevu)> {
+    effets.iter().find_map(|e| match e {
+        Effet::Journaliser(Entree::DuelRetire { duel, prevu, .. }) => Some((*duel, *prevu)),
+        _ => None,
+    })
+}
+
 pub(super) fn controle() -> DuelPrevu {
     duel(Sujet::Controle, true)
 }
@@ -180,31 +197,36 @@ impl Banc {
         let vue = self.vue();
         let contexte = format!("après {evt:?} depuis {avant:?} → {:?}", vue.etat);
 
-        // 1. Une variante ne reste jamais active.
-        match vue.cote_actif {
-            None => {
-                if let Some((cote, courbe)) = &self.appliquee {
-                    assert_eq!(*cote, None, "un côté reste appliqué {contexte}");
-                    assert_eq!(courbe, &self.reference, "pas la référence {contexte}");
-                }
-            }
-            Some(cote) => {
-                assert!(
-                    matches!(
-                        vue.etat,
-                        EtatTest::EnEcoute { .. } | EtatTest::AttenteReponse
-                    ),
-                    "côté actif hors écoute {contexte}"
-                );
-                let appliquee = self.appliquee.as_ref().map(|(c, _)| *c);
-                assert_eq!(appliquee, Some(Some(cote)), "mauvais côté {contexte}");
-            }
-        }
-        if !matches!(
+        // 1. À l'aveugle pendant un duel, référence remise en dehors (ADR-0012).
+        let en_duel = matches!(
             vue.etat,
             EtatTest::EnEcoute { .. } | EtatTest::AttenteReponse
-        ) {
+        );
+        if en_duel {
+            let cote = vue.cote_actif.unwrap_or_else(|| panic!("aucun côté {contexte}"));
+            let (applique, courbe) = self.appliquee.as_ref().unwrap();
+            assert_eq!(*applique, Some(cote), "mauvais côté {contexte}");
+            let duel = self.prevu(vue.duel as usize - 1);
+            let (cote_ref, cote_var) = self.d.courbes_duel.as_ref().unwrap();
+            let attendue = if cote == duel.cote_reference() {
+                cote_ref
+            } else {
+                cote_var
+            };
+            assert_eq!(courbe, attendue, "pas la courbe de ce côté {contexte}");
+            assert_ne!(courbe, &self.reference, "référence nue en plein duel {contexte}");
+            assert!(
+                !effets
+                    .iter()
+                    .any(|e| matches!(e, Effet::Appliquer { cote: None, .. })),
+                "la référence a été appliquée pendant un duel {contexte} : {effets:?}"
+            );
+        } else {
             assert_eq!(vue.cote_actif, None, "{contexte}");
+            if let Some((cote, courbe)) = &self.appliquee {
+                assert_eq!(*cote, None, "un côté reste appliqué {contexte}");
+                assert_eq!(courbe, &self.reference, "pas la référence {contexte}");
+            }
         }
 
         // 2. On ne sort jamais du plan.
@@ -276,6 +298,23 @@ impl Banc {
 
     pub fn repondre(&mut self, r: Reponse) -> Vec<Effet> {
         self.envoyer(Evenement::Reponse(r))
+    }
+
+    /// Le duel d'indice `i` tel qu'il est joué (après un éventuel nouveau tirage).
+    pub fn prevu(&self, i: usize) -> DuelPrevu {
+        self.d.plan[i]
+    }
+
+    /// Répond au duel en cours par sa signification, quelle que soit l'orientation tirée.
+    pub fn repondre_selon(&mut self, preference: crate::plan::Preference) -> Vec<Effet> {
+        use crate::plan::Preference as P;
+        let duel = self.prevu(self.d.issues.len());
+        let reponse = match (preference, duel.reference_est_a) {
+            (P::Aucune, _) => Reponse::Pareil,
+            (P::Variante, true) | (P::Reference, false) => Reponse::B,
+            (P::Variante, false) | (P::Reference, true) => Reponse::A,
+        };
+        self.repondre(reponse)
     }
 
     pub fn etat(&self) -> EtatTest {

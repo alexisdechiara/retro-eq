@@ -1,6 +1,6 @@
 //! Ce que l'interface montre d'un test en cours : une photo, calculée à la demande.
 
-use super::{Deroulement, Phase, Retour};
+use super::{Deroulement, Phase};
 use crate::journal::RaisonPause;
 use crate::plan::{Cote, Preference, Reponse, Sujet};
 
@@ -15,7 +15,8 @@ pub enum EtatTest {
         duel: u32,
         passage: u32,
     },
-    /// Les 6 passages sont finis, la référence est remise, on attend A, Pareil ou B.
+    /// Les 6 passages sont finis, on attend A, Pareil ou B. Un des deux côtés reste en
+    /// place (le dernier entendu ou réécouté), jamais la référence.
     AttenteReponse,
     EnPause {
         raison: RaisonPause,
@@ -56,7 +57,8 @@ pub struct VueTest {
     /// Nombre total de duels. Il **augmente de un** quand un duel de vérification est
     /// ajouté à la fin du plan (et revient en arrière si une annulation le retire).
     pub total: u32,
-    /// Le côté qu'on entend : pendant un passage, ou pendant une réécoute.
+    /// Le côté en place : celui du passage en cours, ou pendant la question le dernier
+    /// entendu ou réécouté. `None` hors d'un duel (c'est alors la référence qui joue).
     pub cote_actif: Option<Cote>,
     /// Passages de A entièrement écoutés dans le duel en cours (0 à 3).
     pub passages_a: u8,
@@ -66,6 +68,8 @@ pub struct VueTest {
     pub progression: f64,
     /// Temps restant avant la prochaine bascule ; `None` hors écoute.
     pub ms_avant_bascule: Option<u64>,
+    /// Pendant la question : temps restant pour répondre avant la pause automatique.
+    pub ms_avant_pause_sans_reponse: Option<u64>,
     /// Le duel en cours est le duel de vérification (référence contre nouvelle version).
     pub est_verification: bool,
     /// Une pause a déjà été conseillée pendant ce test.
@@ -99,11 +103,7 @@ impl Deroulement {
         let passages_finis = match self.phase {
             Phase::Ecoute { passage, .. } => passage,
             Phase::Attente { .. } => usize::MAX,
-            Phase::Pause { retour, .. } => match retour {
-                Retour::DebutDuel => 0,
-                Retour::Passage(passage) => passage,
-                Retour::Attente => usize::MAX,
-            },
+            // En pause, le duel sera rejoué en entier.
             _ => 0,
         };
         let finis_de = |cote: Cote| {
@@ -131,7 +131,7 @@ impl Deroulement {
                     Some(intervalle - ecoule),
                 )
             }
-            Phase::Attente { reecoute } => (reecoute, 0.0, None),
+            Phase::Attente { applique, .. } => (Some(applique), 0.0, None),
             _ => (None, 0.0, None),
         };
 
@@ -158,6 +158,13 @@ impl Deroulement {
             passages_b: finis_de(Cote::B),
             progression,
             ms_avant_bascule,
+            ms_avant_pause_sans_reponse: match self.phase {
+                Phase::Attente { depuis_ms, .. } => Some(
+                    self.delai_reponse_ms()
+                        .saturating_sub(maintenant_ms.saturating_sub(depuis_ms)),
+                ),
+                _ => None,
+            },
             est_verification: en_jeu && duel.is_some_and(|d| d.sujet == Sujet::Verification),
             pause_conseillee: self.pause_conseillee,
             historique,

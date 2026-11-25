@@ -1,6 +1,6 @@
 //! Reprise d'un test après un arrêt brutal : l'état est reconstruit depuis le journal.
 
-use super::{Deroulement, Effet, ParametresTest, Phase, Retour};
+use super::{Deroulement, Effet, ParametresTest, Phase};
 use crate::journal::{Entree, RaisonPause};
 use crate::plan::{DuelPrevu, Sujet};
 use crate::profil::Version;
@@ -14,6 +14,9 @@ pub struct ContexteReprise {
     /// La version de référence du test (celle dont le numéro est dans le journal). Seuls
     /// ses pas par zone servent : la courbe de référence est relue dans le journal.
     pub reference: Version,
+    /// Ignoré : les réglages des variantes sont relus dans le journal (valeurs par défaut
+    /// pour un journal qui ne les contient pas). Le champ reste pour ne pas casser
+    /// l'appelant.
     pub variantes: ReglagesVariantes,
     pub spectre: Spectre,
     /// Un duel de vérification tiré d'avance, pour le cas où le journal n'en contient pas
@@ -40,15 +43,16 @@ impl Deroulement {
     /// Reconstruit un test interrompu à partir de son journal.
     ///
     /// Les réponses sont gardées, les annulations respectées, les duels passés restent
-    /// passés, un duel de vérification déjà ajouté est retrouvé. Le duel interrompu sera
-    /// rejoué depuis son premier passage (ce qu'on en avait entendu avant l'arrêt ne
-    /// compte plus). Le temps d'écoute cumulé repart de zéro.
+    /// passés, un duel de vérification déjà ajouté est retrouvé, et les duels retirés
+    /// (`DuelRetire`) remplacent ceux du plan : le test repris joue et compte les mêmes
+    /// duels. Le duel interrompu sera rejoué depuis son premier passage, avec un nouveau
+    /// tirage s'il avait commencé. Le temps d'écoute cumulé repart de zéro.
     ///
     /// Le test revient **en pause manuelle**. Les effets rendus sont à exécuter tout de
     /// suite : ils remettent la référence dans le moteur (une variante a pu rester active
     /// au moment de l'arrêt) et notent la pause dans le journal. `Evenement::Reprendre`
-    /// relancera ensuite le duel : `Reprise`, `DuelDemarre`, `PassageDemarre`, puis la
-    /// courbe du premier côté.
+    /// relancera ensuite le duel : `Reprise`, `DuelRetire` (si le duel avait commencé),
+    /// `DuelDemarre`, `PassageDemarre`, puis la courbe du premier côté.
     pub fn reprendre_depuis(
         journal: &[Entree],
         contexte: ContexteReprise,
@@ -63,6 +67,7 @@ impl Deroulement {
             mode,
             plan,
             reglages,
+            variantes,
             ..
         } = premiere
         else {
@@ -85,11 +90,13 @@ impl Deroulement {
             mode: mode.clone(),
             plan: plan.clone(),
             reglages: reglages.clone(),
-            variantes: contexte.variantes,
+            variantes: *variantes,
             spectre: contexte.spectre,
             verification: contexte.verification,
         });
 
+        // Le duel courant a-t-il commencé à jouer depuis son dernier tirage ?
+        let mut entame = false;
         for (i, entree) in suite.iter().enumerate() {
             let incoherent = |raison| ErreurReprise::Incoherent {
                 entree: i + 1,
@@ -113,6 +120,7 @@ impl Deroulement {
                     if est_courant(duel) {
                         d.applis_duel.truncate(*passage as usize);
                         d.applis_duel.push(appli_premier_plan.clone());
+                        entame = true;
                     }
                 }
                 Entree::ReponseDonnee { duel, reponse, .. } => {
@@ -124,6 +132,7 @@ impl Deroulement {
                     d.applis.push(d.appli_majoritaire());
                     d.issues.push(Some(*reponse));
                     d.applis_duel.clear();
+                    entame = false;
                 }
                 Entree::DuelPasse { duel, .. } => {
                     if !est_courant(duel) || d.duel_courant().is_none() {
@@ -132,6 +141,7 @@ impl Deroulement {
                     d.applis.push(d.appli_majoritaire());
                     d.issues.push(None);
                     d.applis_duel.clear();
+                    entame = false;
                 }
                 Entree::ReponseAnnulee { duel, .. } => {
                     let duel = *duel as usize;
@@ -139,6 +149,18 @@ impl Deroulement {
                         return Err(incoherent("annulation d'un duel sans réponse"));
                     }
                     d.revenir_au_duel(duel);
+                    entame = false;
+                }
+                Entree::DuelRetire { duel, prevu, .. } => {
+                    let courant = d.indice_courant();
+                    let meme_sujet = d.duel_courant().is_some_and(|c| c.sujet == prevu.sujet);
+                    match d.plan.get_mut(courant) {
+                        Some(place) if *duel as usize == courant && meme_sujet => *place = *prevu,
+                        _ => return Err(incoherent("nouveau tirage d'un autre duel que le duel courant")),
+                    }
+                    d.tirages += 1;
+                    d.applis_duel.clear();
+                    entame = false;
                 }
                 Entree::DuelVerificationAjoute { duel, .. } => {
                     if d.verification_ajoutee || d.duel_courant().is_some() {
@@ -157,9 +179,11 @@ impl Deroulement {
         }
 
         d.applis_duel.clear();
+        // La référence va être remise : si le duel avait commencé, il sera retiré.
+        d.a_retirer = entame && d.duel_courant().is_some();
         d.phase = Phase::Pause {
             raison: RaisonPause::Manuelle,
-            retour: Retour::DebutDuel,
+            depuis_ms: maintenant_ms,
         };
         let mut effets = Vec::new();
         d.remettre_reference(&mut effets);

@@ -30,9 +30,14 @@
 //!
 //! Codes 0 (cloche), 4 (plateau bas), 5 (plateau haut), et 14 et 15 (plateaux
 //! « Q comme pente », traités comme des plateaux ordinaires : approximation
-//! sur la forme exacte du plateau). Les autres types vont au rapport d'ignorés
-//! sous la forme `Peace <code>`. Les bandes éteintes, sans gain ou propres à un
-//! haut-parleur précis (`[Gains1]`…`[Gains8]`) y vont aussi.
+//! sur la forme exacte du plateau, signalée au rapport par
+//! [`RaisonIgnoree::Approximation`]). Les autres types vont au rapport d'ignorés
+//! sous la forme `Peace <code>`. Les bandes éteintes ou sans gain y vont aussi.
+//!
+//! Les sections propres à un haut-parleur (`[Gains1]`…`[Gains8]`, et leurs
+//! équivalents `[Frequencies1]`…) ne sont lues que pour être comparées au réglage
+//! commun : identiques, elles ne sont pas signalées ; différentes, leurs lignes vont
+//! au rapport ([`RaisonIgnoree::HautParleurParticulier`]) et [`Import::partiel`] est vrai.
 //!
 //! # Ce qui n'est pas géré
 //!
@@ -144,18 +149,23 @@ pub fn lire(texte: &str) -> Result<Import, ErreurFormat> {
 
     for (n, entree) in bandes {
         match lire_bande(&sections, n, entree) {
-            Ok(filtre) => courbe.filtres.push(filtre),
+            Ok((filtre, approche)) => {
+                courbe.filtres.push(filtre);
+                if approche {
+                    ignores.push(ignoree(entree, RaisonIgnoree::Approximation));
+                }
+            }
             Err(raison) => ignores.push(ignoree(entree, raison)),
         }
     }
 
-    // Réglages propres à un haut-parleur : `[Gains1]`, `[Gains2]`…
+    // Réglages propres à un haut-parleur : `[Gains1]`, `[Frequencies2]`… On ne les
+    // signale que s'ils diffèrent du réglage commun.
     for section in &sections {
-        let est_particulier = section
-            .nom
-            .strip_prefix("gains")
-            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
-        if est_particulier {
+        let Some((defaut, genre)) = genre_de_section(&section.nom) else {
+            continue;
+        };
+        if resume(section.entrees.iter(), defaut) != resume(entrees(&sections, genre), defaut) {
             for entree in &section.entrees {
                 ignores.push(ignoree(entree, RaisonIgnoree::HautParleurParticulier));
             }
@@ -166,11 +176,39 @@ pub fn lire(texte: &str) -> Result<Import, ErreurFormat> {
     if !preampli_vu && courbe.filtres.is_empty() {
         return Err(ErreurFormat::AucuneLigneUtilisable);
     }
-    Ok(Import {
-        courbe,
-        nom: None,
-        ignores,
+    Ok(Import::nouveau(courbe, ignores))
+}
+
+/// Pour une section propre à un haut-parleur (`gains1`), rend la valeur par défaut d'une
+/// entrée absente et le nom de la section commune (`gains`).
+fn genre_de_section(nom: &str) -> Option<(f64, &'static str)> {
+    const GENRES: [(&str, f64); 5] = [
+        ("frequencies", f64::NAN),
+        ("gains", 0.0),
+        ("qualities", Q_PAR_DEFAUT),
+        ("filters", 0.0),
+        ("disabled", 0.0),
+    ];
+    GENRES.into_iter().find_map(|(genre, defaut)| {
+        let suite = nom.strip_prefix(genre)?;
+        (!suite.is_empty() && suite.chars().all(|c| c.is_ascii_digit())).then_some((defaut, genre))
     })
+}
+
+/// Les entrées d'une section réduites à ce qui compte pour comparer deux réglages :
+/// clé et valeur (lue comme nombre quand c'est possible), sans les valeurs par défaut,
+/// qui n'ajoutent rien à une entrée absente.
+fn resume<'a>(
+    entrees: impl Iterator<Item = &'a Entree>,
+    defaut: f64,
+) -> std::collections::BTreeMap<String, String> {
+    entrees
+        .filter(|e| lire_nombre(&e.valeur).is_none_or(|v| v != defaut))
+        .map(|e| {
+            let valeur = lire_nombre(&e.valeur).map_or_else(|| e.valeur.clone(), |v| v.to_string());
+            (e.cle.clone(), valeur)
+        })
+        .collect()
 }
 
 fn ignoree(entree: &Entree, raison: RaisonIgnoree) -> LigneIgnoree {
@@ -191,7 +229,12 @@ fn numero_de(cle: &str, prefixe: &str) -> Option<u32> {
 }
 
 /// Rassemble les entrées de la bande `n` en un filtre, ou dit pourquoi on l'écarte.
-fn lire_bande(sections: &[Section], n: u32, frequence: &Entree) -> Result<Filtre, RaisonIgnoree> {
+/// Le booléen dit si le filtre est une approximation (codes 14 et 15).
+fn lire_bande(
+    sections: &[Section],
+    n: u32,
+    frequence: &Entree,
+) -> Result<(Filtre, bool), RaisonIgnoree> {
     let frequence_hz = lire_nombre(&frequence.valeur)
         .filter(|f| *f > 0.0)
         .ok_or(RaisonIgnoree::Illisible)?;
@@ -227,12 +270,15 @@ fn lire_bande(sections: &[Section], n: u32, frequence: &Entree) -> Result<Filtre
             .ok_or(RaisonIgnoree::Illisible)?,
         None => Q_PAR_DEFAUT,
     };
-    Ok(Filtre {
-        type_filtre,
-        frequence_hz,
-        gain_db,
-        q,
-    })
+    Ok((
+        Filtre {
+            type_filtre,
+            frequence_hz,
+            gain_db,
+            q,
+        },
+        matches!(code, 14 | 15),
+    ))
 }
 
 /// Écrit un fichier `.peace` (fins de ligne CRLF, comme Peace).
@@ -411,6 +457,45 @@ mod tests {
     }
 
     #[test]
+    fn les_codes_14_et_15_sont_signales_comme_approximation() {
+        let texte = "[Frequencies]\nFrequency1=100\nFrequency2=8000\nFrequency3=500\n[Gains]\nGain1=2\nGain2=-2\nGain3=1\n[Qualities]\nQuality1=0.5\nQuality2=0.4\n[Filters]\nFilter1=14\nFilter2=15\n";
+        let i = lire(texte).expect("lecture");
+        assert_eq!(i.courbe.filtres.len(), 3, "les bandes restent importées");
+        let notes: Vec<_> = i
+            .ignores
+            .iter()
+            .map(|l| (l.texte.as_str(), l.raison.clone()))
+            .collect();
+        assert_eq!(
+            notes,
+            [
+                ("Frequency1=100", RaisonIgnoree::Approximation),
+                ("Frequency2=8000", RaisonIgnoree::Approximation),
+            ]
+        );
+        assert!(!i.partiel, "une approximation n'est pas une perte");
+    }
+
+    #[test]
+    fn un_reglage_haut_parleur_identique_au_commun_est_silencieux() {
+        // Gain absent = 0 dB : l'égalité tient aussi avec les valeurs par défaut omises.
+        let texte = "[Frequencies]\nFrequency1=1000\nFrequency2=2000\n[Gains]\nGain1=1\nGain2=0\n[Gains1]\nGain1=1.0\n[Gains2]\nGain1=1\nGain2=0\n[Frequencies1]\nFrequency1=1000\nFrequency2=2000\n";
+        let i = lire(texte).expect("lecture");
+        assert!(i.ignores.is_empty(), "{:?}", i.ignores);
+        assert!(!i.partiel);
+    }
+
+    #[test]
+    fn un_reglage_haut_parleur_different_rend_l_import_partiel() {
+        let texte =
+            "[Frequencies]\nFrequency1=1000\n[Gains]\nGain1=1\n[Frequencies1]\nFrequency1=1500\n";
+        let i = lire(texte).expect("lecture");
+        assert_eq!(i.ignores.len(), 1);
+        assert_eq!(i.ignores[0].raison, RaisonIgnoree::HautParleurParticulier);
+        assert!(i.partiel);
+    }
+
+    #[test]
     fn les_reglages_d_un_haut_parleur_particulier_sont_signales() {
         let texte = "[Frequencies]\nFrequency1=1000\n[Gains]\nGain1=1\n[Gains1]\nGain1=5\n";
         let i = lire(texte).expect("lecture");
@@ -418,6 +503,7 @@ mod tests {
         assert_eq!(i.ignores.len(), 1);
         assert_eq!(i.ignores[0].raison, RaisonIgnoree::HautParleurParticulier);
         assert_eq!(i.ignores[0].numero, 6);
+        assert!(i.partiel);
     }
 
     #[test]

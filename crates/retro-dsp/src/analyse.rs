@@ -97,14 +97,29 @@ impl Analyseur {
     }
 
     /// Convertit des magnitudes en dBFS (sortie de `spectre`) en `Spectre` à `n` points
-    /// logarithmiques, pour le calcul de compensation. La puissance d'un point est la somme
-    /// de celle des bins de sa bande, pour qu'un bruit rose donne une puissance égale partout.
+    /// logarithmiques, pour le calcul de compensation.
+    ///
+    /// Le bin `k` couvre les fréquences `(k−½)·fe/N` à `(k+½)·fe/N` et sa puissance est
+    /// répartie entre les bandes qui le recoupent, au prorata du recouvrement. Chaque
+    /// puissance n'est ainsi comptée qu'une fois (la puissance totale est conservée), que
+    /// la bande soit plus large qu'un bin (aigus) ou plus étroite (graves) : un bruit rose
+    /// donne une puissance égale dans toutes les bandes.
     pub fn vers_spectre(&self, magnitudes_db: &[f32], n: usize) -> Spectre {
         let frequences_hz = frequences_log(n);
+        let mut puissances = vec![0.0; n];
+        if magnitudes_db.is_empty() || n == 0 {
+            return Spectre {
+                frequences_hz,
+                puissances,
+            };
+        }
         let largeur_bin = f64::from(self.fe) / self.taille as f64;
-        let puissance_bin = |i: usize| 10f64.powf(f64::from(magnitudes_db[i]) / 10.0);
-        let dernier = magnitudes_db.len().saturating_sub(1);
-        let mut puissances = Vec::with_capacity(n);
+        // Densité de puissance de chaque bin (puissance par Hz).
+        let densite: Vec<f64> = magnitudes_db
+            .iter()
+            .map(|&m| 10f64.powf(f64::from(m) / 10.0) / largeur_bin)
+            .collect();
+        let dernier = magnitudes_db.len() - 1;
         // Demi-pas de la grille, pour que les points d'extrémité aient une bande entière.
         let demi_pas = (FREQUENCE_MAX_HZ / FREQUENCE_MIN_HZ).powf(0.5 / (n.max(2) - 1) as f64);
         for (k, &f) in frequences_hz.iter().enumerate() {
@@ -119,29 +134,53 @@ impl Analyseur {
             } else {
                 (f * frequences_hz[k + 1]).sqrt()
             };
-            let (i_lo, i_hi) = (
-                (lo / largeur_bin).ceil() as usize,
-                (hi / largeur_bin).floor() as usize,
-            );
-            let p = if magnitudes_db.is_empty() {
-                0.0
-            } else if i_lo <= i_hi && i_hi <= dernier {
-                (i_lo..=i_hi).map(puissance_bin).sum()
-            } else {
-                // Bande plus étroite qu'un bin : densité interpolée × largeur de la bande.
-                let pos = (f / largeur_bin).min(dernier as f64);
-                let (i0, i1) = (pos.floor() as usize, (pos.ceil() as usize).min(dernier));
-                let t = pos - pos.floor();
-                let densite = puissance_bin(i0) * (1.0 - t) + puissance_bin(i1) * t;
-                densite * (hi - lo) / largeur_bin
-            };
-            puissances.push(p);
+            // Seuls les bins dont l'étendue touche [lo, hi] comptent.
+            let premier = ((lo / largeur_bin - 0.5).floor().max(0.0)) as usize;
+            let dernier_utile = (((hi / largeur_bin + 0.5).ceil()).max(0.0) as usize).min(dernier);
+            for i in premier..=dernier_utile {
+                let debut = ((i as f64 - 0.5) * largeur_bin).max(lo);
+                let fin = ((i as f64 + 0.5) * largeur_bin).min(hi);
+                if fin > debut {
+                    puissances[k] += puissance_dans_bin(&densite, i, largeur_bin, debut, fin);
+                }
+            }
         }
         Spectre {
             frequences_hz,
             puissances,
         }
     }
+}
+
+/// Puissance du bin `i` qui tombe entre `debut` et `fin` (Hz, dans l'étendue du bin).
+///
+/// Dans une bande plus étroite qu'un bin, répartir la puissance à plat ferait des marches
+/// d'escalier (jusqu'à 1 dB sur un bruit rose dans les graves). On donne donc au bin une
+/// densité qui suit la ligne brisée passant par les centres des bins voisins, puis on la
+/// remet à l'échelle pour que le bin entier garde exactement sa puissance : rien n'est
+/// compté deux fois, rien ne passe dans un bin voisin, et la densité reste positive.
+fn puissance_dans_bin(densite: &[f64], i: usize, largeur: f64, debut: f64, fin: f64) -> f64 {
+    let centre = densite[i];
+    // Aux extrémités du spectre on prolonge à plat.
+    let gauche = if i > 0 { densite[i - 1] } else { centre };
+    let droite = densite.get(i + 1).copied().unwrap_or(centre);
+    let moyenne = (gauche + 6.0 * centre + droite) / 8.0;
+    if moyenne <= 0.0 {
+        return 0.0;
+    }
+    let echelle = centre / moyenne;
+    let x_centre = i as f64 * largeur;
+    // Intégrale de la densité linéaire entre `a` et `b` d'un même côté du centre.
+    let morceau = |a: f64, b: f64, voisin: f64| {
+        if b <= a {
+            return 0.0;
+        }
+        let d = |x: f64| centre + (voisin - centre) * (x - x_centre).abs() / largeur;
+        (d(a) + d(b)) / 2.0 * (b - a)
+    };
+    let integrale =
+        morceau(debut, fin.min(x_centre), gauche) + morceau(debut.max(x_centre), fin, droite);
+    echelle * integrale
 }
 
 /// Regroupe un spectre en `n_bandes` bandes logarithmiques de 20 Hz à 20 kHz (ou Nyquist)
@@ -326,6 +365,103 @@ mod tests {
                 "point {i}: {} vs {}",
                 db(i),
                 db(i0)
+            );
+        }
+    }
+
+    /// Magnitudes (dB de puissance) d'un bruit rose idéal : la puissance d'un bin est
+    /// l'intégrale de 1/f sur l'étendue du bin, soit ln((k+½)/(k−½)).
+    fn magnitudes_bruit_rose(a: &Analyseur) -> Vec<f32> {
+        (0..=a.taille() / 2)
+            .map(|k| {
+                let p = if k == 0 {
+                    1e-12
+                } else {
+                    ((k as f64 + 0.5) / (k as f64 - 0.5)).ln()
+                };
+                (10.0 * p.log10()) as f32
+            })
+            .collect()
+    }
+
+    #[test]
+    fn vers_spectre_est_plat_pour_un_bruit_rose_ideal_de_30_hz_a_16_khz() {
+        let (fe, taille) = (48_000.0f32, 4096);
+        let a = Analyseur::new(taille, fe);
+        let mags = magnitudes_bruit_rose(&a);
+        for n in [48, 96, 200] {
+            let s = a.vers_spectre(&mags, n);
+            let db: Vec<(f64, f64)> = s
+                .frequences_hz
+                .iter()
+                .zip(&s.puissances)
+                .filter(|(f, _)| (30.0..=16_000.0).contains(*f))
+                .map(|(&f, &p)| (f, 10.0 * p.log10()))
+                .collect();
+            let moyenne = db.iter().map(|d| d.1).sum::<f64>() / db.len() as f64;
+            for (f, d) in &db {
+                assert!(
+                    (d - moyenne).abs() < 0.3,
+                    "n = {n}, {f:.1} Hz : {d:.2} dB pour une moyenne de {moyenne:.2} dB"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn vers_spectre_conserve_la_puissance_totale() {
+        let (fe, taille) = (48_000.0f32, 4096);
+        let a = Analyseur::new(taille, fe);
+        for n in [48, 96, 200] {
+            let freqs = frequences_log(n);
+            let demi_pas = (FREQUENCE_MAX_HZ / FREQUENCE_MIN_HZ).powf(0.5 / (n - 1) as f64);
+            let (bas, haut) = (freqs[0] / demi_pas, freqs[n - 1] * demi_pas);
+            let largeur = f64::from(fe) / taille as f64;
+            // Puissances quelconques (mais déterministes) dans les bins entièrement couverts.
+            let mut total_bins = 0.0;
+            let mags: Vec<f32> = (0..=taille / 2)
+                .map(|k| {
+                    let couvert =
+                        (k as f64 - 0.5) * largeur >= bas && (k as f64 + 0.5) * largeur <= haut;
+                    if couvert {
+                        let p = 1.0 + ((k * 7919) % 13) as f64;
+                        total_bins += p;
+                        (10.0 * p.log10()) as f32
+                    } else {
+                        -120.0
+                    }
+                })
+                .collect();
+            let s = a.vers_spectre(&mags, n);
+            let total: f64 = s.puissances.iter().sum();
+            assert!(
+                (total / total_bins - 1.0).abs() < 1e-4,
+                "n = {n} : {total} au lieu de {total_bins}"
+            );
+        }
+    }
+
+    #[test]
+    fn vers_spectre_place_un_sinus_dans_la_bonne_bande() {
+        let (fe, taille) = (48_000.0f32, 4800);
+        let mut a = Analyseur::new(taille, fe);
+        for f_sinus in [100.0f32, 1000.0, 5000.0] {
+            let mags = a.spectre(&sinus(f_sinus, fe, taille, 1.0));
+            let s = a.vers_spectre(&mags, 200);
+            let (k, _) = s
+                .puissances
+                .iter()
+                .enumerate()
+                .fold((0, f64::MIN), |m, (i, &p)| if p > m.1 { (i, p) } else { m });
+            let lo = if k == 0 {
+                0.0
+            } else {
+                (s.frequences_hz[k] * s.frequences_hz[k - 1]).sqrt()
+            };
+            let hi = (s.frequences_hz[k] * s.frequences_hz[k + 1]).sqrt();
+            assert!(
+                (lo..=hi).contains(&f64::from(f_sinus)),
+                "{f_sinus} Hz : bande {lo:.1}..{hi:.1} Hz"
             );
         }
     }

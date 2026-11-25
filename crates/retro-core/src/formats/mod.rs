@@ -39,13 +39,60 @@ pub enum RaisonIgnoree {
     TypeFiltreNonGere(String),
     /// Bande Peace sans gain : elle est à plat, elle ne change rien.
     BandeSansGain,
-    /// Réglage propre à un haut-parleur précis de Peace : on ne lit que « Tous ».
+    /// Réglage propre à un haut-parleur précis de Peace, différent du réglage commun :
+    /// on ne lit que « Tous ». (Un réglage identique au commun n'est pas signalé.)
     HautParleurParticulier,
-    /// Ligne qu'on n'arrive pas à lire (valeur manquante, nombre invalide…).
+    /// Ligne qu'on n'arrive pas à lire (valeur manquante, nombre invalide, mot inconnu…).
     Illisible,
+    /// Plateau (`LS`, `HS`, ou `LSC`/`HSC` réglé par une pente en dB/octave ou sans Q) dont
+    /// le sens exact n'est pas documenté assez précisément pour le convertir en `Q` sans
+    /// approximation : la ligne n'est pas importée.
+    PenteNonGeree,
+    /// Ligne placée sous un `Channel:` qui vise des canaux précis (autres que « tous »), alors
+    /// que les sections par canal ne sont pas identiques : l'appli n'a qu'une courbe pour tous.
+    CanalParticulier,
+    /// Ligne d'une section par canal identique à une section déjà importée (cas stéréo
+    /// habituel : mêmes filtres sous `Channel: L` et `Channel: R`). Elle n'est importée
+    /// qu'une fois ; c'est une simple note, rien n'est perdu.
+    CanalIdentique,
+    /// Ligne placée sous un `Device:` qui vise un périphérique précis (autre que « all ») : elle
+    /// n'est pas appliquée, on ne sait pas si ce périphérique est celui de l'utilisateur.
+    PeripheriqueParticulier,
+    /// Note : le fichier commence par un seul `Device:` précis puis tout le reste est écrit
+    /// pour ce périphérique. Le fichier est importé en entier ; la ligne `Device:` est seulement signalée.
+    PeripheriqueUnique,
+    /// Note : la ligne est importée, mais sous une forme approchée (par exemple les
+    /// plateaux Peace dont Q est une pente). Rien n'est perdu, la courbe peut juste différer un peu.
+    Approximation,
 }
 
-/// Une ligne laissée de côté, pour que l'utilisateur sache ce qui n'a pas été importé.
+impl RaisonIgnoree {
+    /// Cette ligne laissée de côté change-t-elle le son par rapport au fichier d'origine ?
+    ///
+    /// Faux pour les commentaires, les lignes éteintes, les bandes sans gain et les simples
+    /// notes (`CanalIdentique`, `PeripheriqueUnique`, `Approximation`). Sert à calculer
+    /// [`Import::partiel`].
+    pub fn change_le_son(&self) -> bool {
+        match self {
+            RaisonIgnoree::Commentaire
+            | RaisonIgnoree::Desactive
+            | RaisonIgnoree::BandeSansGain
+            | RaisonIgnoree::CanalIdentique
+            | RaisonIgnoree::PeripheriqueUnique
+            | RaisonIgnoree::Approximation => false,
+            RaisonIgnoree::CommandeNonGeree
+            | RaisonIgnoree::TypeFiltreNonGere(_)
+            | RaisonIgnoree::HautParleurParticulier
+            | RaisonIgnoree::Illisible
+            | RaisonIgnoree::PenteNonGeree
+            | RaisonIgnoree::CanalParticulier
+            | RaisonIgnoree::PeripheriqueParticulier => true,
+        }
+    }
+}
+
+/// Une ligne du fichier à signaler à l'utilisateur : laissée de côté, ou importée
+/// avec une réserve (voir [`RaisonIgnoree::change_le_son`] pour les distinguer).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LigneIgnoree {
     /// Numéro de la ligne dans le fichier, en partant de 1.
@@ -61,7 +108,25 @@ pub struct Import {
     pub courbe: Courbe,
     /// Nom de profil déduit du fichier, quand le format permet d'en trouver un.
     pub nom: Option<String>,
+    /// Le rapport : les lignes laissées de côté et les simples notes.
     pub ignores: Vec<LigneIgnoree>,
+    /// Vrai quand le profil importé n'est pas tout le fichier : au moins une ligne qui change
+    /// le son n'a pas été prise en compte (par exemple un réglage propre à un canal).
+    /// L'interface doit alors prévenir l'utilisateur.
+    pub partiel: bool,
+}
+
+impl Import {
+    /// Fabrique un import en calculant `partiel` d'après le rapport.
+    pub(crate) fn nouveau(courbe: Courbe, ignores: Vec<LigneIgnoree>) -> Self {
+        let partiel = ignores.iter().any(|l| l.raison.change_le_son());
+        Import {
+            courbe,
+            nom: None,
+            ignores,
+            partiel,
+        }
+    }
 }
 
 /// Ce qui peut empêcher de lire un fichier.

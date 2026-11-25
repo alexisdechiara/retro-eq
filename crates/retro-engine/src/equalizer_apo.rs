@@ -4,6 +4,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -15,9 +16,10 @@ use crate::{ErreurMoteur, EtatMoteur, Moteur, SortieAudio};
 const FICHIER_COURBE: &str = "retro-eq.txt";
 const FICHIER_CONFIG: &str = "config.txt";
 const FICHIER_SAUVEGARDE: &str = "config.txt.avant-retro-eq";
-const LIGNE_INCLUDE: &str = "Include: retro-eq.txt";
+/// Notre ligne `Include`, telle qu'on l'écrit (et seule forme qu'on retire).
+const LIGNE_INCLUDE: &[u8] = b"Include: retro-eq.txt";
 /// Préfixe des lignes d'origine qu'on désactive ; il permet de les reconnaître.
-const PREFIXE_COMMENTAIRE: &str = "# [retro-eq] ";
+const PREFIXE_COMMENTAIRE: &[u8] = b"# [retro-eq] ";
 const BOM: &[u8] = b"\xEF\xBB\xBF";
 
 fn io_err(action: impl Into<String>, source: io::Error) -> ErreurMoteur {
@@ -27,23 +29,40 @@ fn io_err(action: impl Into<String>, source: io::Error) -> ErreurMoteur {
     }
 }
 
-/// Écrit un fichier « d'un coup » : on écrit un fichier temporaire voisin puis
-/// on le renomme par-dessus. Equalizer APO ne voit ainsi jamais un fichier à
-/// moitié écrit (il recharge dès qu'il détecte un changement).
-fn ecrire_atomique(chemin: &Path, octets: &[u8]) -> Result<(), ErreurMoteur> {
+/// Un nom de fichier temporaire unique, dans le même dossier que `chemin`
+/// (le renommage final doit rester sur le même disque pour être atomique).
+///
+/// Numéro de processus + compteur : deux processus, ou deux écritures du même
+/// processus, ne se marchent jamais dessus.
+fn nom_temporaire(chemin: &Path) -> PathBuf {
+    static COMPTEUR: AtomicU64 = AtomicU64::new(0);
     let nom = chemin
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let temporaire = chemin.with_file_name(format!("{nom}.tmp"));
+    let numero = COMPTEUR.fetch_add(1, Ordering::Relaxed);
+    chemin.with_file_name(format!("{nom}.{}.{numero}.tmp", std::process::id()))
+}
+
+/// Écrit un fichier « d'un coup » : on écrit un fichier temporaire voisin puis
+/// on le renomme par-dessus. Equalizer APO ne voit ainsi jamais un fichier à
+/// moitié écrit (il recharge dès qu'il détecte un changement).
+fn ecrire_atomique(chemin: &Path, octets: &[u8]) -> Result<(), ErreurMoteur> {
+    let temporaire = nom_temporaire(chemin);
     let resultat = (|| {
-        let mut fichier = fs::File::create(&temporaire)?;
+        // `create_new` : on refuse d'ouvrir un fichier qui existe déjà.
+        let mut fichier = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporaire)?;
         io::Write::write_all(&mut fichier, octets)?;
         fichier.sync_all()?;
         drop(fichier);
         fs::rename(&temporaire, chemin)
     })();
     if let Err(e) = resultat {
+        // Si le fichier n'a pas pu être créé, il n'est pas à nous : on ne le
+        // supprime que s'il existe parce que *nous* l'avons créé (le nom est unique).
         let _ = fs::remove_file(&temporaire);
         return Err(io_err(format!("écriture de {}", chemin.display()), e));
     }
@@ -64,8 +83,9 @@ fn est_inerte(ligne: &[u8]) -> bool {
     t.is_empty() || t.starts_with(b"#")
 }
 
-/// Est-ce notre ligne `Include: retro-eq.txt` ?
-fn est_notre_include(ligne: &[u8]) -> bool {
+/// Est-ce un `Include: retro-eq.txt` actif, écrit comme l'utilisateur veut
+/// (casse, espaces) ? Sert à dire si le moteur est branché, pas à défaire.
+fn ressemble_a_notre_include(ligne: &[u8]) -> bool {
     let t = ligne.trim_ascii();
     t.len() >= 8
         && t[..8].eq_ignore_ascii_case(b"include:")
@@ -74,95 +94,176 @@ fn est_notre_include(ligne: &[u8]) -> bool {
             .eq_ignore_ascii_case(FICHIER_COURBE.as_bytes())
 }
 
-/// `config.txt` découpé en lignes, avec ce qu'il faut pour le réécrire à
-/// l'identique côté mise en forme (BOM, CRLF ou LF, saut de ligne final).
-/// On travaille sur des octets : le fichier n'est pas forcément de l'UTF-8.
-struct ConfigTexte {
-    bom: bool,
-    fin_de_ligne: &'static [u8],
-    lignes: Vec<Vec<u8>>,
-    saut_final: bool,
+/// Une ligne du fichier : son contenu et sa fin (`""`, `"\n"` ou `"\r\n"`).
+///
+/// On garde la fin de chaque ligne telle quelle, au lieu de deviner « le » style
+/// du fichier : c'est ce qui rend l'annulation exacte même avec des fins de
+/// ligne mélangées.
+struct Ligne<'a> {
+    contenu: &'a [u8],
+    fin: &'static [u8],
 }
 
-impl ConfigTexte {
-    fn analyser(octets: &[u8]) -> Self {
-        let (bom, corps) = match octets.strip_prefix(BOM) {
-            Some(reste) => (true, reste),
-            None => (false, octets),
-        };
-        let crlf = corps.windows(2).any(|w| w == b"\r\n");
-        let mut lignes: Vec<Vec<u8>> = if corps.is_empty() {
-            Vec::new()
-        } else {
-            corps
-                .split(|&b| b == b'\n')
-                .map(|l| l.strip_suffix(b"\r").unwrap_or(l).to_vec())
-                .collect()
-        };
-        // « a\nb\n » donne un dernier morceau vide : c'est le saut final.
-        let saut_final = lignes.last().is_some_and(|l| l.is_empty()) && corps.ends_with(b"\n");
-        if saut_final {
-            lignes.pop();
-        }
-        ConfigTexte {
-            bom,
-            fin_de_ligne: if crlf { b"\r\n" } else { b"\n" },
-            lignes,
-            saut_final,
-        }
-    }
-
-    fn rendre(&self) -> Vec<u8> {
-        let mut sortie = Vec::new();
-        if self.bom {
-            sortie.extend_from_slice(BOM);
-        }
-        for (i, ligne) in self.lignes.iter().enumerate() {
-            if i > 0 {
-                sortie.extend_from_slice(self.fin_de_ligne);
+/// Découpe en lignes sur des octets (le fichier n'est pas forcément de l'UTF-8).
+/// Seule la dernière ligne peut ne pas avoir de fin ; un texte vide n'a aucune ligne.
+fn decouper(mut reste: &[u8]) -> Vec<Ligne<'_>> {
+    let mut lignes = Vec::new();
+    while !reste.is_empty() {
+        match reste.iter().position(|&b| b == b'\n') {
+            Some(i) => {
+                let (avant, suite) = (&reste[..i], &reste[i + 1..]);
+                lignes.push(match avant.strip_suffix(b"\r") {
+                    Some(contenu) => Ligne {
+                        contenu,
+                        fin: b"\r\n",
+                    },
+                    None => Ligne {
+                        contenu: avant,
+                        fin: b"\n",
+                    },
+                });
+                reste = suite;
             }
-            sortie.extend_from_slice(ligne);
-        }
-        if self.saut_final {
-            sortie.extend_from_slice(self.fin_de_ligne);
-        }
-        sortie
-    }
-
-    /// Commente les lignes actives sauf notre Include, qu'on ajoute s'il manque.
-    fn brancher(&mut self) {
-        let mut trouve = false;
-        for ligne in &mut self.lignes {
-            if est_inerte(ligne) {
-                continue;
-            }
-            if est_notre_include(ligne) && !trouve {
-                trouve = true;
-                continue;
-            }
-            let mut commentee = PREFIXE_COMMENTAIRE.as_bytes().to_vec();
-            commentee.extend_from_slice(ligne);
-            *ligne = commentee;
-        }
-        if !trouve {
-            self.lignes.push(LIGNE_INCLUDE.as_bytes().to_vec());
-            self.saut_final = true;
-        }
-    }
-
-    /// Chemin inverse (sans sauvegarde sous la main) : retire notre Include et
-    /// réactive les lignes que nous avions commentées.
-    fn debrancher(&mut self) {
-        self.lignes.retain(|l| !est_notre_include(l));
-        for ligne in &mut self.lignes {
-            if let Some(origine) = ligne.strip_prefix(PREFIXE_COMMENTAIRE.as_bytes()) {
-                *ligne = origine.to_vec();
+            None => {
+                lignes.push(Ligne {
+                    contenu: reste,
+                    fin: b"",
+                });
+                break;
             }
         }
     }
+    lignes
+}
 
-    fn est_vide(&self) -> bool {
-        self.lignes.iter().all(|l| l.trim_ascii().is_empty())
+fn sans_bom(octets: &[u8]) -> (bool, &[u8]) {
+    match octets.strip_prefix(BOM) {
+        Some(reste) => (true, reste),
+        None => (false, octets),
+    }
+}
+
+/// Faut-il commenter cette ligne ? Les lignes actives, bien sûr ; et aussi celles
+/// qui portent déjà notre préfixe : sans cela, l'annulation leur retirerait un
+/// préfixe qui n'est pas de nous et le fichier serait abîmé.
+fn a_commenter(contenu: &[u8]) -> bool {
+    !est_inerte(contenu) || contenu.starts_with(PREFIXE_COMMENTAIRE)
+}
+
+/// Ce que devient `config.txt` pour qu'Equalizer APO n'utilise que notre courbe :
+/// les lignes actives sont mises en commentaire et notre `Include` est ajouté
+/// à la fin. `None` = le fichier n'existe pas.
+///
+/// Cette transformation est **exactement réversible** (voir [`debrancher`]),
+/// pour n'importe quels octets :
+/// - chaque ligne garde sa propre fin, le BOM reste au début ;
+/// - sans saut de ligne final, on en ajoute un avant notre `Include` et on
+///   laisse ce dernier sans fin : c'est ce qui dit à l'annulation qu'il faut
+///   aussi retirer ce saut de ligne ;
+/// - un fichier absent donne `Include…\n`, un fichier vide `Include…` sans fin.
+fn brancher(original: Option<&[u8]>) -> Vec<u8> {
+    let Some(original) = original else {
+        let mut sortie = LIGNE_INCLUDE.to_vec();
+        sortie.push(b'\n');
+        return sortie;
+    };
+    let (bom, corps) = sans_bom(original);
+    let lignes = decouper(corps);
+    let mut sortie = Vec::with_capacity(original.len() + 64);
+    if bom {
+        sortie.extend_from_slice(BOM);
+    }
+    for ligne in &lignes {
+        if a_commenter(ligne.contenu) {
+            sortie.extend_from_slice(PREFIXE_COMMENTAIRE);
+        }
+        sortie.extend_from_slice(ligne.contenu);
+        sortie.extend_from_slice(ligne.fin);
+    }
+    // Fin de ligne à ajouter : celle de la dernière ligne terminée, sinon LF.
+    let fin = lignes
+        .iter()
+        .rev()
+        .map(|l| l.fin)
+        .find(|f| !f.is_empty())
+        .unwrap_or(b"\n");
+    match lignes.last() {
+        None => sortie.extend_from_slice(LIGNE_INCLUDE),
+        Some(derniere) if derniere.fin.is_empty() => {
+            // Un `\r` en fin de contenu serait relu comme la moitié d'un `\r\n` :
+            // dans ce cas on écrit `\r\n` pour que le contenu garde son `\r`.
+            let a_un_cr_final = derniere.contenu.ends_with(b"\r");
+            sortie.extend_from_slice(if a_un_cr_final { b"\r\n" } else { fin });
+            sortie.extend_from_slice(LIGNE_INCLUDE);
+        }
+        Some(_) => {
+            sortie.extend_from_slice(LIGNE_INCLUDE);
+            sortie.extend_from_slice(fin);
+        }
+    }
+    sortie
+}
+
+/// Défait exactement ce que fait [`brancher`] : retire notre `Include` (et le
+/// saut de ligne qu'on avait ajouté avant lui) et réactive les lignes qui
+/// portent notre préfixe. Tout le reste, octet pour octet, est rendu tel quel.
+///
+/// Rend `None` quand le fichier n'est que notre `Include` : il n'existait pas
+/// avant nous, c'est à l'appelant de le supprimer.
+///
+/// Sur un fichier qui a bougé depuis (lignes ajoutées par l'utilisateur), elle
+/// défait seulement nos marques et laisse le reste : on rend ce que
+/// l'utilisateur aurait sans Retro EQ.
+fn debrancher(courant: &[u8]) -> Option<Vec<u8>> {
+    let (bom, corps) = sans_bom(courant);
+    let mut lignes = decouper(corps);
+    let est_notre_include = |l: &Ligne| l.contenu == LIGNE_INCLUDE;
+    if !bom
+        && !lignes.is_empty()
+        && lignes
+            .iter()
+            .all(|l| est_notre_include(l) && !l.fin.is_empty())
+    {
+        return None;
+    }
+    let include_final_sans_fin = lignes
+        .last()
+        .is_some_and(|l| est_notre_include(l) && l.fin.is_empty());
+    lignes.retain(|l| !est_notre_include(l));
+    if include_final_sans_fin {
+        if let Some(derniere) = lignes.last_mut() {
+            derniere.fin = b"";
+        }
+    }
+    let mut sortie = Vec::with_capacity(courant.len());
+    if bom {
+        sortie.extend_from_slice(BOM);
+    }
+    for ligne in &lignes {
+        let contenu = ligne
+            .contenu
+            .strip_prefix(PREFIXE_COMMENTAIRE)
+            .unwrap_or(ligne.contenu);
+        sortie.extend_from_slice(contenu);
+        sortie.extend_from_slice(ligne.fin);
+    }
+    Some(sortie)
+}
+
+/// Notre `Include` exact est-il dans ce fichier ? Si oui, le fichier a déjà été
+/// branché par nous (une copie à l'identique de notre ligne n'a aucune autre raison d'être).
+fn contient_notre_include(octets: &[u8]) -> bool {
+    let (_, corps) = sans_bom(octets);
+    decouper(corps).iter().any(|l| l.contenu == LIGNE_INCLUDE)
+}
+
+/// Remet à neuf un fichier déjà branché mais qui a bougé : on défait nos marques
+/// puis on les refait, pour que les lignes ajoutées depuis soient commentées
+/// elles aussi, sans empiler de préfixes. Sur un fichier propre, rend les mêmes octets.
+fn rebrancher(courant: &[u8]) -> Vec<u8> {
+    match debrancher(courant) {
+        Some(propre) => brancher(Some(&propre)),
+        None => brancher(None),
     }
 }
 
@@ -225,6 +326,7 @@ pub struct EqualizerApo {
     pause_fondu: Duration,
     dormir: Box<dyn FnMut(Duration) + Send>,
     derniere: Option<Courbe>,
+    copie_conservee: Option<PathBuf>,
 }
 
 impl EqualizerApo {
@@ -237,6 +339,7 @@ impl EqualizerApo {
             pause_fondu: Duration::from_millis(20),
             dormir: Box::new(thread::sleep),
             derniere: None,
+            copie_conservee: None,
         }
     }
 
@@ -292,24 +395,38 @@ impl EqualizerApo {
         )
     }
 
-    /// Fait en sorte que `config.txt` inclue notre fichier. Sauvegarde
-    /// l'original avant la toute première modification.
+    /// Fait en sorte que `config.txt` inclue notre fichier. Copie l'original
+    /// avant la toute première modification (jamais écrasée ensuite).
     fn brancher_config(&self) -> Result<(), ErreurMoteur> {
         let chemin = self.chemin(FICHIER_CONFIG);
-        let original = lire_si_present(&chemin)?;
-        let mut config = ConfigTexte::analyser(original.as_deref().unwrap_or(&[]));
-        config.brancher();
-        let nouveau = config.rendre();
-        if original.as_deref() == Some(nouveau.as_slice()) {
+        let courant = lire_si_present(&chemin)?;
+        let deja_branche = courant.as_deref().is_some_and(contient_notre_include);
+        let nouveau = match &courant {
+            Some(octets) if deja_branche => rebrancher(octets),
+            autre => brancher(autre.as_deref()),
+        };
+        if courant.as_deref() == Some(nouveau.as_slice()) {
             return Ok(()); // déjà branché : on ne touche à rien
         }
-        if let Some(octets) = &original {
+        if let (Some(octets), false) = (&courant, deja_branche) {
             let sauvegarde = self.chemin(FICHIER_SAUVEGARDE);
             if !sauvegarde.exists() {
                 ecrire_atomique(&sauvegarde, octets)?;
             }
         }
         ecrire_atomique(&chemin, &nouveau)
+    }
+
+    /// Un nom libre pour garder une ancienne copie : `config.txt.avant-retro-eq.1`, `.2`…
+    fn nom_copie_conservee(&self) -> PathBuf {
+        let mut numero = 1u32;
+        loop {
+            let candidat = self.chemin(&format!("{FICHIER_SAUVEGARDE}.{numero}"));
+            if !candidat.exists() {
+                return candidat;
+            }
+            numero += 1;
+        }
     }
 }
 
@@ -348,11 +465,10 @@ impl Moteur for EqualizerApo {
         }
         match fs::read(self.chemin(FICHIER_CONFIG)) {
             Ok(octets) => {
-                let config = ConfigTexte::analyser(&octets);
-                if config
-                    .lignes
+                let (_, corps) = sans_bom(&octets);
+                if decouper(corps)
                     .iter()
-                    .any(|l| !est_inerte(l) && est_notre_include(l))
+                    .any(|l| !est_inerte(l.contenu) && ressemble_a_notre_include(l.contenu))
                 {
                     EtatMoteur::Actif
                 } else {
@@ -374,40 +490,64 @@ impl Moteur for EqualizerApo {
         }
     }
 
-    /// Rend `config.txt` tel qu'il était, à l'octet près, depuis la sauvegarde,
-    /// puis supprime la sauvegarde et `retro-eq.txt`.
+    /// Rend à l'utilisateur ce qu'il aurait sans Retro EQ : on défait exactement
+    /// nos modifications dans le `config.txt` **actuel** (notre `Include`
+    /// disparaît, les lignes préfixées `# [retro-eq] ` sont réactivées, octet
+    /// pour octet), puis on supprime `retro-eq.txt`.
     ///
-    /// Sans sauvegarde (le fichier n'existait pas avant nous, ou il a été
-    /// supprimé), on défait nos modifications ligne à ligne : notre Include
-    /// disparaît, les lignes préfixées `# [retro-eq] ` sont réactivées, et si
-    /// plus rien d'utile ne reste, `config.txt` est supprimé car c'est nous
-    /// qui l'avions créé. Si le dossier n'existe plus (Equalizer APO
+    /// On ne restaure pas l'ancienne sauvegarde par-dessus : si le fichier a été
+    /// remplacé entre-temps (autre outil, réinstallation), elle écraserait la
+    /// config actuelle. La sauvegarde `config.txt.avant-retro-eq` ne sert que de
+    /// filet : identique au résultat, elle est supprimée ; différente, elle est
+    /// gardée sous `config.txt.avant-retro-eq.N` et signalée par
+    /// [`Moteur::copie_de_securite`].
+    ///
+    /// Si `config.txt` n'était que notre `Include` (il n'existait pas avant
+    /// nous), il est supprimé. Si le dossier n'existe plus (Equalizer APO
     /// désinstallé), il n'y a rien à rendre : succès.
     fn retirer(&mut self) -> Result<(), ErreurMoteur> {
         self.derniere = None;
+        self.copie_conservee = None;
         if !self.dossier.is_dir() {
             return Ok(());
         }
         let config = self.chemin(FICHIER_CONFIG);
         let sauvegarde = self.chemin(FICHIER_SAUVEGARDE);
-        match lire_si_present(&sauvegarde)? {
-            Some(octets) => {
-                ecrire_atomique(&config, &octets)?;
-                supprimer_si_present(&sauvegarde)?;
-            }
-            None => {
-                if let Some(octets) = lire_si_present(&config)? {
-                    let mut texte = ConfigTexte::analyser(&octets);
-                    texte.debrancher();
-                    if texte.est_vide() {
-                        supprimer_si_present(&config)?;
-                    } else {
-                        ecrire_atomique(&config, &texte.rendre())?;
-                    }
+        let courant = lire_si_present(&config)?;
+        let rendu: Option<Vec<u8>> = match courant {
+            None => None,
+            Some(octets) => match debrancher(&octets) {
+                None => {
+                    supprimer_si_present(&config)?;
+                    None
                 }
+                Some(rendu) => {
+                    if rendu != octets {
+                        ecrire_atomique(&config, &rendu)?;
+                    }
+                    Some(rendu)
+                }
+            },
+        };
+        if let Some(copie) = lire_si_present(&sauvegarde)? {
+            if rendu.as_deref() == Some(copie.as_slice()) {
+                supprimer_si_present(&sauvegarde)?;
+            } else {
+                let destination = self.nom_copie_conservee();
+                fs::rename(&sauvegarde, &destination).map_err(|e| {
+                    io_err(
+                        format!("conservation de l'ancienne copie {}", sauvegarde.display()),
+                        e,
+                    )
+                })?;
+                self.copie_conservee = Some(destination);
             }
         }
         supprimer_si_present(&self.chemin(FICHIER_COURBE))
+    }
+
+    fn copie_de_securite(&self) -> Option<PathBuf> {
+        self.copie_conservee.clone()
     }
 }
 
@@ -512,7 +652,7 @@ mod tests {
         m.appliquer(&courbe_test()).unwrap();
         m.couper().unwrap();
         let texte = String::from_utf8(lire(&dir, "retro-eq.txt")).unwrap();
-        assert!(texte.contains("Preamp: 0.0 dB"));
+        assert!(texte.contains("Preamp: 0.00 dB"));
         assert!(!texte.contains("Filter"));
         assert_eq!(m.etat(), EtatMoteur::Actif);
     }
@@ -710,6 +850,248 @@ mod tests {
         m.appliquer(&courbe_gain(0.0, 0.0)).unwrap();
         m.appliquer(&courbe_gain(-6.0, 6.0)).unwrap();
         assert_eq!(*pauses.lock().unwrap(), 0);
+    }
+
+    fn noms_du_dossier(dir: &TempDir) -> Vec<String> {
+        let mut noms: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        noms.sort();
+        noms
+    }
+
+    #[test]
+    fn config_remplacee_entre_deux_appliquer_n_est_pas_perdue_par_retirer() {
+        // O1 -> appliquer -> l'utilisateur (ou une réinstallation) met O2 -> appliquer -> retirer.
+        let dir = TempDir::new().unwrap();
+        let o1 = b"Preamp: -1 dB\n";
+        let o2 = b"Preamp: -9 dB\r\nFilter: ON PK Fc 60 Hz Gain 4 dB Q 1";
+        fs::write(dir.path().join("config.txt"), o1).unwrap();
+        let mut m = moteur(&dir);
+        m.appliquer(&courbe_test()).unwrap();
+        fs::write(dir.path().join("config.txt"), o2).unwrap();
+        m.appliquer(&courbe_test()).unwrap();
+        assert_eq!(m.etat(), EtatMoteur::Actif);
+        m.retirer().unwrap();
+
+        // La config actuelle de l'utilisateur est rendue, pas l'ancienne.
+        assert_eq!(lire(&dir, "config.txt"), o2);
+        assert!(!dir.path().join("retro-eq.txt").exists());
+        // L'ancienne copie reste, sous un nom qui ne gêne pas une future installation.
+        assert!(!dir.path().join("config.txt.avant-retro-eq").exists());
+        let noms = noms_du_dossier(&dir);
+        assert_eq!(noms.len(), 2, "{noms:?}");
+        let gardee = noms
+            .iter()
+            .find(|n| n.starts_with("config.txt.avant-retro-eq."))
+            .expect("copie de sécurité conservée");
+        assert_eq!(lire(&dir, gardee), o1);
+        assert_eq!(m.copie_de_securite(), Some(dir.path().join(gardee)));
+    }
+
+    #[test]
+    fn deux_copies_conservees_ne_se_marchent_pas_dessus() {
+        let dir = TempDir::new().unwrap();
+        for (i, (avant, apres)) in [(b"a\n", b"b\n"), (b"c\n", b"d\n")].into_iter().enumerate() {
+            fs::write(dir.path().join("config.txt"), avant).unwrap();
+            let mut m = moteur(&dir);
+            m.appliquer(&courbe_test()).unwrap();
+            fs::write(dir.path().join("config.txt"), apres).unwrap();
+            m.retirer().unwrap();
+            assert_eq!(lire(&dir, "config.txt"), apres, "tour {i}");
+        }
+        let copies: Vec<_> = noms_du_dossier(&dir)
+            .into_iter()
+            .filter(|n| n.starts_with("config.txt.avant-retro-eq."))
+            .collect();
+        assert_eq!(copies.len(), 2, "{copies:?}");
+    }
+
+    #[test]
+    fn retirer_sans_ecart_ne_garde_pas_de_copie_et_ne_signale_rien() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("config.txt"), "x\n").unwrap();
+        let mut m = moteur(&dir);
+        m.appliquer(&courbe_test()).unwrap();
+        m.retirer().unwrap();
+        assert_eq!(m.copie_de_securite(), None);
+        assert_eq!(noms_du_dossier(&dir), vec!["config.txt".to_string()]);
+    }
+
+    #[test]
+    fn retirer_apres_ajout_d_une_ligne_par_l_utilisateur_la_garde() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("config.txt"), "Preamp: -1 dB\n").unwrap();
+        let mut m = moteur(&dir);
+        m.appliquer(&courbe_test()).unwrap();
+        let mut courante = lire(&dir, "config.txt");
+        courante.extend_from_slice(b"Filter: ON PK Fc 1 Hz Gain 1 dB Q 1\n");
+        fs::write(dir.path().join("config.txt"), courante).unwrap();
+        // Un nouvel appliquer remet tout au propre, sans rien empiler.
+        m.appliquer(&courbe_test()).unwrap();
+        m.retirer().unwrap();
+        assert_eq!(
+            lire(&dir, "config.txt"),
+            b"Preamp: -1 dB\nFilter: ON PK Fc 1 Hz Gain 1 dB Q 1\n"
+        );
+    }
+
+    #[test]
+    fn config_absente_puis_creee_par_l_utilisateur_reste_apres_retirer() {
+        let dir = TempDir::new().unwrap();
+        let mut m = moteur(&dir);
+        m.appliquer(&courbe_test()).unwrap();
+        fs::write(dir.path().join("config.txt"), "Preamp: -4 dB\n").unwrap();
+        m.appliquer(&courbe_test()).unwrap();
+        m.retirer().unwrap();
+        assert_eq!(lire(&dir, "config.txt"), b"Preamp: -4 dB\n");
+    }
+
+    // --- annulation exacte des modifications ---
+
+    /// Petit générateur pseudo-aléatoire (xorshift) : pas de dépendance de test en plus.
+    struct Alea(u64);
+    impl Alea {
+        fn suivant(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn jusqu_a(&mut self, n: usize) -> usize {
+            (self.suivant() % n as u64) as usize
+        }
+    }
+
+    /// Morceaux qui piègent la découpe en lignes, la détection de nos marques et le BOM.
+    const MORCEAUX: &[&[u8]] = &[
+        b"\n",
+        b"\r\n",
+        b"\r",
+        b"a",
+        b"Preamp: -3 dB",
+        b"Filter: ON PK Fc 100 Hz Gain 5 dB Q 1",
+        b"#",
+        b"# [retro-eq] ",
+        b"# [retro-eq] Preamp: 1 dB",
+        b"Include: retro-eq.txt",
+        b"include:  RETRO-EQ.txt ",
+        b" ",
+        b"\t",
+        b"\xEF\xBB\xBF",
+        b"\xFF\xFE",
+        b"\x00",
+    ];
+
+    fn octets_generes(alea: &mut Alea) -> Vec<u8> {
+        let mut x = Vec::new();
+        for _ in 0..alea.jusqu_a(12) {
+            if alea.jusqu_a(5) == 0 {
+                x.push(alea.suivant() as u8);
+            } else {
+                x.extend_from_slice(MORCEAUX[alea.jusqu_a(MORCEAUX.len())]);
+            }
+        }
+        x
+    }
+
+    #[test]
+    fn debrancher_defait_exactement_brancher_pour_n_importe_quels_octets() {
+        let mut alea = Alea(0x9E37_79B9_7F4A_7C15);
+        for _ in 0..20_000 {
+            let x = octets_generes(&mut alea);
+            let y = brancher(Some(&x));
+            assert_eq!(debrancher(&y), Some(x.clone()), "x = {x:?}, y = {y:?}");
+            // Notre Include est présent et se retrouve.
+            assert!(contient_notre_include(&y), "x = {x:?}");
+        }
+    }
+
+    #[test]
+    fn brancher_est_injectif_sur_les_cas_limites() {
+        // Deux entrées différentes ne donnent jamais la même sortie.
+        let cas: Vec<Option<&[u8]>> = vec![
+            None,
+            Some(b""),
+            Some(b"\n"),
+            Some(b"a"),
+            Some(b"a\n"),
+            Some(b"a\r\n"),
+            Some(b"\xEF\xBB\xBF"),
+        ];
+        let sorties: Vec<Vec<u8>> = cas.iter().map(|x| brancher(*x)).collect();
+        for i in 0..sorties.len() {
+            for j in i + 1..sorties.len() {
+                assert_ne!(sorties[i], sorties[j], "{:?} / {:?}", cas[i], cas[j]);
+            }
+        }
+        assert_eq!(debrancher(&brancher(None)), None);
+        assert_eq!(debrancher(&brancher(Some(b""))), Some(Vec::new()));
+    }
+
+    #[test]
+    fn une_ligne_deja_prefixee_ou_notre_include_dans_l_original_ne_corrompt_rien() {
+        for x in [
+            &b"# [retro-eq] Preamp: 1 dB\n"[..],
+            b"Include: retro-eq.txt\n",
+            b"Include: retro-eq.txt",
+            b"# [retro-eq] ",
+            b"\xEF\xBB\xBF# [retro-eq] x\r\nInclude: retro-eq.txt\r\n",
+        ] {
+            assert_eq!(debrancher(&brancher(Some(x))), Some(x.to_vec()), "{x:?}");
+        }
+    }
+
+    #[test]
+    fn brancher_ne_se_cumule_pas_avec_normaliser() {
+        let mut alea = Alea(42);
+        for _ in 0..2_000 {
+            let x = octets_generes(&mut alea);
+            let y = brancher(Some(&x));
+            // Ce que fait `appliquer` sur un fichier déjà branché : même octets.
+            assert_eq!(rebrancher(&y), y, "x = {x:?}");
+        }
+    }
+
+    #[test]
+    fn un_fichier_temporaire_d_un_autre_processus_n_est_pas_ecrase() {
+        let dir = TempDir::new().unwrap();
+        // Les anciens noms fixes : un autre processus pourrait les utiliser.
+        fs::write(dir.path().join("config.txt.tmp"), "autre processus").unwrap();
+        fs::write(dir.path().join("retro-eq.txt.tmp"), "autre processus").unwrap();
+        fs::write(dir.path().join("config.txt"), "x\n").unwrap();
+        let mut m = moteur(&dir);
+        m.appliquer(&courbe_test()).unwrap();
+        assert_eq!(lire(&dir, "config.txt.tmp"), b"autre processus");
+        assert_eq!(lire(&dir, "retro-eq.txt.tmp"), b"autre processus");
+    }
+
+    #[test]
+    fn les_noms_temporaires_sont_uniques_et_voisins() {
+        let cible = Path::new("/un/dossier/config.txt");
+        let a = nom_temporaire(cible);
+        let b = nom_temporaire(cible);
+        assert_ne!(a, b);
+        assert_eq!(a.parent(), cible.parent());
+        assert!(a
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("config.txt."));
+        assert!(a
+            .to_string_lossy()
+            .contains(&std::process::id().to_string()));
+    }
+
+    #[test]
+    fn un_echec_d_ecriture_nettoie_le_fichier_temporaire() {
+        let dir = TempDir::new().unwrap();
+        // Un dossier à la place du fichier : le renommage final échoue.
+        fs::create_dir(dir.path().join("cible")).unwrap();
+        fs::write(dir.path().join("cible").join("occupe"), "x").unwrap();
+        assert!(ecrire_atomique(&dir.path().join("cible"), b"abc").is_err());
+        assert_eq!(noms_du_dossier(&dir), vec!["cible".to_string()]);
     }
 
     #[cfg(not(windows))]

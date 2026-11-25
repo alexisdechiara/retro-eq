@@ -6,6 +6,7 @@ use crate::depot::ErreurDepot;
 use crate::plan::{Cote, DuelPrevu, Mode, Reponse};
 use crate::reglages::ReglagesTest;
 use crate::resultat::ResultatTest;
+use crate::zone::ReglagesVariantes;
 use retro_dsp::Courbe;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -21,6 +22,8 @@ pub enum RaisonPause {
     Appel,
     /// « Plus tard » : le duel en cours sera rejoué.
     PlusTard,
+    /// Personne n'a répondu à temps : le test s'est mis en pause tout seul (ADR-0012).
+    SansReponse,
 }
 
 /// Un événement du journal. Une ligne JSON par entrée, avec un champ `"type"` qui nomme la
@@ -39,6 +42,10 @@ pub enum Entree {
         mode: Mode,
         plan: Vec<DuelPrevu>,
         reglages: ReglagesTest,
+        /// Les réglages des variantes (pas initial, plancher) en vigueur pour ce test.
+        /// Absents des journaux plus anciens : valeurs par défaut.
+        #[serde(default)]
+        variantes: ReglagesVariantes,
         horodatage_ms: u64,
     },
     /// Le duel `duel` (indice dans le plan, depuis 0) commence.
@@ -64,6 +71,14 @@ pub enum Entree {
     DuelPasse { duel: u32, horodatage_ms: u64 },
     /// Le duel recommence depuis son premier passage.
     DuelRecommence { duel: u32, horodatage_ms: u64 },
+    /// Le duel `duel` va être rejoué après une interruption, avec un nouveau tirage
+    /// (qui est A, ordre des passages) : `prevu` remplace le duel du plan (ADR-0012).
+    /// Toujours écrit avant le `DuelDemarre` du duel rejoué.
+    DuelRetire {
+        duel: u32,
+        prevu: DuelPrevu,
+        horodatage_ms: u64,
+    },
     /// Le test est en pause.
     Pause {
         raison: RaisonPause,
@@ -93,6 +108,7 @@ impl Entree {
             | Entree::ReponseAnnulee { horodatage_ms, .. }
             | Entree::DuelPasse { horodatage_ms, .. }
             | Entree::DuelRecommence { horodatage_ms, .. }
+            | Entree::DuelRetire { horodatage_ms, .. }
             | Entree::Pause { horodatage_ms, .. }
             | Entree::Reprise { horodatage_ms }
             | Entree::DuelVerificationAjoute { horodatage_ms, .. }
@@ -248,6 +264,7 @@ mod tests {
             mode: Mode::DuelsEnJeu { precis: false },
             plan: vec![duel()],
             reglages: ReglagesTest::default(),
+            variantes: ReglagesVariantes::default(),
             horodatage_ms: 1000,
         }
     }
@@ -301,8 +318,17 @@ mod tests {
                 duel: duel(),
                 horodatage_ms: 1010,
             },
-            Entree::TestAbandonne {
+            Entree::DuelRetire {
+                duel: 1,
+                prevu: duel(),
                 horodatage_ms: 1011,
+            },
+            Entree::Pause {
+                raison: RaisonPause::SansReponse,
+                horodatage_ms: 1012,
+            },
+            Entree::TestAbandonne {
+                horodatage_ms: 1013,
             },
         ]
     }
@@ -351,6 +377,23 @@ mod tests {
         let v = serde_json::to_value(demarrage()).unwrap();
         assert_eq!(v["type"], "test_demarre");
         assert_eq!(v["version_reference"], 2);
+    }
+
+    #[test]
+    fn un_journal_sans_reglages_de_variantes_prend_les_valeurs_par_defaut() {
+        let mut v = serde_json::to_value(demarrage()).unwrap();
+        v.as_object_mut().unwrap().remove("variantes");
+        let Entree::TestDemarre { variantes, .. } = serde_json::from_value(v).unwrap() else {
+            panic!("mauvaise variante");
+        };
+        assert_eq!(variantes, ReglagesVariantes::default());
+        let v = serde_json::to_value(Entree::DuelRetire {
+            duel: 2,
+            prevu: duel(),
+            horodatage_ms: 4,
+        })
+        .unwrap();
+        assert_eq!(v["type"], "duel_retire");
     }
 
     #[test]

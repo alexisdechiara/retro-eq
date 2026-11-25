@@ -12,6 +12,22 @@ pub const INTERVALLE_DEFAUT_MS: u32 = 20_000;
 /// Écoute cumulée sans pause après laquelle on conseille une pause : 40 minutes.
 pub const PAUSE_CONSEILLEE_MS: u64 = 40 * 60 * 1000;
 
+/// Délai le plus court laissé pour répondre (ms).
+pub const DELAI_REPONSE_MIN_MS: u32 = 30_000;
+/// Délai le plus long laissé pour répondre (ms) : 10 minutes.
+pub const DELAI_REPONSE_MAX_MS: u32 = 600_000;
+/// Délai par défaut pour répondre (ms) : 2 minutes (ADR-0012).
+pub const DELAI_REPONSE_DEFAUT_MS: u32 = 120_000;
+
+/// Ramène un délai de réponse dans `30 000..=600 000` ms.
+pub fn borner_delai_reponse(ms: u32) -> u32 {
+    ms.clamp(DELAI_REPONSE_MIN_MS, DELAI_REPONSE_MAX_MS)
+}
+
+fn lire_delai_reponse<'de, D: Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    u32::deserialize(d).map(borner_delai_reponse)
+}
+
 /// Ramène un intervalle dans `10 000..=120 000` ms.
 pub fn borner_intervalle(ms: u32) -> u32 {
     ms.clamp(INTERVALLE_MIN_MS, INTERVALLE_MAX_MS)
@@ -40,6 +56,10 @@ pub struct ReglagesTest {
     intervalle_ms: u32,
     bip: bool,
     pause_conseillee_apres_ms: u64,
+    /// Temps laissé pour répondre une fois la question posée. Passé ce délai, le test se
+    /// met en pause tout seul : un côté ne reste pas actif indéfiniment (ADR-0012).
+    #[serde(deserialize_with = "lire_delai_reponse")]
+    delai_reponse_ms: u32,
 }
 
 impl Default for ReglagesTest {
@@ -48,6 +68,7 @@ impl Default for ReglagesTest {
             intervalle_ms: INTERVALLE_DEFAUT_MS,
             bip: true,
             pause_conseillee_apres_ms: PAUSE_CONSEILLEE_MS,
+            delai_reponse_ms: DELAI_REPONSE_DEFAUT_MS,
         }
     }
 }
@@ -76,6 +97,17 @@ impl ReglagesTest {
     /// Écoute cumulée (ms) après laquelle on conseille une pause.
     pub fn pause_conseillee_apres_ms(&self) -> u64 {
         self.pause_conseillee_apres_ms
+    }
+
+    /// Temps laissé pour répondre après la question, en ms (toujours dans 30 000..=600 000).
+    pub fn delai_reponse_ms(&self) -> u32 {
+        self.delai_reponse_ms
+    }
+
+    /// Mêmes réglages avec un autre délai de réponse (borné à 30 s – 10 min).
+    pub fn avec_delai_reponse_ms(mut self, ms: u32) -> Self {
+        self.delai_reponse_ms = borner_delai_reponse(ms);
+        self
     }
 
     /// Même réglages avec un autre délai avant le conseil de pause (utile aux tests).
@@ -169,6 +201,24 @@ mod tests {
         assert_eq!(r.intervalle_ms(), 20_000);
         assert!(r.bip());
         assert_eq!(r.pause_conseillee_apres_ms(), 40 * 60 * 1000);
+    }
+
+    #[test]
+    fn le_delai_de_reponse_vaut_2_minutes_et_reste_entre_30_secondes_et_10_minutes() {
+        let r = ReglagesTest::default();
+        assert_eq!(r.delai_reponse_ms(), 120_000);
+        assert_eq!(r.clone().avec_delai_reponse_ms(1).delai_reponse_ms(), 30_000);
+        assert_eq!(
+            r.clone().avec_delai_reponse_ms(9_999_999).delai_reponse_ms(),
+            600_000
+        );
+        assert_eq!(r.avec_delai_reponse_ms(45_000).delai_reponse_ms(), 45_000);
+        // Un journal écrit avant ce réglage se relit avec la valeur par défaut, et une
+        // valeur hors limites dans un fichier est bornée.
+        let ancien: ReglagesTest = serde_json::from_str(r#"{"intervalle_ms": 20000}"#).unwrap();
+        assert_eq!(ancien.delai_reponse_ms(), 120_000);
+        let hors: ReglagesTest = serde_json::from_str(r#"{"delai_reponse_ms": 5}"#).unwrap();
+        assert_eq!(hors.delai_reponse_ms(), 30_000);
     }
 
     #[test]

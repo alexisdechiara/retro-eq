@@ -12,6 +12,7 @@ export component Accueil inherits VerticalLayout {
         Paragraphe {
             font-size: 18px;
             text: Appli.etat-moteur == 0 ? @tr("Le moteur audio est introuvable : rien n’est égalisé pour l’instant.")
+                : !Appli.moteur-autorise ? @tr("Égaliseur pas encore activé : rien n’est écrit dans ta configuration audio tant que tu n’as pas terminé le premier lancement.")
                 : Appli.egaliseur-actif ? @tr("Ton égaliseur est actif. Envie de l’affiner encore ?")
                 : @tr("Ton égaliseur est coupé : le son passe sans correction.");
         }
