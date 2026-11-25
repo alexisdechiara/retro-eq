@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Visualiseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Vumetre, Pastille, Format } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Pastille, Format } from "../composants.slint";
 
 // Une mesure : étiquette, valeur à largeur fixe (la mise en page ne bouge pas quand le chiffre change), unité.
 component Mesure inherits Rectangle {
@@ -108,17 +108,11 @@ export component EcranVisualiseur inherits VerticalLayout {
 
     HorizontalLayout {
         spacing: 24px;
-        // Niveau : vumètre et mesures.
+        // Niveau : les mesures, en chiffres.
         Carte {
             horizontal-stretch: 1;
             TitreSection { contenu: @tr("Niveau du signal"); }
             if Visualiseur.capture-active: Etiquette { contenu: @tr("Source : {}", Visualiseur.source); }
-            Vumetre {
-                niveau-db: Visualiseur.capture-active ? Visualiseur.niveau-db : -60;
-                min-height: 190px;
-                accessible-role: image;
-                accessible-label: @tr("Vumètre : niveau du signal");
-            }
             HorizontalLayout {
                 spacing: 12px;
                 Mesure { nom: @tr("Niveau"); valeur: Visualiseur.capture-active ? niveau-texte : "–"; }

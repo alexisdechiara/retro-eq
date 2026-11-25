@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Appli, Ecran, Test, Egaliseur } from "../etat.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Interrupteur, EcranCourbe, Vumetre, Format } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Interrupteur, EcranCourbe, Format } from "../composants.slint";
 
 export component Accueil inherits VerticalLayout {
     alignment: start;
@@ -99,13 +99,15 @@ export component Accueil inherits VerticalLayout {
         Carte {
             horizontal-stretch: 1;
             Etiquette { contenu: @tr("Niveau en direct"); }
-            Vumetre { niveau-db: Appli.niveau-db; }
+            // Le niveau en chiffres, sans jauge : c'est ce qui se lit le mieux d'un coup d'œil.
+            Rectangle { vertical-stretch: 1; }
             HorizontalLayout {
-                spacing: 8px;
+                spacing: 10px;
                 alignment: center;
-                Chiffres { text: Format.nombre(Appli.niveau-db, false); font-size: 28px; vertical-alignment: center; }
-                Chiffres { text: "dB"; color: Theme.discret; vertical-alignment: bottom; }
+                Chiffres { text: Format.nombre(Appli.niveau-db, false); font-size: 72px; vertical-alignment: center; }
+                Chiffres { text: "dB"; font-size: 24px; color: Theme.discret; vertical-alignment: center; }
             }
+            Rectangle { vertical-stretch: 1; }
             HorizontalLayout {
                 alignment: center;
                 Bouton { texte: @tr("Visualiseur"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.visualiseur); } }

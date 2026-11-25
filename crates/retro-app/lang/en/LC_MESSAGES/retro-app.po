@@ -833,8 +833,6 @@ msgstr "What comes out of your headset right now: the signal level and the sound
 msgid "Niveau du signal"
 msgstr "Signal level"
 
-msgid "Vumètre : niveau du signal"
-msgstr "Level meter: signal level"
 
 msgid "Niveau"
 msgstr "Level"
