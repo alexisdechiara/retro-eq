@@ -940,3 +940,55 @@ msgstr "✓ Already on this PC"
 
 msgid "Créer un profil"
 msgstr "Create a profile"
+
+# Mises à jour
+msgid "Mises à jour"
+msgstr "Updates"
+
+msgid "Vérifier maintenant"
+msgstr "Check now"
+
+msgid "Voir la version sur GitHub"
+msgstr "View the release on GitHub"
+
+msgid "Signaler un problème"
+msgstr "Report a problem"
+
+msgid "Nouveautés de la {}"
+msgstr "What’s new in {}"
+
+msgid "Publiée le {}"
+msgstr "Released on {}"
+
+msgid "Installateur : {}"
+msgstr "Installer: {}"
+
+msgid "{} · disponible"
+msgstr "{} · available"
+
+msgid "{} · à jour"
+msgstr "{} · up to date"
+
+msgid "{} · aucune version publiée"
+msgstr "{} · no release published"
+
+msgid "{} · pas encore vérifié"
+msgstr "{} · not checked yet"
+
+msgid "{} (mise à jour disponible)"
+msgstr "{} (update available)"
+
+msgid "Le projet n’a encore publié aucune version sur GitHub : il n’y a rien à télécharger pour l’instant."
+msgstr "The project hasn’t published any release on GitHub yet: there is nothing to download for now."
+
+msgid "Retro EQ ne télécharge ni n’installe rien tout seul : la page de la version s’ouvre dans ton navigateur, c’est toi qui décides."
+msgstr "Retro EQ never downloads or installs anything by itself: the release page opens in your browser, and you decide."
+
+msgid "Ce qui est envoyé : une seule requête à GitHub, sans compte ni donnée personnelle, avec seulement le nom et la version de l’appli. GitHub voit ton adresse IP, comme n’importe quel site. Le réglage « Vérifier les mises à jour au démarrage » (Réglages) coupe les vérifications automatiques."
+msgstr "What is sent: a single request to GitHub, with no account and no personal data, only the app’s name and version. GitHub sees your IP address, like any website. The “Check for updates at startup” setting (Settings) turns off automatic checks."
+
+msgid "Vérifier les mises à jour au démarrage"
+msgstr "Check for updates at startup"
+
+msgid "Au plus une fois par jour, Retro EQ demande à GitHub si une version plus récente existe. Désactivé, il ne se connecte jamais à Internet de lui-même."
+msgstr "At most once a day, Retro EQ asks GitHub whether a newer version exists. When turned off, it never connects to the Internet on its own."

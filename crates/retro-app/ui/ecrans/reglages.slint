@@ -52,6 +52,13 @@ export component EcranReglages inherits VerticalLayout {
             text: @tr("{} sorties audio sont connues de Retro EQ.", Reglages.sorties.length);
             font-size: 14px;
         }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Vérifier les mises à jour au démarrage");
+            aide: @tr("Au plus une fois par jour, Retro EQ demande à GitHub si une version plus récente existe. Désactivé, il ne se connecte jamais à Internet de lui-même.");
+            coche: Reglages.verifier-mises-a-jour;
+            bascule(v) => { Reglages.regler-verifier-mises-a-jour(v); }
+        }
     }
 
     Carte {

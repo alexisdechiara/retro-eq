@@ -167,6 +167,7 @@ export global Reglages {
     in property <[LigneRaccourci]> raccourcis;
     in property <[string]> sorties;
     in property <string> sortie: "";
+    in property <bool> verifier-mises-a-jour: true;
     callback choisir-langue(string);
     callback regler-rail(bool);
     callback regler-fermer-reduit(bool);
@@ -177,6 +178,22 @@ export global Reglages {
     callback importer();
     callback exporter(string);
     callback rendre-son-origine();
+    callback regler-verifier-mises-a-jour(bool);
+}
+
+// La vérification des mises à jour (écran À propos, pastille de la barre de titre).
+export global MiseAJour {
+    in property <bool> en-cours: false;
+    in property <int> etat: 0;                   // 0 pas encore vérifié, 1 à jour, 2 mise à jour disponible, 3 aucune version publiée
+    in property <string> verification: "";       // « vérifié aujourd’hui à 19:40 »
+    in property <string> version: "";            // la version proposée (état 2)
+    in property <string> date: "";               // sa date, en toutes lettres
+    in property <string> notes: "";              // ses notes : texte brut tronqué, jamais du Markdown ni du HTML
+    in property <string> page: "";               // sa page sur GitHub, ouverte dans le navigateur
+    in property <string> installateur: "";       // nom et taille de l’installateur, s’il y en a un
+    in property <string> probleme: "";           // pourquoi la dernière vérification a échoué (vide sinon)
+    in property <bool> disponible: false;        // allume la pastille à côté de l’onglet Réglages
+    callback verifier();                         // « Vérifier maintenant »
 }
 
 // ----- Base AutoEQ (ADR-0013) -----

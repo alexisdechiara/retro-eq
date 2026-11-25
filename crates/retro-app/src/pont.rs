@@ -14,6 +14,7 @@ use crate::autotest::{self, Cible};
 use crate::barre::{Barre, EvenementBarre};
 use crate::controleur::{ChoixTest, Controleur, EtatBaseAutoEq, EtatTestVue, VueDuels};
 use crate::courbes::chemin_svg;
+use crate::http::{ClientHttp, ClientUreq, ErreurHttp};
 use crate::mini::Mini;
 use crate::niveaux::SuiviNiveau;
 use crate::raccourcis::{Action, Raccourcis};
@@ -22,12 +23,14 @@ use crate::*;
 use retro_audio::{
     Bip, Capture, DetecteurAppel, Mesure, PleinEcran, PremierPlan, SortiesAudio, Trame,
 };
+use retro_core::mises_a_jour::ReponseApi;
 use retro_core::{Langue, Reponse};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Nombre de barres du visualiseur.
@@ -127,6 +130,9 @@ fn horloge_systeme() -> u64 {
         .unwrap_or(0)
 }
 
+/// Ce que rend le fil de vérification des mises à jour.
+type ReponseMaj = Result<ReponseApi, ErreurHttp>;
+
 /// Tout l'état vivant de l'appli, côté interface.
 pub struct Pont {
     pub controleur: Controleur,
@@ -152,6 +158,10 @@ pub struct Pont {
     /// La langue dont les textes sont en ce moment dans l'interface : tant qu'elle diffère de
     /// celle du contrôleur, `synchroniser` rechange les textes (voir `appliquer_langue`).
     langue_appliquee: Option<Langue>,
+    /// La vérification des mises à jour : le client HTTP, et le canal par lequel le fil qui
+    /// fait la requête rend sa réponse (vidé par le minuteur, sur le fil de l'interface).
+    client_http: Arc<dyn ClientHttp>,
+    reponses_maj: (Sender<ReponseMaj>, Receiver<ReponseMaj>),
 }
 
 impl Pont {
@@ -196,6 +206,50 @@ impl Pont {
             dernier_premier_plan: None,
             dernier_appel: false,
             langue_appliquee: None,
+            client_http: Arc::new(ClientUreq::nouveau()),
+            reponses_maj: std::sync::mpsc::channel(),
+        }
+    }
+
+    /// Lance une vérification des mises à jour sur un fil à part (jamais sur celui de
+    /// l'interface : une requête peut durer jusqu'à dix secondes). Sans effet si le
+    /// contrôleur n'en veut pas : réglage coupé, déjà vérifié aujourd'hui, ou une
+    /// vérification déjà en route.
+    fn lancer_verification(&mut self, automatique: bool) {
+        let t = self.maintenant();
+        let Some(demande) = self.controleur.demander_verification(automatique, t) else {
+            return;
+        };
+        let client = self.client_http.clone();
+        let envoi = self.reponses_maj.0.clone();
+        let lance = std::thread::Builder::new()
+            .name("mises-a-jour".into())
+            .spawn(move || {
+                let _ = envoi.send(demande.envoyer(client.as_ref()));
+            });
+        if let Err(e) = lance {
+            // Pas de fil disponible : on le dit comme un échec de réseau, sans planter.
+            self.controleur
+                .recevoir_verification(Err(ErreurHttp(e.to_string())), t);
+        }
+    }
+
+    /// Au démarrage : la vérification automatique, si elle est due.
+    pub fn verifier_au_demarrage(&mut self, fenetre: &FenetrePrincipale) {
+        self.lancer_verification(true);
+        self.synchroniser(fenetre);
+    }
+
+    /// Reprend les réponses revenues du fil de vérification, s'il y en a.
+    fn recevoir_mises_a_jour(&mut self, fenetre: &FenetrePrincipale) {
+        let mut recu = false;
+        while let Ok(resultat) = self.reponses_maj.1.try_recv() {
+            let t = self.maintenant();
+            self.controleur.recevoir_verification(resultat, t);
+            recu = true;
+        }
+        if recu {
+            self.synchroniser(fenetre);
         }
     }
 
@@ -330,6 +384,19 @@ impl Pont {
         reglages.set_bip(vue.bip);
         reglages.set_pause_appels(vue.pause_appels);
         reglages.set_intervalle_s(vue.intervalle_s as i32);
+        reglages.set_verifier_mises_a_jour(vue.verifier_mises_a_jour);
+        let maj_vue = c.vue_mise_a_jour(t);
+        let vue_maj = fenetre.global::<MiseAJour>();
+        vue_maj.set_en_cours(maj_vue.en_cours);
+        vue_maj.set_etat(maj_vue.etat);
+        vue_maj.set_verification(maj_vue.verification.as_str().into());
+        vue_maj.set_version(maj_vue.version.as_str().into());
+        vue_maj.set_date(maj_vue.date.as_str().into());
+        vue_maj.set_notes(maj_vue.notes.as_str().into());
+        vue_maj.set_page(maj_vue.page.as_str().into());
+        vue_maj.set_installateur(maj_vue.installateur.as_str().into());
+        vue_maj.set_probleme(maj_vue.probleme.as_str().into());
+        vue_maj.set_disponible(maj_vue.disponible());
         let conflits = self.raccourcis.conflits_par_ligne();
         maj(
             &self.modeles.raccourcis,
@@ -578,6 +645,7 @@ impl Pont {
         self.images += 1;
         let t = self.maintenant();
         self.ecouter(fenetre);
+        self.recevoir_mises_a_jour(fenetre);
 
         // Les raccourcis globaux.
         let mut actions = self
@@ -1264,6 +1332,13 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         let t = p.maintenant();
         p.controleur.rendre_son_origine(t);
         p.autotester(f);
+    }));
+    reglages.on_regler_verifier_mises_a_jour(agir!(|p, f, v| {
+        p.controleur.regler_verifier_mises_a_jour(v);
+    }));
+    fenetre.global::<MiseAJour>().on_verifier(agir!(|p, f| {
+        // À la demande de l'utilisateur : sans tenir compte du réglage ni de la règle d'un jour.
+        p.lancer_verification(false);
     }));
 
     // Premier affichage, puis le minuteur.

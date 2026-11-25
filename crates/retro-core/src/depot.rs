@@ -4,6 +4,7 @@
 //! <dossier>/profils/<id>.json    un profil et toutes ses versions
 //! <dossier>/reglages.json        les réglages de l'appli
 //! <dossier>/etat-moteur.json     la courbe qui devrait être active
+//! <dossier>/mises-a-jour.json    la dernière vérification des mises à jour
 //! <dossier>/tests/<id>.jsonl     le journal d'un test
 //! ```
 //!
@@ -11,6 +12,7 @@
 //! Un plantage laisse l'ancien fichier intact ou le nouveau complet, jamais un demi-fichier.
 
 use crate::journal::{Journal, LectureJournal};
+use crate::mises_a_jour::MiseAJourSauvee;
 use crate::profil::Profil;
 use crate::reglages::ReglagesAppli;
 use retro_dsp::Courbe;
@@ -224,6 +226,21 @@ impl Depot {
 
     pub fn sauver_reglages(&self, reglages: &ReglagesAppli) -> Result<(), ErreurDepot> {
         ecrire_json(&self.dossier.join("reglages.json"), reglages)
+    }
+
+    // --- Mises à jour ---
+
+    /// Ce que la dernière vérification des mises à jour a laissé (`mises-a-jour.json`) ;
+    /// rien du tout si le fichier n'existe pas encore.
+    pub fn charger_mises_a_jour(&self) -> Result<MiseAJourSauvee, ErreurDepot> {
+        match lire_json(&self.dossier.join("mises-a-jour.json")) {
+            Err(e) if e.est_introuvable() => Ok(MiseAJourSauvee::default()),
+            autre => autre,
+        }
+    }
+
+    pub fn sauver_mises_a_jour(&self, sauve: &MiseAJourSauvee) -> Result<(), ErreurDepot> {
+        ecrire_json(&self.dossier.join("mises-a-jour.json"), sauve)
     }
 
     // --- État du moteur ---

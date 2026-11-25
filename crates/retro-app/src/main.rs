@@ -13,7 +13,8 @@
 //!   aux réglages enregistrés). Sans elle, `--demo` est en français et l'appli suit ses
 //!   réglages, ou la langue du système au tout premier lancement.
 //!
-//! Variables d'environnement : `RETRO_EQ_DONNEES` (dossier de données),
+//! Variables d'environnement : `RETRO_EQ_DEMO_MAJ` (avec `--demo` : l'état des mises à jour
+//! montré, voir `demo.rs`), `RETRO_EQ_DONNEES` (dossier de données),
 //! `RETRO_EQ_CONFIG_APO` (dossier `config` d'Equalizer APO, au lieu de le chercher),
 //! `RETRO_EQ_SCENARIO` (suite d'actions d'essai, voir `Pont::jouer_scenario`) et, hors
 //! Windows, `RETRO_EQ_IMPORT` (fichier que « Importer » lit, faute de boîte de dialogue).
@@ -36,6 +37,7 @@ mod controleur;
 mod courbes;
 mod demo;
 mod fenetre;
+mod http;
 mod instance;
 mod mini;
 mod niveaux;
@@ -205,6 +207,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if ecran.is_none() && premier_lancement {
             fenetre.global::<Appli>().set_ecran(Ecran::Demarrage);
+        }
+        // La vérification des mises à jour du jour (sur un fil à part). Jamais pour une
+        // capture d'écran ni un scénario d'essai : ils ne doivent pas toucher le réseau.
+        if capture.is_none() && std::env::var_os("RETRO_EQ_SCENARIO").is_none() {
+            if let Ok(mut pont) = pont.try_borrow_mut() {
+                pont.verifier_au_demarrage(&fenetre);
+            }
         }
         _vivant = Some((pont, minuteur));
     }

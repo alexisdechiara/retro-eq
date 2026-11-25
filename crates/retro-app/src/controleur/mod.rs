@@ -11,11 +11,17 @@
 
 mod autoeq;
 mod dates;
+mod mises_a_jour;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_mises_a_jour;
 mod vues;
 
 pub use autoeq::EtatBaseAutoEq;
+// Seul l'essai réel (`http.rs`) nomme ce type : le pont, lui, le fait voyager sans le nommer.
+#[cfg(test)]
+pub use mises_a_jour::DemandeVerification;
 pub use vues::*;
 
 use crate::reseau::ErreurReseau;
@@ -224,6 +230,8 @@ pub struct Controleur {
     tirages: u64,
     /// La base AutoEQ : l'index gardé en local, la recherche et les téléchargements.
     autoeq: autoeq::Etat,
+    /// La vérification des mises à jour (voir `mises_a_jour.rs`).
+    maj: mises_a_jour::EtatVerification,
 }
 
 impl Controleur {
@@ -292,7 +300,9 @@ impl Controleur {
             bips: 0,
             tirages: 0,
             autoeq: autoeq::Etat::default(),
+            maj: mises_a_jour::EtatVerification::default(),
         };
+        c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
         // La référence d'abord, quoi qu'il se soit passé avant.
         if let Err(e) = c.appliquer_courbe_du_jour() {
@@ -1888,6 +1898,7 @@ impl Controleur {
             bip: self.reglages.bip,
             pause_appels: self.reglages.pause_appels,
             intervalle_s: self.reglages.intervalle_ms / 1000,
+            verifier_mises_a_jour: self.reglages.verifier_mises_a_jour,
         }
     }
 }
