@@ -174,6 +174,9 @@ pub struct VueResultat {
     pub courbe_nouvelle: Courbe,
     /// Vrai quand ce que le test propose est ce qui est actif en ce moment.
     pub active: bool,
+    /// Faux quand rien ne pousse à activer : aucun changement retenu, ou la référence
+    /// préférée au duel de vérification. L'activation reste possible, sans être mise en avant.
+    pub recommandee: bool,
     pub preampli_db: f64,
 }
 

@@ -76,6 +76,8 @@ impl Banc {
             match entree {
                 Entree::TestDemarre { plan, .. } => duels = plan,
                 Entree::DuelVerificationAjoute { duel, .. } => duels.push(duel),
+                // Un duel rejoué après une pause a un nouveau tirage, qui remplace l'ancien.
+                Entree::DuelRetire { duel, prevu, .. } => duels[duel as usize] = prevu,
                 _ => {}
             }
         }
@@ -566,8 +568,8 @@ fn un_test_complet_de_demarrer_a_activer() {
     );
     // Les zones sans changement retenu passent à un pas de 2 dB ; les graves gardent 4 dB.
     assert_eq!(profil.versions()[1].pas_par_zone[Zone::Graves.index()], 4.0);
-    assert_eq!(profil.versions()[1].pas_par_zone[Zone::Presence.index()], 2.0);
-    // 12 duels ne couvrent que 5 zones : une zone pas encore testée garde son pas.
+    assert_eq!(profil.versions()[1].pas_par_zone[Zone::SubGraves.index()], 2.0);
+    // 12 duels ne couvrent que 5 couples (zone, sens) : une zone pas encore testée garde son pas.
     assert_eq!(profil.versions()[1].pas_par_zone[Zone::Air.index()], 4.0);
 
     c.activer_resultat();
@@ -863,7 +865,7 @@ fn les_bips_confirment_les_reponses_et_previennent_en_plein_ecran() {
 }
 
 #[test]
-fn maintenir_une_touche_fait_reecouter_puis_remet_la_reference() {
+fn maintenir_une_touche_fait_reecouter_et_ce_cote_reste_en_place() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();
     c.choisir_test(choix("duels-en-jeu"));
@@ -877,9 +879,12 @@ fn maintenir_une_touche_fait_reecouter_puis_remet_la_reference() {
     c.reecouter(Cote::A, true, t + 100);
     assert_eq!(c.vue_duels(t + 100).cote_actif, 1);
     assert_eq!(banc.moteur.appels().len(), avant + 1);
+    // Au relâchement, on ne repasse pas par la référence : l'entendre revenir dirait quel
+    // côté elle était (ADR-0012). Le moteur ne reçoit rien de plus.
+    let apres = banc.moteur.appels().len();
     c.reecouter(Cote::A, false, t + 900);
-    assert_eq!(c.vue_duels(t + 900).cote_actif, 0);
-    assert!(banc.derniere_courbe().filtres.is_empty());
+    assert_eq!(banc.moteur.appels().len(), apres);
+    assert_eq!(c.vue_duels(t + 900).cote_actif, 1);
     assert_eq!(c.vue_duels(t + 900).etat, EtatTestVue::AttenteReponse);
 }
 
@@ -1090,4 +1095,162 @@ fn les_reglages_sont_gardes_d_un_lancement_a_l_autre() {
     assert!(vue.rail && !vue.fermer_reduit && !vue.mini_fenetre);
     assert_eq!(vue.intervalle_s, 10);
     assert!(!c.fermer_reduit());
+}
+
+// ----- Rester à l'aveugle (ADR-0012) et décider prudemment (ADR-0005) -----
+
+#[test]
+fn pendant_la_question_la_reference_n_est_pas_remise() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    let mut t = T0;
+    for _ in 0..5 {
+        t += PASSAGE;
+        c.tic(t);
+    }
+    let avant = banc.moteur.appels().len();
+    t += PASSAGE;
+    c.tic(t);
+    assert_eq!(c.vue_duels(t).etat, EtatTestVue::AttenteReponse);
+    // Le dernier côté entendu reste en place : rien n'est envoyé au moteur.
+    assert_eq!(banc.moteur.appels().len(), avant);
+    assert_ne!(c.vue_duels(t).cote_actif, 0);
+}
+
+#[test]
+fn sans_reponse_le_test_se_met_en_pause_sur_la_reference_et_le_dit() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    c.prendre_annonce();
+    let mut t = T0;
+    for _ in 0..6 {
+        t += PASSAGE;
+        c.tic(t);
+    }
+    // Deux minutes passent sans réponse.
+    for _ in 0..13 {
+        t += PASSAGE;
+        c.tic(t);
+    }
+    assert_eq!(c.vue_duels(t).etat, EtatTestVue::Pause);
+    assert!(banc.derniere_courbe().filtres.is_empty());
+    assert!(!c.touches_de_test_actives());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(!annonce.erreur);
+    assert!(annonce.texte.contains("Pas de réponse"));
+    // Dit une seule fois.
+    c.tic(t + 1_000);
+    assert!(c.prendre_annonce().is_none());
+
+    // À la reprise, le duel est rejoué avec un nouveau tirage, noté dans le journal.
+    c.reprendre(t + 2_000);
+    assert_eq!(c.vue_duels(t + 2_000).etat, EtatTestVue::Ecoute);
+    assert_eq!(c.vue_duels(t + 2_000).duel, 1);
+    assert!(banc
+        .journal(&identifiant(T0))
+        .entrees
+        .iter()
+        .any(|e| matches!(e, Entree::DuelRetire { duel: 0, .. })));
+}
+
+#[test]
+fn si_la_verification_prefere_la_reference_l_activation_n_est_pas_mise_en_avant() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    jouer(&mut c, &banc, T0, |sujet| match sujet {
+        Sujet::Verification => Some(false),
+        autre => plus_de_graves(autre),
+    });
+    let resultat = c.vue_resultat().unwrap();
+    assert!(resultat.zones.iter().any(|z| z.change));
+    assert!(!resultat.recommandee);
+    assert!(!resultat.active);
+    assert!(resultat.verification.contains("préféré ta référence"));
+    // La version existe quand même, et l'utilisateur garde la main.
+    assert_eq!(
+        banc.depot().charger_profil("mon-profil").unwrap().versions().len(),
+        2
+    );
+    c.activer_resultat();
+    assert!(c.vue_resultat().unwrap().active);
+}
+
+#[test]
+fn des_differences_entendues_aux_controles_ne_laissent_rien_retenir() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    // Toujours « la variante », y compris quand les deux côtés sont identiques.
+    jouer(&mut c, &banc, T0, |_| Some(true));
+    let resultat = c.vue_resultat().unwrap();
+    assert!(resultat.zones.iter().all(|z| !z.change));
+    assert!(resultat.resume.starts_with("Rien n’est retenu"));
+    assert!(resultat.controles.contains("aucun changement n’est retenu"));
+    assert!(!resultat.recommandee);
+    let profil = banc.depot().charger_profil("mon-profil").unwrap();
+    assert_eq!(profil.version_active().courbe, profil.versions()[0].courbe);
+}
+
+#[test]
+fn une_seule_victoire_est_un_indice_rejoue_en_tete_du_test_suivant() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    // Plus de graves préféré une seule fois sur les deux duels de ce couple.
+    let vus = std::cell::Cell::new(0);
+    let fin = jouer(&mut c, &banc, T0, |sujet| match sujet {
+        Sujet::Zone {
+            zone: Zone::Graves,
+            sens: retro_core::Sens::Plus,
+        } => {
+            vus.set(vus.get() + 1);
+            (vus.get() == 1).then_some(true)
+        }
+        _ => None,
+    });
+    let resultat = c.vue_resultat().unwrap();
+    let graves = resultat.zones.iter().find(|z| z.nom == "Graves").unwrap();
+    assert!(!graves.change);
+    assert!(graves.detail.starts_with("Un indice seulement"), "{}", graves.detail);
+
+    let suivant = fin + 60_000;
+    assert!(c.demarrer_test(suivant));
+    let duels = banc.duels(&identifiant(suivant));
+    let graves_plus = duels
+        .iter()
+        .filter(|d| {
+            d.sujet
+                == Sujet::Zone {
+                    zone: Zone::Graves,
+                    sens: retro_core::Sens::Plus,
+                }
+        })
+        .count();
+    assert_eq!(graves_plus, 2, "l'indice est rejoué, deux fois, au test suivant");
+}
+
+#[test]
+fn un_import_partiel_dit_ce_qui_a_ete_laisse_de_cote() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let fichier = banc.dossier.path().join("mixte.txt");
+    std::fs::write(
+        &fichier,
+        "# mon réglage\nPreamp: -3 dB\nFilter 1: ON PK Fc 1000 Hz Gain 3 dB Q 1.41\nFilter 2: ON LP Fc 18000 Hz\nFilter 3: OFF PK Fc 50 Hz Gain 2 dB Q 1\n",
+    )
+    .unwrap();
+    assert!(c.importer(&fichier, T0).is_some());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(!annonce.erreur);
+    assert!(annonce.texte.contains("en partie seulement"), "{}", annonce.texte);
+    assert!(annonce.texte.contains("1 ligne laissée de côté"), "{}", annonce.texte);
+    assert!(annonce.texte.contains("type de filtre non géré"), "{}", annonce.texte);
 }

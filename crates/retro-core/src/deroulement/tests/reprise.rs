@@ -168,7 +168,11 @@ fn le_test_repris_est_en_pause_reference_remise_et_rejoue_le_duel_interrompu() {
         }
     );
     assert_eq!((v.duel, v.total), (2, 3));
-    assert_eq!((v.passages_a, v.passages_b), (0, 0), "le duel sera rejoué en entier");
+    assert_eq!(
+        (v.passages_a, v.passages_b),
+        (0, 0),
+        "le duel sera rejoué en entier"
+    );
     assert_eq!(v.historique, b.vue().historique);
     assert!(r.envoyer(E::Tic).is_empty());
     assert!(r.repondre(Reponse::B).is_empty());
@@ -478,7 +482,13 @@ fn aller_retour_un_test_repris_finit_comme_l_original() {
                         continue;
                     }
                     // Deux fois sur trois « la variante » : assez pour retenir des changements.
-                    let preference = [P::Variante, P::Variante, P::Reference][n as usize - 9];
+                    // Les contrôles reçoivent « Pareil », sinon rien ne serait retenu.
+                    let courant = original.prevu(original.d.issues.len());
+                    let preference = if courant.est_controle() {
+                        P::Aucune
+                    } else {
+                        [P::Variante, P::Variante, P::Reference][n as usize - 9]
+                    };
                     for b in [&mut original, &mut copie] {
                         b.repondre_selon(preference);
                     }

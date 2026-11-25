@@ -6,6 +6,7 @@
 //! phrase en sortie. Le jour où la traduction de ces phrases est branchée, c'est ce seul
 //! fichier qu'il faut reprendre.
 
+use retro_core::formats::RaisonIgnoree;
 use retro_core::{
     BilanControles, BilanDuels, Confiance, Cote, DuelFini, Origine, Preference, Reponse,
     ResultatZone, Sens, Sujet, Zone,
@@ -300,7 +301,10 @@ pub fn nom_confiance(confiance: Confiance) -> &'static str {
 }
 
 /// Le résumé d'un résultat par zones : « 2 zones changent, 3 restent comme avant. »
-pub fn resume_zones(changees: u32, inchangees: u32) -> String {
+pub fn resume_zones(changees: u32, inchangees: u32, rien_retenu: bool) -> String {
+    if rien_retenu {
+        return "Rien n’est retenu de ce test : tu as entendu des différences entre des versions identiques. Ton réglage est gardé tel quel.".to_string();
+    }
     let reste = match inchangees {
         0 => String::new(),
         1 => ", 1 reste comme avant".to_string(),
@@ -335,9 +339,9 @@ pub fn bilan_controles(c: &BilanControles) -> String {
         return String::new();
     }
     let sur = pluriel(c.repondus, "duel de contrôle", "duels de contrôle");
-    if c.penalise {
+    if c.rien_retenu || c.penalise {
         format!(
-            "Sur {sur} (deux versions identiques), tu as entendu une différence {} fois : la confiance baisse d’un cran.",
+            "Sur {sur} (deux versions identiques), tu as entendu une différence {} fois. Tes réponses ne distinguent donc pas deux versions identiques : aucun changement n’est retenu pour ce test.",
             c.a_ou_b
         )
     } else {
@@ -356,7 +360,7 @@ pub fn verification(preference: Option<Preference>) -> String {
             "Duel de vérification : nouvelle version préférée à la référence.".to_string()
         }
         Some(Preference::Reference) => {
-            "Duel de vérification : tu as préféré la référence. Rien ne t’oblige à activer la nouvelle version."
+            "Duel de vérification : tu as préféré ta référence à la nouvelle version. La nouvelle version est gardée dans le profil, mais rien n’indique qu’elle te plaît davantage."
                 .to_string()
         }
         Some(Preference::Aucune) => {
@@ -375,13 +379,40 @@ pub fn detail_zone(z: &ResultatZone) -> String {
     if z.contradictoire {
         format!("Réponses contradictoires (préférée en plus et en moins) : rien ne change · {comptes}")
     } else if z.est_changee() {
-        format!("Changement retenu · {comptes}")
+        format!(
+            "Changement retenu · {comptes} · {}",
+            explication_confiance(z.confiance)
+        )
+    } else if let Some(sens) = z.indice {
+        format!(
+            "Un indice seulement ({} de {}, préféré une seule fois) : rien ne change, ce sera rejoué en premier au prochain test · {comptes}",
+            match sens {
+                Sens::Plus => "plus",
+                Sens::Moins => "moins",
+            },
+            z.zone.nom().to_lowercase()
+        )
     } else if z.pour_variante == 0 && z.pour_reference == 0 {
         format!("Pareil {} fois · ton réglage est gardé", z.pareil)
     } else if z.pour_reference > z.pour_variante {
         format!("Référence préférée · {comptes}")
     } else {
-        format!("Avis partagés · {comptes}")
+        format!("Avis partagés : rien ne change · {comptes}")
+    }
+}
+
+/// Ce qu'un niveau de confiance veut dire, dans les termes de l'ADR-0005 : il décrit une
+/// comparaison prise seule. Il ne dit pas « ce changement est probablement réel », parce
+/// qu'un test fait plusieurs comparaisons à la fois.
+pub fn explication_confiance(confiance: Confiance) -> &'static str {
+    match confiance {
+        Confiance::Sur => {
+            "prise seule, cette comparaison avait moins de 6 % de chances de tomber ainsi par hasard"
+        }
+        Confiance::Probable => {
+            "prise seule, cette comparaison avait au plus 1 chance sur 4 de tomber ainsi par hasard"
+        }
+        Confiance::Indice => "prise seule, cette comparaison peut très bien être due au hasard",
     }
 }
 
@@ -443,12 +474,61 @@ pub fn annonce_profil_cree(profil: &str) -> String {
     format!("Profil « {profil} » créé.")
 }
 
-pub fn annonce_import(profil: &str, format: &str, lignes_ignorees: usize) -> String {
-    let base = format!("« {profil} » importé depuis {}.", nom_format(format));
-    match lignes_ignorees {
-        0 => base,
-        1 => format!("{base} 1 ligne n’a pas pu être reprise."),
-        n => format!("{base} {n} lignes n’ont pas pu être reprises."),
+/// Pourquoi une ligne d'un fichier importé a été laissée de côté, en quelques mots.
+pub fn raison_ignoree(raison: &RaisonIgnoree) -> &'static str {
+    match raison {
+        RaisonIgnoree::TypeFiltreNonGere(_) => "type de filtre non géré",
+        RaisonIgnoree::PenteNonGeree => "plateau réglé par une pente",
+        RaisonIgnoree::CanalParticulier => "réglage propre à un canal",
+        RaisonIgnoree::PeripheriqueParticulier => "réglage propre à un autre périphérique",
+        RaisonIgnoree::HautParleurParticulier => "réglage propre à un haut-parleur",
+        RaisonIgnoree::CommandeNonGeree => "commande non gérée",
+        _ => "ligne illisible",
+    }
+}
+
+/// Le compte rendu d'un import : ce qui a été laissé de côté et pourquoi, ce qui a été
+/// repris de façon approchée. Jamais un simple « réussi » quand le profil n'est pas tout le fichier.
+pub fn annonce_import(
+    profil: &str,
+    format: &str,
+    laissees: &[(&'static str, usize)],
+    approchees: usize,
+) -> String {
+    let mut texte = format!("« {profil} » importé depuis {}", nom_format(format));
+    let total: usize = laissees.iter().map(|(_, n)| n).sum();
+    if total == 0 {
+        texte.push('.');
+    } else {
+        let details: Vec<String> = laissees
+            .iter()
+            .map(|(raison, n)| format!("{n} × {raison}"))
+            .collect();
+        texte.push_str(&format!(
+            ", en partie seulement : {} laissée{} de côté ({}).",
+            pluriel(total as u32, "ligne", "lignes"),
+            if total > 1 { "s" } else { "" },
+            details.join(", ")
+        ));
+    }
+    if approchees > 0 {
+        texte.push_str(&format!(
+            " {} reprise{} de façon approchée.",
+            pluriel(approchees as u32, "ligne", "lignes"),
+            if approchees > 1 { "s" } else { "" }
+        ));
+    }
+    texte
+}
+
+/// Après « Rendre le son d'origine ». `copie` : une ancienne copie de la configuration
+/// restée sur le disque parce qu'elle différait de ce qui a été rendu.
+pub fn annonce_son_origine(copie: Option<&str>) -> String {
+    match copie {
+        None => ANNONCE_SON_ORIGINE.to_string(),
+        Some(chemin) => format!(
+            "{ANNONCE_SON_ORIGINE} Une ancienne copie de ta configuration, différente, est gardée ici : {chemin}"
+        ),
     }
 }
 
@@ -466,7 +546,9 @@ pub fn annonce_egaliseur(coupe: bool) -> &'static str {
 
 pub const ANNONCE_MOTEUR_AUTORISE: &str = "Égaliseur activé sur ta sortie audio.";
 pub const ANNONCE_SON_ORIGINE: &str =
-    "Son d’origine rendu : Retro EQ ne touche plus à ta configuration audio.";
+    "Son d’origine rendu : ce que Retro EQ avait écrit dans ta configuration audio est retiré.";
+pub const ANNONCE_SANS_REPONSE: &str =
+    "Pas de réponse depuis un moment : test en pause, ta référence est remise. Ce duel sera rejoué.";
 pub const ANNONCE_TEST_ARRETE: &str = "Test arrêté. Ta référence est remise.";
 pub const ANNONCE_TEST_REPRIS: &str =
     "Un test interrompu a été retrouvé : tes réponses sont gardées, tu peux le reprendre.";
@@ -674,8 +756,8 @@ mod tests {
 
     #[test]
     fn le_resume_accorde_le_singulier_et_le_pluriel() {
-        assert_eq!(resume_zones(2, 3), "2 zones changent, 3 restent comme avant.");
-        assert_eq!(resume_zones(1, 1), "1 zone change, 1 reste comme avant.");
-        assert!(resume_zones(0, 4).starts_with("Aucune zone"));
+        assert_eq!(resume_zones(2, 3, false), "2 zones changent, 3 restent comme avant.");
+        assert_eq!(resume_zones(1, 1, false), "1 zone change, 1 reste comme avant.");
+        assert!(resume_zones(0, 4, false).starts_with("Aucune zone"));
     }
 }

@@ -96,7 +96,7 @@ export component EcranResultat inherits VerticalLayout {
                 TitreSection { contenu: @tr("Ce que tes oreilles ont choisi"); }
                 Paragraphe {
                     font-size: 14px;
-                    text: @tr("Indice : avis partagés. Probable : une chance sur 4 au plus que ce soit le hasard. Sûr : moins de 6 % de hasard.");
+                    text: @tr("Chaque niveau décrit une comparaison prise seule. Indice : elle peut être due au hasard. Probable : elle avait au plus 1 chance sur 4 de tomber ainsi par hasard. Sûr : moins de 6 %. Un test fait plusieurs comparaisons : ces niveaux ne garantissent pas qu’un changement est réel.");
                 }
                 if Resultat.zones.length == 0: Paragraphe { text: @tr("Aucune zone n’a encore été testée."); }
                 for z in Resultat.zones: LigneZoneResultat {
@@ -123,10 +123,14 @@ export component EcranResultat inherits VerticalLayout {
             alignment: start;
             Carte {
                 TitreSection { contenu: @tr("Garder ce profil"); }
+                if !Resultat.active && !Resultat.recommandee: Paragraphe {
+                    text: @tr("Ce test ne donne pas de raison d’activer cette version : ta référence reste en place.");
+                    font-size: 15px;
+                }
                 if !Resultat.active: Bouton {
-                    texte: @tr("Activer ce profil");
+                    texte: Resultat.recommandee ? @tr("Activer ce profil") : @tr("Activer quand même");
                     prefixe: "✓";
-                    genre: GenreBouton.principal;
+                    genre: Resultat.recommandee ? GenreBouton.principal : GenreBouton.secondaire;
                     active => { Resultat.activer(); }
                 }
                 if Resultat.active: VerticalLayout {

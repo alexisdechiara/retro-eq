@@ -19,7 +19,7 @@ pub use vues::*;
 use crate::textes;
 use retro_core::formats::{self, ErreurFormat, Format};
 use retro_core::{
-    duel_verification, plan, ContexteReprise, Cote, Depot, Deroulement, Effet, Entree,
+    duel_verification, plan_avec_historique, ContexteReprise, HistoriquePlan, Cote, Depot, Deroulement, Effet, Entree,
     ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
     FadersEtSupplementaires, HasardGraine, HasardReel, Journal, Langue, Mode, Navigation, Origine,
     ParametresTest, Profil, RaisonPause, ReglagesAppli, ReglagesTest,
@@ -543,7 +543,15 @@ impl Controleur {
             }
             c.reglages.moteur_autorise = false;
             c.sauver_reglages();
-            Ok(Some(textes::ANNONCE_SON_ORIGINE.to_string()))
+            // Une ancienne copie de la configuration, différente de ce qui vient d'être
+            // rendu, est restée sur le disque : on dit où.
+            let copie = c
+                .moteur
+                .copie_de_securite()
+                .filter(|_| !c.options.moteur_absent);
+            Ok(Some(textes::annonce_son_origine(
+                copie.as_deref().map(|p| p.display().to_string()).as_deref(),
+            )))
         });
     }
 
@@ -823,19 +831,27 @@ impl Controleur {
             );
             nouveau = Some(profil.id().to_string());
             c.ajouter_profil(profil)?;
-            // Les commentaires et les lignes éteintes ne sont pas une perte : on ne compte
-            // que ce qui aurait dû donner un filtre.
-            let perdues = import
+            // Les commentaires et les lignes éteintes ne sont pas une perte : le résumé ne
+            // compte que ce qui change le son, et à part ce qui a été repris de façon approchée.
+            let mut laissees: Vec<(&'static str, usize)> = Vec::new();
+            for ligne in import.ignores.iter().filter(|l| l.raison.change_le_son()) {
+                let raison = textes::raison_ignoree(&ligne.raison);
+                match laissees.iter_mut().find(|(r, _)| *r == raison) {
+                    Some((_, n)) => *n += 1,
+                    None => laissees.push((raison, 1)),
+                }
+            }
+            let approchees = import
                 .ignores
                 .iter()
-                .filter(|l| {
-                    matches!(
-                        l.raison,
-                        formats::RaisonIgnoree::TypeFiltreNonGere(_) | formats::RaisonIgnoree::Illisible
-                    )
-                })
+                .filter(|l| l.raison == formats::RaisonIgnoree::Approximation)
                 .count();
-            Ok(Some(textes::annonce_import(&nom, nom_format, perdues)))
+            Ok(Some(textes::annonce_import(
+                &nom,
+                nom_format,
+                &laissees,
+                approchees,
+            )))
         });
         nouveau
     }
@@ -1026,11 +1042,13 @@ impl Controleur {
         }
     }
 
-    /// Les zones déjà testées pour ce profil, du plus ancien test au plus récent : le plan
-    /// commence par celles qui attendent depuis le plus longtemps (ADR-0005).
-    fn zones_deja_testees(&self, profil_id: &str) -> Vec<Zone> {
+    /// Ce que les tests finis de ce profil apprennent au suivant, du plus ancien au plus
+    /// récent : les couples (zone, sens) déjà joués, et les indices du dernier test, qui
+    /// passeront en tête du plan (ADR-0005). Tout est relu dans les journaux.
+    fn historique_plan(&self, profil_id: &str) -> HistoriquePlan {
+        let mut historique = HistoriquePlan::depuis_zones(&[]);
         let Ok(dossier) = std::fs::read_dir(self.depot.dossier().join("tests")) else {
-            return Vec::new();
+            return historique;
         };
         let mut ids: Vec<String> = dossier
             .filter_map(|e| e.ok())
@@ -1042,27 +1060,25 @@ impl Controleur {
             })
             .collect();
         ids.sort();
-        let mut zones = Vec::new();
         for id in ids {
             let Ok(lecture) = self.depot.lire_journal(&id) else {
                 continue;
             };
-            let fini = lecture
-                .entrees
-                .iter()
-                .any(|e| matches!(e, Entree::TestTermine { .. }));
-            if let (true, Some(Entree::TestDemarre { profil_id: p, plan, .. })) =
-                (fini, lecture.entrees.first())
-            {
-                if p == profil_id {
-                    zones.extend(plan.iter().filter_map(|d| match d.sujet {
-                        Sujet::Zone { zone, .. } => Some(zone),
-                        _ => None,
-                    }));
-                }
+            let Some(Entree::TestDemarre {
+                profil_id: p, plan, ..
+            }) = lecture.entrees.first()
+            else {
+                continue;
+            };
+            let resultat = lecture.entrees.iter().find_map(|e| match e {
+                Entree::TestTermine { resultat, .. } => Some(resultat),
+                _ => None,
+            });
+            if let (true, Some(resultat)) = (p == profil_id, resultat) {
+                historique.ajouter_test(plan, &resultat.indices);
             }
         }
-        zones
+        historique
     }
 
     /// Lance un test avec les choix mémorisés. Rend vrai si un test tourne après l'appel
@@ -1090,9 +1106,9 @@ impl Controleur {
             let (mode, autre) = c.mode_choisi()?;
             let profil = c.profil_actif()?;
             let (profil_id, reference) = (profil.id().to_string(), profil.version_active().clone());
-            let historique = c.zones_deja_testees(&profil_id);
+            let historique = c.historique_plan(&profil_id);
             let mut hasard = c.hasard();
-            let duels = plan(&mode, &reference, &historique, &mut hasard);
+            let duels = plan_avec_historique(&mode, &reference, &historique, &mut hasard);
             let verification = duel_verification(&mut hasard);
             let test_id = format!("t{t}");
             let journal = c.depot.ouvrir_journal(&test_id)?;
@@ -1273,8 +1289,18 @@ impl Controleur {
 
     /// Le temps passe : à appeler plusieurs fois par seconde pendant un test.
     pub fn tic(&mut self, t: u64) {
-        if self.test_en_cours() {
-            self.envoyer(Evenement::Tic, t);
+        if !self.test_en_cours() {
+            return;
+        }
+        let avant = self.etat_test();
+        self.envoyer(Evenement::Tic, t);
+        // Personne n'a répondu à temps : le test s'est mis en pause tout seul et la
+        // référence est remise (ADR-0012). On le dit, sinon la pause surprend.
+        let sans_reponse = Some(EtatTest::EnPause {
+            raison: RaisonPause::SansReponse,
+        });
+        if avant != sans_reponse && self.etat_test() == sans_reponse {
+            self.annoncer(textes::ANNONCE_SANS_REPONSE);
         }
     }
 
@@ -1595,7 +1621,11 @@ impl Controleur {
                 let numero = dernier.version_nouvelle.unwrap_or(dernier.version_reference);
                 (
                     format!("{} · version {numero}", profil.nom()),
-                    textes::resume_zones(changees, r.zones.len() as u32 - changees),
+                    textes::resume_zones(
+                        changees,
+                        r.zones.len() as u32 - changees,
+                        r.controles.rien_retenu,
+                    ),
                     r.nouvelle_courbe.clone(),
                     est_actif && Some(profil.numero_actif()) == dernier.version_nouvelle,
                 )
@@ -1632,6 +1662,7 @@ impl Controleur {
             courbe_reference: dernier.courbe_reference.clone(),
             courbe_nouvelle,
             active,
+            recommandee: r.recommandee || r.autre_profil.as_ref().is_some_and(|b| b.preference == retro_core::Preference::Variante),
         })
     }
 

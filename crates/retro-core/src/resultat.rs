@@ -495,7 +495,11 @@ mod tests {
         assert_eq!(z.indice, Some(Sens::Moins));
         assert!(!r.a_des_changements());
         assert_eq!(r.indices, vec![(Zone::Graves, Sens::Moins)]);
-        assert_eq!(r.nouveaux_pas[Zone::Graves.index()], 4.0, "zone encore à l'étude");
+        assert_eq!(
+            r.nouveaux_pas[Zone::Graves.index()],
+            4.0,
+            "zone encore à l'étude"
+        );
         assert!(r.nouvelle_courbe.filtres.is_empty());
         // Un seul duel joué et gagné : indice aussi.
         let p = vec![duel_zone(Zone::Air, Sens::Plus, true)];
@@ -776,7 +780,12 @@ mod tests {
         assert!(r.controles.rien_retenu);
         assert!(r.controles.penalise);
         assert_eq!(
-            (r.controles.total, r.controles.repondus, r.controles.a_ou_b, r.controles.pareil),
+            (
+                r.controles.total,
+                r.controles.repondus,
+                r.controles.a_ou_b,
+                r.controles.pareil
+            ),
             (2, 2, 1, 1)
         );
         assert!(!r.a_des_changements());
@@ -1035,7 +1044,10 @@ mod tests {
         let o = v.as_object_mut().unwrap();
         o.remove("recommandee");
         o.remove("indices");
-        o["controles"].as_object_mut().unwrap().remove("rien_retenu");
+        o["controles"]
+            .as_object_mut()
+            .unwrap()
+            .remove("rien_retenu");
         o["zones"][0].as_object_mut().unwrap().remove("indice");
         let ancien: ResultatTest = serde_json::from_value(v).unwrap();
         assert!(!ancien.recommandee);

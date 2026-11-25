@@ -247,6 +247,7 @@ impl Pont {
                 resultat.set_courbe_reference(chemin_svg(&vue.courbe_reference).into());
                 resultat.set_courbe_nouvelle(chemin_svg(&vue.courbe_nouvelle).into());
                 resultat.set_active(vue.active);
+                resultat.set_recommandee(vue.recommandee);
                 resultat.set_preampli_db(vue.preampli_db as f32);
                 maj(
                     &self.modeles.zones,

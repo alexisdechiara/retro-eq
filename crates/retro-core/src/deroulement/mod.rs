@@ -30,8 +30,8 @@ mod tests;
 pub use reprise::{ContexteReprise, ErreurReprise};
 pub use vue::{DuelFini, EtatTest, VueTest};
 
-use crate::journal::{Entree, RaisonPause};
 use crate::hasard::HasardGraine;
+use crate::journal::{Entree, RaisonPause};
 use crate::plan::{retirer_duel, Cote, DuelPrevu, Mode, Reponse, Sujet};
 use crate::profil::Version;
 use crate::reglages::ReglagesTest;
@@ -137,12 +137,21 @@ pub const PAUSE_QUI_REPOSE_MS: u64 = 5 * 60 * 1000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     Pret,
-    Ecoute { passage: usize, debut_ms: u64 },
+    Ecoute {
+        passage: usize,
+        debut_ms: u64,
+    },
     /// La question est posée. `applique` est le côté en place ; `depuis_ms` le début du
     /// délai de réponse (relancé par chaque réécoute).
-    Attente { applique: Cote, depuis_ms: u64 },
+    Attente {
+        applique: Cote,
+        depuis_ms: u64,
+    },
     /// À la reprise, le duel courant repart toujours de son premier passage.
-    Pause { raison: RaisonPause, depuis_ms: u64 },
+    Pause {
+        raison: RaisonPause,
+        depuis_ms: u64,
+    },
     Termine,
     Abandonne,
 }

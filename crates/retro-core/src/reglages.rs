@@ -207,9 +207,14 @@ mod tests {
     fn le_delai_de_reponse_vaut_2_minutes_et_reste_entre_30_secondes_et_10_minutes() {
         let r = ReglagesTest::default();
         assert_eq!(r.delai_reponse_ms(), 120_000);
-        assert_eq!(r.clone().avec_delai_reponse_ms(1).delai_reponse_ms(), 30_000);
         assert_eq!(
-            r.clone().avec_delai_reponse_ms(9_999_999).delai_reponse_ms(),
+            r.clone().avec_delai_reponse_ms(1).delai_reponse_ms(),
+            30_000
+        );
+        assert_eq!(
+            r.clone()
+                .avec_delai_reponse_ms(9_999_999)
+                .delai_reponse_ms(),
             600_000
         );
         assert_eq!(r.avec_delai_reponse_ms(45_000).delai_reponse_ms(), 45_000);

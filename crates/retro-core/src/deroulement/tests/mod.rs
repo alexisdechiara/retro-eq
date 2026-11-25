@@ -203,7 +203,9 @@ impl Banc {
             EtatTest::EnEcoute { .. } | EtatTest::AttenteReponse
         );
         if en_duel {
-            let cote = vue.cote_actif.unwrap_or_else(|| panic!("aucun côté {contexte}"));
+            let cote = vue
+                .cote_actif
+                .unwrap_or_else(|| panic!("aucun côté {contexte}"));
             let (applique, courbe) = self.appliquee.as_ref().unwrap();
             assert_eq!(*applique, Some(cote), "mauvais côté {contexte}");
             let duel = self.prevu(vue.duel as usize - 1);
@@ -214,7 +216,10 @@ impl Banc {
                 cote_var
             };
             assert_eq!(courbe, attendue, "pas la courbe de ce côté {contexte}");
-            assert_ne!(courbe, &self.reference, "référence nue en plein duel {contexte}");
+            assert_ne!(
+                courbe, &self.reference,
+                "référence nue en plein duel {contexte}"
+            );
             assert!(
                 !effets
                     .iter()
@@ -335,26 +340,5 @@ impl Banc {
 
     pub fn compte(&self, effet: &Effet) -> usize {
         self.tous.iter().filter(|e| *e == effet).count()
-    }
-}
-
-impl Banc {
-    /// La courbe appliquée au début du passage `passage` du duel `duel` (dernière fois).
-    pub fn appliquee_au_passage(&self, duel: u32, passage: u32) -> (Option<Cote>, Courbe) {
-        self.tous
-            .windows(2)
-            .rev()
-            .find_map(|paire| match (&paire[0], &paire[1]) {
-                (
-                    Effet::Journaliser(Entree::PassageDemarre {
-                        duel: d,
-                        passage: p,
-                        ..
-                    }),
-                    Effet::Appliquer { cote, courbe },
-                ) if *d == duel && *p == passage => Some((*cote, courbe.clone())),
-                _ => None,
-            })
-            .unwrap()
     }
 }

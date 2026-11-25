@@ -159,10 +159,11 @@ impl HistoriquePlan {
     /// Ajoute un test terminé : les couples de son plan, et les indices de son résultat
     /// (`resultat.indices`), qui remplacent ceux du test d'avant.
     pub fn ajouter_test(&mut self, plan: &[DuelPrevu], indices: &[Couple]) {
-        self.couples.extend(plan.iter().filter_map(|d| match d.sujet {
-            Sujet::Zone { zone, sens } => Some((zone, sens)),
-            _ => None,
-        }));
+        self.couples
+            .extend(plan.iter().filter_map(|d| match d.sujet {
+                Sujet::Zone { zone, sens } => Some((zone, sens)),
+                _ => None,
+            }));
         self.indices = indices.to_vec();
     }
 }

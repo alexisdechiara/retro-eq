@@ -156,7 +156,11 @@ impl Deroulement {
                     let meme_sujet = d.duel_courant().is_some_and(|c| c.sujet == prevu.sujet);
                     match d.plan.get_mut(courant) {
                         Some(place) if *duel as usize == courant && meme_sujet => *place = *prevu,
-                        _ => return Err(incoherent("nouveau tirage d'un autre duel que le duel courant")),
+                        _ => {
+                            return Err(incoherent(
+                                "nouveau tirage d'un autre duel que le duel courant",
+                            ))
+                        }
                     }
                     d.tirages += 1;
                     d.applis_duel.clear();

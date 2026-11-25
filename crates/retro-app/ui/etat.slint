@@ -88,6 +88,7 @@ export global Resultat {
     in property <string> courbe-reference: "";
     in property <string> courbe-nouvelle: "";
     in property <bool> active: false;
+    in property <bool> recommandee: true;        // faux : rien ne pousse à activer (aucun changement, ou référence préférée à la vérification)
     in property <float> preampli-db: 0;
     callback activer();
     callback revenir-reference();
