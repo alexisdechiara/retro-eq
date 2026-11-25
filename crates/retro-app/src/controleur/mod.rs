@@ -23,7 +23,7 @@ use retro_core::{
     Entree, ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
     FadersEtSupplementaires, HasardGraine, HasardReel, HistoriquePlan, Journal, Langue, Mode,
     Navigation, Origine, ParametresTest, Profil, RaisonPause, ReglagesAppli, ReglagesTest,
-    ReglagesVariantes, Reponse, ResultatTest, Sujet, Version, Zone,
+    ReglagesVariantes, Reponse, ResultatTest, Version, Zone,
 };
 use retro_dsp::{Courbe, Spectre};
 use retro_engine::{ErreurMoteur, EtatMoteur, Moteur, SortieAudio};
@@ -563,6 +563,14 @@ impl Controleur {
 
     /// Coupe ou remet l'égaliseur (Ctrl+Alt+0). Le moteur reste en place, à plat.
     pub fn basculer_egaliseur(&mut self) {
+        // Tant que l'accord n'est pas donné, il n'y a rien à couper : on le dit.
+        if !self.reglages.moteur_autorise && !self.options.moteur_absent {
+            self.annonce = Some(Annonce {
+                texte: textes::ANNONCE_PAS_ENCORE_ACTIVE.to_string(),
+                erreur: true,
+            });
+            return;
+        }
         self.tenter(|c| {
             c.exiger_pas_de_test()?;
             c.reglages.egaliseur_coupe = !c.reglages.egaliseur_coupe;

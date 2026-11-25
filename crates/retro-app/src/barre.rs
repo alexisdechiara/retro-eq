@@ -4,6 +4,8 @@
 
 /// Ce que l'utilisateur a demandé depuis l'icône.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Hors Windows il n'y a pas d'icône : personne ne fabrique ces demandes.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum EvenementBarre {
     Ouvrir,
     BasculerEgaliseur,
@@ -30,7 +32,8 @@ mod systeme {
         let mut rgba = Vec::with_capacity((COTE * COTE * 4) as usize);
         for y in 0..COTE {
             for x in 0..COTE {
-                let coin = (x < 3 || x >= COTE - 3) && (y < 3 || y >= COTE - 3);
+                let bord = |v: u32| !(3..COTE - 3).contains(&v);
+                let coin = bord(x) && bord(y);
                 let couleur = if coin {
                     [0, 0, 0, 0]
                 } else {

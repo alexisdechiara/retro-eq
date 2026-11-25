@@ -133,23 +133,6 @@ fn pluriel(n: u32, singulier: &str, pluriel: &str) -> String {
     }
 }
 
-/// Un gain en dB avec son signe : « +4 dB », « −2,5 dB », « 0 dB ».
-pub fn db(valeur: f64) -> String {
-    let arrondi = (valeur * 10.0).round() / 10.0;
-    let nombre = if arrondi.fract() == 0.0 {
-        format!("{}", arrondi.abs() as i64)
-    } else {
-        format!("{:.1}", arrondi.abs()).replace('.', ",")
-    };
-    if arrondi > 0.0 {
-        format!("+{nombre} dB")
-    } else if arrondi < 0.0 {
-        format!("−{nombre} dB")
-    } else {
-        "0 dB".to_string()
-    }
-}
-
 /// Une fréquence lisible : « 250 Hz », « 2 kHz ».
 fn frequence(hz: f64) -> (String, &'static str) {
     if hz >= 1000.0 {
@@ -292,14 +275,6 @@ pub fn niveau_confiance(confiance: Confiance) -> i32 {
     }
 }
 
-pub fn nom_confiance(confiance: Confiance) -> &'static str {
-    match confiance {
-        Confiance::Indice => "Indice",
-        Confiance::Probable => "Probable",
-        Confiance::Sur => "Sûr",
-    }
-}
-
 /// Le résumé d'un résultat par zones : « 2 zones changent, 3 restent comme avant. »
 pub fn resume_zones(changees: u32, inchangees: u32, rien_retenu: bool) -> String {
     if rien_retenu {
@@ -373,7 +348,7 @@ pub fn verification(preference: Option<Preference>) -> String {
 /// Le détail d'une zone du résultat : les comptes tels quels, sans précision inventée.
 pub fn detail_zone(z: &ResultatZone, rien_retenu: bool) -> String {
     let comptes = format!(
-        "variante {} fois, référence {} fois, Pareil {} fois",
+        "les deux sens confondus : variante {} fois, référence {} fois, Pareil {} fois",
         z.pour_variante, z.pour_reference, z.pareil
     );
     if rien_retenu {
@@ -709,14 +684,6 @@ pub fn bilan_autotest(bons: usize, a_verifier: usize, erreurs: usize) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn les_gains_sont_ecrits_a_la_francaise() {
-        assert_eq!(db(4.0), "+4 dB");
-        assert_eq!(db(-2.5), "−2,5 dB");
-        assert_eq!(db(0.0), "0 dB");
-        assert_eq!(db(-0.01), "0 dB");
-    }
 
     #[test]
     fn les_plages_de_zone_melangent_hz_et_khz_quand_il_faut() {

@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use retro_core::{DuelPrevu, LectureJournal};
+use retro_core::{DuelPrevu, LectureJournal, Sujet};
 use retro_dsp::TypeFiltre;
 use retro_engine::{Appel, MoteurSimule};
 use tempfile::TempDir;
@@ -678,11 +678,7 @@ fn sans_changement_la_nouvelle_version_est_activee_avec_des_pas_reduits() {
     let profil = banc.depot().charger_profil("mon-profil").unwrap();
     assert_eq!(profil.numero_actif(), 2);
     assert_eq!(profil.version_active().courbe, profil.versions()[0].courbe);
-    assert!(profil
-        .version_active()
-        .pas_par_zone
-        .iter()
-        .any(|&pas| pas == 2.0));
+    assert!(profil.version_active().pas_par_zone.contains(&2.0));
     assert_eq!(
         banc.depot().charger_etat_moteur().unwrap().unwrap().version,
         Some(2)
