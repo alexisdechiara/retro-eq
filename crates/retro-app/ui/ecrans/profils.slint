@@ -46,13 +46,17 @@ component Cassette inherits Rectangle {
     TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.choisit(); } }
     // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.choisit(); return accept; }
             return reject;
         }
     }
-    if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 18px; }
+    if (portee.has-focus && portee.au-clavier): Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 18px; }
 }
 
 component Detail inherits Carte {

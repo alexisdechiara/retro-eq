@@ -133,7 +133,9 @@ export component EcranVisualiseur inherits VerticalLayout {
                             font-weight: 500;
                             font-size: 64px;
                             color: Theme.texte;
-                            min-width: 150px;
+                            // Largeur fixe, pour « −55,3 » comme pour « −8 » : la carte ne bouge pas.
+                            width: 200px;
+                            horizontal-alignment: right;
                         }
                         Text { text: "dB"; font-family: Theme.chiffres; font-size: 22px; color: Theme.discret; vertical-alignment: center; }
                     }

@@ -41,13 +41,17 @@ component Reponse inherits Rectangle {
     }
     // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.choisit(); return accept; }
             return reject;
         }
     }
-    if portee.has-focus: Rectangle {
+    if (portee.has-focus && portee.au-clavier): Rectangle {
         x: -5px;
         y: -5px;
         width: parent.width + 10px;

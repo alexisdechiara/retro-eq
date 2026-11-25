@@ -104,7 +104,9 @@ export component Accueil inherits VerticalLayout {
             HorizontalLayout {
                 spacing: 10px;
                 alignment: center;
-                Chiffres { text: Format.nombre(Appli.niveau-db, false); font-size: 72px; vertical-alignment: center; }
+                // Largeur fixe (jusqu'à « −120 ») et valeur entière : sinon la largeur suit le
+                // nombre et les deux cartes de la rangée se redistribuent à chaque changement.
+                Chiffres { text: Format.nombre(round(Appli.niveau-db), false); font-size: 72px; vertical-alignment: center; horizontal-alignment: right; width: 190px; }
                 Chiffres { text: "dB"; font-size: 24px; color: Theme.discret; vertical-alignment: center; }
             }
             Rectangle { vertical-stretch: 1; }

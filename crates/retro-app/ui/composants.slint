@@ -190,7 +190,7 @@ export component Bouton {
             background: Theme.ambre;
         }
     }
-    Anneau { visible-anneau: portee.has-focus; }
+    Anneau { visible-anneau: (portee.has-focus && portee.au-clavier); }
     zone := TouchArea {
         enabled: actif;
         mouse-cursor: pointer;
@@ -200,6 +200,10 @@ export component Bouton {
     // il prendrait le focus au premier appui ET garderait l'événement, et la TouchArea ne
     // verrait que le deuxième clic. C'est le `clicked` ci-dessus qui donne le focus.
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         enabled: actif;
         key-pressed(e) => {
@@ -220,9 +224,9 @@ export component Carte inherits Rectangle {
     border-radius: Theme.rayon-carte;
     border-width: 1.5px;
     border-color: alerte ? Theme.erreur : choisie ? Theme.ambre : Theme.trait;
-    drop-shadow-blur: 30px;
-    drop-shadow-offset-y: 18px;
-    drop-shadow-color: #000000b0;
+    drop-shadow-blur: Theme.ombre-carte-flou;
+    drop-shadow-offset-y: Theme.ombre-carte-decalage;
+    drop-shadow-color: Theme.ombre-carte;
     VerticalLayout {
         padding: remplissage;
         spacing: 16px;
@@ -396,7 +400,7 @@ export component Interrupteur {
                     background: coche ? Theme.sur-ambre : Theme.discret;
                     animate x { duration: Theme.rapide; easing: ease-out; }
                 }
-                Anneau { visible-anneau: portee.has-focus; }
+                Anneau { visible-anneau: (portee.has-focus && portee.au-clavier); }
             }
         }
     }
@@ -406,6 +410,10 @@ export component Interrupteur {
     }
     // `focus-on-click: false` : voir le commentaire de `Bouton`.
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) {
@@ -474,9 +482,9 @@ export component Platine inherits Rectangle {
     border-radius: Theme.rayon-carte;
     border-width: 1.5px;
     border-color: lecture ? couleur : Theme.trait;
-    drop-shadow-blur: 30px;
-    drop-shadow-offset-y: 18px;
-    drop-shadow-color: #000000b0;
+    drop-shadow-blur: Theme.ombre-carte-flou;
+    drop-shadow-offset-y: Theme.ombre-carte-decalage;
+    drop-shadow-color: Theme.ombre-carte;
     VerticalLayout {
         padding: compact ? 14px : 22px;
         spacing: compact ? 10px : 16px;
@@ -594,7 +602,7 @@ export component Fader {
                 drop-shadow-offset-y: 3px;
                 drop-shadow-color: Theme.ombre-bouton;
                 Rectangle { width: 22px; height: 3px; border-radius: 1.5px; background: Theme.ambre; }
-                Anneau { visible-anneau: portee.has-focus; rayon: 5px; }
+                Anneau { visible-anneau: (portee.has-focus && portee.au-clavier); rayon: 5px; }
             }
             prise := TouchArea {
                 mouse-cursor: ns-resize;
@@ -626,6 +634,10 @@ export component Fader {
     }
     // `focus-on-click: false` : le Fader prend le focus lui-même à l'appui (voir `prise`).
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == Key.UpArrow) { root.regle(min(maxi, valeur + 0.5)); return accept; }

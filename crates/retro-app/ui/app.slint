@@ -59,10 +59,14 @@ component Onglet {
     }
     if courant && !vertical: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
     if courant && vertical: Rectangle { x: 0px; width: 3px; height: 24px; border-radius: 1.5px; background: Theme.ambre; }
-    if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 6px; }
+    if (portee.has-focus && portee.au-clavier): Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 6px; }
     zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
     // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
@@ -102,11 +106,15 @@ component OngletAccueil {
             stroke-line-join: round;
             fill: transparent;
         }
-        if portee.has-focus: Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 20px; }
+        if (portee.has-focus && portee.au-clavier): Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 20px; }
     }
     if courant: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
     zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
     portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
         focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }

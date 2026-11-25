@@ -163,6 +163,10 @@ component Cassette inherits VerticalLayout {
             }
             // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
             portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
                 focus-on-click: false;
                 enabled: disponible;
                 key-pressed(e) => {
@@ -170,7 +174,7 @@ component Cassette inherits VerticalLayout {
                     return reject;
                 }
             }
-            if portee.has-focus: Rectangle {
+            if (portee.has-focus && portee.au-clavier): Rectangle {
                 x: -6px;
                 y: -6px;
                 width: parent.width + 12px;
