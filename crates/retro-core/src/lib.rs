@@ -38,6 +38,7 @@ pub use presets::{presets, Preset};
 pub use profil::{ErreurProfil, Origine, Profil, Version};
 pub use reglages::{Langue, Navigation, ReglagesAppli, ReglagesTest};
 pub use resultat::{
-    calculer_resultat, BilanControles, BilanDuels, PreferenceAppli, ResultatTest, ResultatZone,
+    calculer_resultat, BilanControles, BilanDuels, ComptesSens, PreferenceAppli, ResultatTest,
+    ResultatZone,
 };
 pub use zone::{filtre_de_zone, variante, ReglagesVariantes, Sens, Zone};

@@ -24,6 +24,9 @@ thiserror.workspace = true
 global-hotkey = "0.7"
 # Ouvre un lien ou un dossier avec l'appli par défaut du système (MIT).
 open = "5"
+# La langue du système, pour la langue de départ de l'interface (MIT ou Apache 2.0). Déjà
+# présente dans Cargo.lock : Slint s'en sert aussi.
+sys-locale = "0.3"
 # Sert seulement à connaître le décalage horaire local, pour dater les versions (MIT ou Apache 2.0).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 

@@ -37,7 +37,8 @@ const PREAMPLI_MIN_DB: f64 = -24.0;
 /// Nombre de points du spectre par défaut (bruit rose).
 const POINTS_SPECTRE: usize = 96;
 
-/// Ce qui peut empêcher une action. Le texte est celui montré à l'utilisateur.
+/// Ce qui peut empêcher une action. Le texte (`Display`) est en français et sert aux
+/// journaux et aux tests ; ce que l'utilisateur lit vient de `textes::erreur`, dans sa langue.
 #[derive(Debug, Error)]
 pub enum ErreurControleur {
     #[error("{0}")]
@@ -74,12 +75,31 @@ pub enum ErreurControleur {
     AucunResultat,
     #[error("Impossible de reprendre le test interrompu : {0}")]
     Reprise(#[from] ErreurReprise),
-    #[error("{action} : {source}")]
+    #[error("{} {} : {source}", .action.verbe(), .chemin.display())]
     Fichier {
-        action: String,
+        action: ActionFichier,
+        chemin: PathBuf,
         #[source]
         source: std::io::Error,
     },
+}
+
+/// Ce que l'appli faisait d'un fichier quand une erreur est survenue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionFichier {
+    Lecture,
+    Ecriture,
+}
+
+impl ActionFichier {
+    /// Le verbe, en français, pour le `Display` de l'erreur (les journaux). L'utilisateur,
+    /// lui, lit `textes::erreur`, qui parle sa langue.
+    fn verbe(self) -> &'static str {
+        match self {
+            ActionFichier::Lecture => "Lecture de",
+            ActionFichier::Ecriture => "Écriture de",
+        }
+    }
 }
 
 type Issue<T> = Result<T, ErreurControleur>;
@@ -96,6 +116,12 @@ pub struct Options {
     pub decalage_minutes: i32,
     /// Graine du hasard. `None` : vrai hasard. Les tests en fixent une pour être rejouables.
     pub graine: Option<u64>,
+    /// La langue du système : celle que prend l'appli au tout premier lancement, tant
+    /// qu'aucun réglage n'a été enregistré.
+    pub langue_systeme: Langue,
+    /// Une langue imposée pour cette exécution seulement (captures d'écran), sans toucher
+    /// aux réglages enregistrés.
+    pub langue_imposee: Option<Langue>,
 }
 
 /// Les choix de l'écran « Nouveau test ».
@@ -199,21 +225,31 @@ impl Controleur {
         maintenant_ms: u64,
     ) -> Result<Controleur, ErreurControleur> {
         let depot = Depot::ouvrir(dossier)?;
+        // Au tout premier lancement, aucun réglage n'est encore enregistré : l'appli prend
+        // la langue du système. Ensuite, c'est le choix de l'utilisateur qui compte.
+        let premier_lancement = !depot.dossier().join("reglages.json").exists();
         let mut annonce = None;
-        let reglages = depot.charger_reglages().unwrap_or_else(|e| {
+        let mut reglages = depot.charger_reglages().unwrap_or_else(|e| {
             annonce = Some(Annonce {
-                texte: format!("Réglages illisibles, valeurs par défaut reprises : {e}"),
+                texte: textes::annonce_reglages_illisibles(&e, options.langue_systeme),
                 erreur: true,
             });
             ReglagesAppli::default()
         });
+        if premier_lancement {
+            reglages.langue = options.langue_systeme;
+        }
+        if let Some(langue) = options.langue_imposee {
+            reglages.langue = langue;
+        }
+        let langue = reglages.langue;
         let liste = depot.lister_profils()?;
         if let Some(ignore) = liste.ignores.first() {
             annonce = Some(Annonce {
-                texte: format!(
-                    "Profil illisible laissé de côté ({}) : {}",
-                    ignore.chemin.display(),
-                    ignore.raison
+                texte: textes::annonce_profil_ignore(
+                    &ignore.chemin.display().to_string(),
+                    &ignore.raison,
+                    langue,
                 ),
                 erreur: true,
             });
@@ -248,6 +284,7 @@ impl Controleur {
             c.signaler(e);
         }
         c.retrouver_test_interrompu(maintenant_ms);
+        c.retrouver_dernier_resultat();
         Ok(c)
     }
 
@@ -267,7 +304,7 @@ impl Controleur {
         if self.profils.is_empty() {
             let profil = Profil::nouveau(
                 "mon-profil",
-                "Mon profil",
+                textes::profil_par_defaut(self.reglages.langue),
                 Courbe::default(),
                 Origine::Preset,
                 self.date(t),
@@ -294,7 +331,7 @@ impl Controleur {
         match self.reprendre_test(&dernier, t) {
             Ok(effets) => {
                 self.executer(effets, t);
-                self.annoncer(textes::ANNONCE_TEST_REPRIS);
+                self.annoncer(textes::annonce_test_repris(self.reglages.langue));
             }
             Err(e) => {
                 self.noter_abandon(&dernier, t);
@@ -344,15 +381,7 @@ impl Controleur {
             },
             t,
         )?;
-        // Le journal ne garde que la courbe de l'autre profil : on retrouve lequel c'était.
-        let autre = match mode {
-            Mode::ProfilContreProfil { autre, .. } => self
-                .profils
-                .iter()
-                .find(|p| p.id() != profil_id && &p.version_active().courbe == autre)
-                .map(|p| (p.id().to_string(), p.nom().to_string())),
-            _ => None,
-        };
+        let autre = self.retrouver_autre_profil(mode, profil_id);
         self.test = Some(TestEnCours {
             deroulement,
             journal: self.depot.ouvrir_journal(test_id)?,
@@ -363,6 +392,104 @@ impl Controleur {
             autre,
         });
         Ok(effets)
+    }
+
+    /// Le journal ne garde que la courbe de l'autre profil d'un test « profil contre
+    /// profil » : on retrouve lequel c'était d'après sa version active. Rend (identifiant, nom).
+    fn retrouver_autre_profil(&self, mode: &Mode, profil_id: &str) -> Option<(String, String)> {
+        match mode {
+            Mode::ProfilContreProfil { autre, .. } => self
+                .profils
+                .iter()
+                .find(|p| p.id() != profil_id && &p.version_active().courbe == autre)
+                .map(|p| (p.id().to_string(), p.nom().to_string())),
+            _ => None,
+        }
+    }
+
+    /// Les identifiants des journaux de test présents sur le disque, triés.
+    fn ids_journaux(&self) -> Vec<String> {
+        let Ok(dossier) = std::fs::read_dir(self.depot.dossier().join("tests")) else {
+            return Vec::new();
+        };
+        let mut ids: Vec<String> = dossier
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let chemin = e.path();
+                (chemin.extension().and_then(|x| x.to_str()) == Some("jsonl"))
+                    .then(|| chemin.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                    .flatten()
+            })
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    /// Refait « Ton résultat » au démarrage, d'après le journal du dernier test fini du
+    /// profil actif : sans cela, l'écran serait vide après chaque relance alors que le
+    /// journal garde `TestTermine { resultat }`. La courbe de référence, la version de
+    /// référence et l'autre profil viennent du début du journal ; la version ajoutée par le
+    /// test est celle du profil dont l'origine est ce test.
+    fn retrouver_dernier_resultat(&mut self) {
+        let Some(actif) = self.actif.clone() else {
+            return;
+        };
+        // (heure de fin, résultat reconstruit) du plus récent.
+        let mut dernier: Option<(u64, DernierResultat)> = None;
+        for id in self.ids_journaux() {
+            let Ok(lecture) = self.depot.lire_journal(&id) else {
+                continue;
+            };
+            let Some(Entree::TestDemarre {
+                profil_id,
+                version_reference,
+                courbe_reference,
+                mode,
+                ..
+            }) = lecture.entrees.first()
+            else {
+                continue;
+            };
+            if *profil_id != actif {
+                continue;
+            }
+            let Some((resultat, fin_ms)) = lecture.entrees.iter().find_map(|e| match e {
+                Entree::TestTermine {
+                    resultat,
+                    horodatage_ms,
+                } => Some((resultat, *horodatage_ms)),
+                _ => None,
+            }) else {
+                continue;
+            };
+            if dernier.as_ref().is_some_and(|(t, _)| *t > fin_ms) {
+                continue;
+            }
+            let sur_zones = !matches!(mode, Mode::ProfilContreProfil { .. });
+            let version_nouvelle = self.profil(&actif).ok().and_then(|p| {
+                p.versions()
+                    .iter()
+                    .find(|v| matches!(&v.origine, Origine::Test { test_id } if *test_id == id))
+                    .map(|v| v.numero)
+            });
+            // Un résultat « par zones » dont la version n'a jamais été enregistrée (arrêt
+            // brutal juste après la fin) ne pourrait pas être activé : on ne le montre pas.
+            if sur_zones && version_nouvelle.is_none() {
+                continue;
+            }
+            dernier = Some((
+                fin_ms,
+                DernierResultat {
+                    resultat: resultat.clone(),
+                    profil_id: actif.clone(),
+                    courbe_reference: courbe_reference.clone(),
+                    version_reference: *version_reference,
+                    version_nouvelle,
+                    autre: self.retrouver_autre_profil(mode, &actif),
+                },
+            ));
+        }
+        self.resultat = dernier.map(|(_, r)| r);
     }
 
     // ----- Petits outils -----
@@ -396,9 +523,14 @@ impl Controleur {
 
     fn signaler(&mut self, erreur: ErreurControleur) {
         self.annonce = Some(Annonce {
-            texte: erreur.to_string(),
+            texte: textes::erreur(&erreur, self.reglages.langue),
             erreur: true,
         });
+    }
+
+    /// La langue de l'interface en ce moment.
+    pub fn langue(&self) -> Langue {
+        self.reglages.langue
     }
 
     /// Exécute une action : son message de réussite devient une annonce, son erreur aussi.
@@ -533,7 +665,8 @@ impl Controleur {
         self.sauver_reglages();
         self.tenter(|c| {
             c.appliquer_courbe_du_jour()?;
-            Ok((!c.options.moteur_absent).then(|| textes::ANNONCE_MOTEUR_AUTORISE.to_string()))
+            Ok((!c.options.moteur_absent)
+                .then(|| textes::annonce_moteur_autorise(c.reglages.langue).to_string()))
         });
     }
 
@@ -557,6 +690,7 @@ impl Controleur {
                 .filter(|_| !c.options.moteur_absent);
             Ok(Some(textes::annonce_son_origine(
                 copie.as_deref().map(|p| p.display().to_string()).as_deref(),
+                c.reglages.langue,
             )))
         });
     }
@@ -566,7 +700,7 @@ impl Controleur {
         // Tant que l'accord n'est pas donné, il n'y a rien à couper : on le dit.
         if !self.reglages.moteur_autorise && !self.options.moteur_absent {
             self.annonce = Some(Annonce {
-                texte: textes::ANNONCE_PAS_ENCORE_ACTIVE.to_string(),
+                texte: textes::annonce_pas_encore_active(self.reglages.langue).to_string(),
                 erreur: true,
             });
             return;
@@ -577,7 +711,8 @@ impl Controleur {
             c.sauver_reglages();
             c.appliquer_courbe_du_jour()?;
             Ok(Some(
-                textes::annonce_egaliseur(c.reglages.egaliseur_coupe).to_string(),
+                textes::annonce_egaliseur(c.reglages.egaliseur_coupe, c.reglages.langue)
+                    .to_string(),
             ))
         });
     }
@@ -698,7 +833,11 @@ impl Controleur {
             c.brouillon = None;
             c.sauver_etat_moteur()?;
             c.appliquer_courbe_du_jour()?;
-            Ok(Some(textes::annonce_version_enregistree(numero, &nom)))
+            Ok(Some(textes::annonce_version_enregistree(
+                numero,
+                &nom,
+                c.reglages.langue,
+            )))
         });
     }
 
@@ -713,7 +852,7 @@ impl Controleur {
             c.brouillon = None;
             c.sauver_etat_moteur()?;
             c.appliquer_courbe_du_jour()?;
-            Ok(Some(textes::annonce_profil_active(&nom)))
+            Ok(Some(textes::annonce_profil_active(&nom, c.reglages.langue)))
         });
     }
 
@@ -741,7 +880,11 @@ impl Controleur {
                 c.sauver_etat_moteur()?;
                 c.appliquer_courbe_du_jour()?;
             }
-            Ok(Some(textes::annonce_version_activee(numero, &nom)))
+            Ok(Some(textes::annonce_version_activee(
+                numero,
+                &nom,
+                c.reglages.langue,
+            )))
         });
     }
 
@@ -765,7 +908,7 @@ impl Controleur {
         self.tenter(|c| {
             let source = c.profil(id)?;
             let version = source.version_active();
-            let nom = format!("{} (copie)", source.nom());
+            let nom = textes::copie_de(source.nom(), c.reglages.langue);
             let copie = Profil::nouveau(
                 c.nouvel_id(t),
                 nom.clone(),
@@ -775,7 +918,7 @@ impl Controleur {
             );
             nouveau = Some(copie.id().to_string());
             c.ajouter_profil(copie)?;
-            Ok(Some(textes::annonce_profil_cree(&nom)))
+            Ok(Some(textes::annonce_profil_cree(&nom, c.reglages.langue)))
         });
         nouveau
     }
@@ -784,20 +927,23 @@ impl Controleur {
     pub fn creer_depuis_preset(&mut self, nom_preset: &str, t: u64) -> Option<String> {
         let mut nouveau = None;
         self.tenter(|c| {
+            let l = c.reglages.langue;
+            // Le nom reçu est celui affiché dans la langue courante (ou le nom d'origine).
             let preset = retro_core::presets()
                 .into_iter()
-                .find(|p| p.nom == nom_preset)
+                .find(|p| p.nom == nom_preset || textes::nom_preset(p.nom, l) == nom_preset)
                 .ok_or(ErreurControleur::ProfilInconnu)?;
+            let nom = textes::nom_preset(preset.nom, l);
             let profil = Profil::nouveau(
                 c.nouvel_id(t),
-                preset.nom,
+                nom.clone(),
                 preset.courbe.avec_preampli_auto(),
                 Origine::Preset,
                 c.date(t),
             );
             nouveau = Some(profil.id().to_string());
             c.ajouter_profil(profil)?;
-            Ok(Some(textes::annonce_profil_cree(preset.nom)))
+            Ok(Some(textes::annonce_profil_cree(&nom, l)))
         });
         nouveau
     }
@@ -809,8 +955,10 @@ impl Controleur {
     pub fn importer(&mut self, chemin: &Path, t: u64) -> Option<String> {
         let mut nouveau = None;
         self.tenter(|c| {
+            let l = c.reglages.langue;
             let octets = std::fs::read(chemin).map_err(|source| ErreurControleur::Fichier {
-                action: format!("Lecture de {}", chemin.display()),
+                action: ActionFichier::Lecture,
+                chemin: chemin.to_path_buf(),
                 source,
             })?;
             // Peace écrit parfois en Windows-1252 : on lit ce qui est lisible plutôt que de refuser.
@@ -831,9 +979,10 @@ impl Controleur {
                 chemin
                     .file_stem()
                     .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "Profil importé".to_string())
+                    .unwrap_or_else(|| textes::profil_importe(l).to_string())
             });
             // Préampli automatique : un fichier venu d'ailleurs ne doit pas pouvoir saturer.
+            let (fichier, auto) = (import.courbe.preampli_db, import.courbe.preampli_auto_db());
             let profil = Profil::nouveau(
                 c.nouvel_id(t),
                 nom.clone(),
@@ -849,7 +998,7 @@ impl Controleur {
             // compte que ce qui change le son, et à part ce qui a été repris de façon approchée.
             let mut laissees: Vec<(&'static str, usize)> = Vec::new();
             for ligne in import.ignores.iter().filter(|l| l.raison.change_le_son()) {
-                let raison = textes::raison_ignoree(&ligne.raison);
+                let raison = textes::raison_ignoree(&ligne.raison, l);
                 match laissees.iter_mut().find(|(r, _)| *r == raison) {
                     Some((_, n)) => *n += 1,
                     None => laissees.push((raison, 1)),
@@ -860,8 +1009,10 @@ impl Controleur {
                 .iter()
                 .filter(|l| l.raison == formats::RaisonIgnoree::Approximation)
                 .count();
+            // Le préampli du fichier n'est pas repris : on dit quand l'écart s'entend.
+            let preampli = ((fichier - auto).abs() > 0.5).then_some((fichier, auto));
             Ok(Some(textes::annonce_import(
-                &nom, nom_format, &laissees, approchees,
+                &nom, nom_format, &laissees, approchees, preampli, l,
             )))
         });
         nouveau
@@ -894,10 +1045,14 @@ impl Controleur {
         std::fs::create_dir_all(&dossier)
             .and_then(|_| std::fs::write(&chemin, contenu))
             .map_err(|source| ErreurControleur::Fichier {
-                action: format!("Écriture de {}", chemin.display()),
+                action: ActionFichier::Ecriture,
+                chemin: chemin.clone(),
                 source,
             })?;
-        Ok(Some(textes::annonce_export(&chemin.display().to_string())))
+        Ok(Some(textes::annonce_export(
+            &chemin.display().to_string(),
+            self.reglages.langue,
+        )))
     }
 
     /// Exporte la version active d'un profil. `format` : « peace », « apo », « autoeq », « wavelet ».
@@ -922,7 +1077,8 @@ impl Controleur {
     pub fn exporter_resultat(&mut self, format: &str) {
         self.tenter(|c| {
             let dernier = c.resultat.as_ref().ok_or(ErreurControleur::AucunResultat)?;
-            let nom = format!("{} (résultat)", c.profil(&dernier.profil_id)?.nom());
+            let nom =
+                textes::nom_export_resultat(c.profil(&dernier.profil_id)?.nom(), c.reglages.langue);
             let courbe = dernier.resultat.nouvelle_courbe.clone();
             c.ecrire_export(&nom, &courbe, format)
         });
@@ -931,7 +1087,10 @@ impl Controleur {
     // ----- Réglages -----
 
     pub fn choisir_langue(&mut self, code: &str) {
-        self.reglages.langue = if code == "en" { Langue::En } else { Langue::Fr };
+        // Un code inconnu laisse la langue en place.
+        if let Some(langue) = Langue::depuis_code(code) {
+            self.reglages.langue = langue;
+        }
         self.sauver_reglages();
     }
 
@@ -1064,19 +1223,7 @@ impl Controleur {
     /// passeront en tête du plan (ADR-0005). Tout est relu dans les journaux.
     fn historique_plan(&self, profil_id: &str) -> HistoriquePlan {
         let mut historique = HistoriquePlan::depuis_zones(&[]);
-        let Ok(dossier) = std::fs::read_dir(self.depot.dossier().join("tests")) else {
-            return historique;
-        };
-        let mut ids: Vec<String> = dossier
-            .filter_map(|e| e.ok())
-            .filter_map(|e| {
-                let chemin = e.path();
-                (chemin.extension().and_then(|x| x.to_str()) == Some("jsonl"))
-                    .then(|| chemin.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                    .flatten()
-            })
-            .collect();
-        ids.sort();
+        let ids = self.ids_journaux();
         for id in ids {
             let Ok(lecture) = self.depot.lire_journal(&id) else {
                 continue;
@@ -1249,9 +1396,12 @@ impl Controleur {
         // On garde le message précis du moteur s'il y en a un, complété par ce qu'on a fait.
         let cause = self.annonce.take().map(|a| a.texte).unwrap_or_default();
         self.annonce = Some(Annonce {
-            texte: format!("{} {cause}", textes::ANNONCE_PAUSE_ERREUR)
-                .trim()
-                .to_string(),
+            texte: format!(
+                "{} {cause}",
+                textes::annonce_pause_erreur(self.reglages.langue)
+            )
+            .trim()
+            .to_string(),
             erreur: true,
         });
     }
@@ -1319,7 +1469,7 @@ impl Controleur {
             raison: RaisonPause::SansReponse,
         });
         if avant != sans_reponse && self.etat_test() == sans_reponse {
-            self.annoncer(textes::ANNONCE_SANS_REPONSE);
+            self.annoncer(textes::annonce_sans_reponse(self.reglages.langue));
         }
     }
 
@@ -1364,7 +1514,7 @@ impl Controleur {
         }
         self.envoyer(Evenement::Abandonner, t);
         self.test = None;
-        self.annoncer(textes::ANNONCE_TEST_ARRETE);
+        self.annoncer(textes::annonce_test_arrete(self.reglages.langue));
     }
 
     /// Un appel vocal commence ou se termine. Sans effet si le réglage est coupé.
@@ -1490,7 +1640,7 @@ impl Controleur {
                     actif: self.actif.as_deref() == Some(p.id()),
                     versions: p.versions().len(),
                     date: dates::jour_mois(&version.creee_le),
-                    resume: textes::resume_profil(&version.origine),
+                    resume: textes::resume_profil(&version.origine, self.reglages.langue),
                     courbe: version.courbe.clone(),
                 }
             })
@@ -1509,7 +1659,7 @@ impl Controleur {
             .map(|v| VueVersion {
                 numero: v.numero,
                 date: dates::jour_heure(&v.creee_le),
-                origine: textes::origine(&v.origine),
+                origine: textes::origine(&v.origine, self.reglages.langue),
                 active: v.numero == profil.numero_actif(),
                 courbe: v.courbe.clone(),
             })
@@ -1517,13 +1667,15 @@ impl Controleur {
     }
 
     pub fn presets(&self) -> Vec<String> {
+        let l = self.reglages.langue;
         retro_core::presets()
             .into_iter()
-            .map(|p| p.nom.to_string())
+            .map(|p| textes::nom_preset(p.nom, l))
             .collect()
     }
 
     pub fn vue_nouveau_test(&self) -> VueNouveauTest {
+        let l = self.reglages.langue;
         let zone = Zone::TOUTES.get(self.choix.zone).copied();
         let duels = match self.choix.mode.as_str() {
             "duels-en-jeu" if self.choix.precis => 30,
@@ -1537,12 +1689,12 @@ impl Controleur {
         VueNouveauTest {
             reference: self
                 .profil_actif()
-                .map(|p| format!("{} · version {}", p.nom(), p.numero_actif()))
+                .map(|p| textes::profil_et_version(p.nom(), p.numero_actif(), l))
                 .unwrap_or_default(),
-            source: textes::SOURCE_PC.to_string(),
-            mode: textes::nom_mode(&self.choix.mode, zone, &self.choix.autre_profil),
-            duree: textes::duree_test(duels, intervalle_s),
-            zones: textes::noms_zones(),
+            source: textes::source_pc(l).to_string(),
+            mode: textes::nom_mode(&self.choix.mode, zone, &self.choix.autre_profil, l),
+            duree: textes::duree_test(duels, intervalle_s, l),
+            zones: textes::noms_zones(l),
             profils: self
                 .profils
                 .iter()
@@ -1555,6 +1707,7 @@ impl Controleur {
     /// L'écran Duels à l'instant `t`. Ne contient que ce que le test à l'aveugle permet de
     /// montrer : ni le sujet du duel en cours, ni qui y joue la référence.
     pub fn vue_duels(&self, t: u64) -> VueDuels {
+        let l = self.reglages.langue;
         let Some(test) = self.test.as_ref() else {
             return VueDuels::default();
         };
@@ -1576,7 +1729,7 @@ impl Controleur {
                     Cote::A => vue.passages_a,
                     Cote::B => vue.passages_b,
                 };
-                textes::suite(cote, faits + 1)
+                textes::suite(cote, faits + 1, l)
             }
             _ => String::new(),
         };
@@ -1602,7 +1755,7 @@ impl Controleur {
                 .iter()
                 .rev()
                 .map(|duel| {
-                    let (titre, detail) = textes::ligne_journal(duel, fini);
+                    let (titre, detail) = textes::ligne_journal(duel, fini, l);
                     VueLigneJournal {
                         titre,
                         cote: textes::cote_reponse(duel.reponse),
@@ -1619,6 +1772,7 @@ impl Controleur {
     }
 
     pub fn vue_resultat(&self) -> Option<VueResultat> {
+        let l = self.reglages.langue;
         let dernier = self.resultat.as_ref()?;
         let profil = self.profil(&dernier.profil_id).ok()?;
         let r = &dernier.resultat;
@@ -1627,14 +1781,14 @@ impl Controleur {
             (Some(bilan), autre) => {
                 let (autre_id, autre_nom) = autre
                     .clone()
-                    .unwrap_or_else(|| (String::new(), "l’autre profil".to_string()));
+                    .unwrap_or_else(|| (String::new(), textes::l_autre_profil(l).to_string()));
                 let courbe = self
                     .profil(&autre_id)
                     .map(|p| p.version_active().courbe.clone())
                     .unwrap_or_else(|_| dernier.courbe_reference.clone());
                 (
-                    format!("{} contre {autre_nom}", profil.nom()),
-                    textes::resume_autre_profil(bilan, &autre_nom),
+                    textes::titre_profil_contre_profil(profil.nom(), &autre_nom, l),
+                    textes::resume_autre_profil(bilan, &autre_nom, l),
                     courbe,
                     self.actif.as_deref() == Some(autre_id.as_str()),
                 )
@@ -1645,11 +1799,12 @@ impl Controleur {
                     .version_nouvelle
                     .unwrap_or(dernier.version_reference);
                 (
-                    format!("{} · version {numero}", profil.nom()),
+                    textes::profil_et_version(profil.nom(), numero, l),
                     textes::resume_zones(
                         changees,
                         r.zones.len() as u32 - changees,
                         r.controles.rien_retenu,
+                        l,
                     ),
                     r.nouvelle_courbe.clone(),
                     est_actif && Some(profil.numero_actif()) == dernier.version_nouvelle,
@@ -1660,18 +1815,18 @@ impl Controleur {
             titre,
             confiance: textes::niveau_confiance(r.confiance),
             resume,
-            controles: textes::bilan_controles(&r.controles),
-            verification: textes::verification(r.verification_preference),
+            controles: textes::bilan_controles(&r.controles, l),
+            verification: textes::verification(r.verification_preference, l),
             zones: r
                 .zones
                 .iter()
                 .map(|z| VueZone {
-                    nom: z.zone.nom().to_string(),
-                    plage: textes::plage_zone(z.zone),
+                    nom: textes::nom_zone(z.zone, l).to_string(),
+                    plage: textes::plage_zone(z.zone, l),
                     gain_db: z.gain_db,
                     change: z.est_changee(),
                     confiance: textes::niveau_confiance(z.confiance),
-                    detail: textes::detail_zone(z, r.controles.rien_retenu),
+                    detail: textes::detail_zone(z, r.controles.rien_retenu, l),
                 })
                 .collect(),
             applis: r
@@ -1680,7 +1835,7 @@ impl Controleur {
                 .map(|a| VueAppliResultat {
                     nom: a.appli.clone(),
                     duels: a.duels,
-                    preference: textes::preference_appli(a.preference).to_string(),
+                    preference: textes::preference_appli(a.preference, l).to_string(),
                 })
                 .collect(),
             preampli_db: courbe_nouvelle.preampli_db,
@@ -1696,10 +1851,7 @@ impl Controleur {
 
     pub fn vue_reglages(&self) -> VueReglages {
         VueReglages {
-            langue: match self.reglages.langue {
-                Langue::Fr => "fr",
-                Langue::En => "en",
-            },
+            langue: self.reglages.langue.code(),
             rail: self.reglages.navigation == Navigation::Rail,
             fermer_reduit: self.reglages.fermer_reduit,
             mini_fenetre: self.reglages.mini_fenetre,

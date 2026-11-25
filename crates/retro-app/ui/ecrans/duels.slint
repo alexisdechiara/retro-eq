@@ -256,7 +256,7 @@ export component Duels inherits VerticalLayout {
         padding-top: 34px;
         spacing: 8px;
         TitreSection { contenu: @tr("Journal"); }
-        Paragraphe { text: @tr("Les zones sont tirées au hasard. La zone testée et qui était la référence ne sont révélées qu’après ta réponse."); }
+        Paragraphe { text: @tr("Pendant le test, chaque duel jugé n’affiche que ta réponse. La zone testée, les duels de contrôle et qui jouait la référence ne sont révélés qu’une fois le test terminé."); }
         Carte {
             remplissage: 16px;
             if Test.journal.length == 0: Paragraphe { text: @tr("Aucun duel jugé pour l’instant. Les réponses apparaîtront ici, une par une."); }

@@ -34,7 +34,20 @@ impl Banc {
             moteur_absent: false,
             decalage_minutes: 60,
             graine: Some(7),
+            langue_systeme: Langue::Fr,
+            langue_imposee: None,
         }
+    }
+
+    /// Ouvre un contrôleur avec ces options plutôt que les options habituelles.
+    fn ouvrir_avec(&self, options: Options, t: u64) -> Controleur {
+        Controleur::ouvrir(
+            self.dossier.path().join("donnees"),
+            Box::new(self.moteur.clone()),
+            options,
+            t,
+        )
+        .unwrap()
     }
 
     fn ouvrir(&self, t: u64) -> Controleur {
@@ -637,31 +650,145 @@ fn chaque_reponse_est_sur_le_disque_des_qu_elle_est_donnee() {
 }
 
 #[test]
-fn le_journal_affiche_ne_revele_pas_les_duels_de_controle() {
+fn le_journal_affiche_ne_revele_rien_tant_que_le_test_court() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();
     c.choisir_test(choix("duels-en-jeu"));
     c.demarrer_test(T0);
-    let duels = banc.duels(&identifiant(T0));
     let mut t = T0;
-    for _ in 0..11 {
-        t += 1_000;
-        c.repondre(Reponse::A, t);
+    for reponse in [Reponse::A, Reponse::B, Reponse::Pareil] {
+        for _ in 0..3 {
+            t += 1_000;
+            c.repondre(reponse, t);
+        }
     }
     let vue = c.vue_duels(t);
-    assert_eq!(vue.journal.len(), 11);
-    // Le journal va du plus récent au plus ancien.
-    for (ligne, duel) in vue.journal.iter().rev().zip(&duels) {
+    assert_eq!(vue.journal.len(), 9);
+    // Le journal va du plus récent au plus ancien : toutes les lignes ont la même forme,
+    // contrôles compris, et aucune ne nomme une zone ni la référence.
+    for (ligne, numero) in vue.journal.iter().zip((1..=9).rev()) {
+        assert_eq!(ligne.titre, format!("Duel {numero} · réponse enregistrée"));
         let texte = format!("{} {}", ligne.titre, ligne.detail);
-        assert!(!texte.contains("contrôle"), "{texte}");
-        if duel.est_controle() {
-            assert!(texte.ends_with("réponse enregistrée"), "{texte}");
-        } else {
-            assert!(texte.contains("était la"), "{texte}");
+        for interdit in [
+            "contrôle",
+            "référence",
+            "variante",
+            "zone",
+            "graves",
+            "aigus",
+        ] {
+            assert!(!texte.to_lowercase().contains(interdit), "{texte}");
+        }
+        // Ce que l'utilisateur a répondu, lui, est montré.
+        match numero {
+            1..=3 => assert_eq!(ligne.cote, 1),
+            4..=6 => assert_eq!(ligne.cote, 2),
+            _ => assert_eq!((ligne.cote, ligne.detail.as_str()), (0, "Pareil")),
         }
     }
     // Rien sur le duel en cours.
-    assert_eq!(vue.duel, 12);
+    assert_eq!(vue.duel, 10);
+}
+
+#[test]
+fn une_fois_le_test_fini_le_journal_revele_zones_et_controles() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    let fin = jouer(&mut c, &banc, T0, plus_de_graves);
+    let vue = c.vue_duels(fin);
+    assert_eq!(vue.etat, EtatTestVue::Termine);
+    let textes: Vec<String> = vue
+        .journal
+        .iter()
+        .map(|l| format!("{} {}", l.titre, l.detail))
+        .collect();
+    assert!(textes.iter().any(|t| t.contains("contrôle")), "{textes:?}");
+    assert!(
+        textes.iter().any(|t| t.contains("graves en plus")),
+        "{textes:?}"
+    );
+    assert!(textes.iter().all(|t| !t.contains("réponse enregistrée")));
+}
+
+#[test]
+fn le_dernier_resultat_survit_au_redemarrage() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    jouer(&mut c, &banc, T0, plus_de_graves);
+    let avant = c.vue_resultat().unwrap();
+    drop(c);
+
+    // Un nouveau contrôleur sur le même dossier retrouve le résultat dans le journal.
+    let c = banc.ouvrir(T0 + 3_600_000);
+    assert_eq!(c.vue_resultat(), Some(avant.clone()));
+    assert!(avant.zones.iter().any(|z| z.change));
+
+    // Il est encore activable, comme avant le redémarrage.
+    let mut c = c;
+    c.activer_resultat();
+    assert!(c.vue_resultat().unwrap().active);
+    c.revenir_reference();
+    assert!(!c.vue_resultat().unwrap().active);
+}
+
+#[test]
+fn le_resultat_retrouve_est_le_plus_recent_du_profil_actif() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    jouer(&mut c, &banc, T0, plus_de_graves);
+    let t1 = T0 + 7_200_000;
+    c.demarrer_test(t1);
+    jouer(&mut c, &banc, t1, |_| None);
+    let second = c.vue_resultat().unwrap();
+    // Le second test n'a rien changé : le résultat montré n'est pas celui du premier.
+    assert!(second.zones.iter().all(|z| !z.change));
+    drop(c);
+    let c = banc.ouvrir(t1 + 3_600_000);
+    assert_eq!(c.vue_resultat(), Some(second));
+}
+
+#[test]
+fn sans_test_fini_il_n_y_a_pas_de_resultat_au_demarrage() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    // Un test abandonné n'a pas de résultat à retrouver.
+    c.arreter_test(T0 + 5_000);
+    drop(c);
+    assert!(banc.ouvrir(T0 + 60_000).vue_resultat().is_none());
+}
+
+#[test]
+fn le_resultat_profil_contre_profil_survit_au_redemarrage() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let autre = c.creer_depuis_preset("À plat", T0 - 10).unwrap();
+    c.renommer_profil(&autre, "Harman");
+    c.activer_profil(&autre);
+    c.regler_bande(1, 6.0);
+    c.enregistrer_egaliseur(T0 - 5);
+    c.activer_profil("mon-profil");
+    c.choisir_test(ChoixTest {
+        autre_profil: "Harman".to_string(),
+        ..choix("profil-contre-profil")
+    });
+    assert!(c.demarrer_test(T0));
+    jouer(&mut c, &banc, T0, |sujet| match sujet {
+        Sujet::AutreProfil => Some(true),
+        _ => None,
+    });
+    let avant = c.vue_resultat().unwrap();
+    assert!(avant.titre.contains("Harman"));
+    drop(c);
+    let c = banc.ouvrir(T0 + 3_600_000);
+    assert_eq!(c.vue_resultat(), Some(avant));
 }
 
 #[test]
@@ -1275,7 +1402,9 @@ fn une_seule_victoire_est_un_indice_rejoue_en_tete_du_test_suivant() {
     let graves = resultat.zones.iter().find(|z| z.nom == "Graves").unwrap();
     assert!(!graves.change);
     assert!(
-        graves.detail.starts_with("Un indice seulement"),
+        graves
+            .detail
+            .ends_with("un indice, à confirmer au prochain test"),
         "{}",
         graves.detail
     );
@@ -1327,4 +1456,165 @@ fn un_import_partiel_dit_ce_qui_a_ete_laisse_de_cote() {
         "{}",
         annonce.texte
     );
+}
+
+#[test]
+fn un_import_dit_quand_son_preampli_est_remplace_par_l_automatique() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let ecrire = |nom: &str, preampli: &str| {
+        let fichier = banc.dossier.path().join(nom);
+        std::fs::write(
+            &fichier,
+            format!("Preamp: {preampli} dB\nFilter 1: ON PK Fc 1000 Hz Gain 4.2 dB Q 1.41\n"),
+        )
+        .unwrap();
+        fichier
+    };
+
+    // Préampli du fichier à -6 dB, automatique à -4,2 dB : on le dit, avec les deux valeurs.
+    assert!(c.importer(&ecrire("a.txt", "-6"), T0).is_some());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(!annonce.erreur);
+    assert!(
+        annonce
+            .texte
+            .contains("préampli du fichier (−6 dB) remplacé par le préampli automatique (−4,2 dB)"),
+        "{}",
+        annonce.texte
+    );
+    // Le profil créé porte bien le préampli automatique.
+    let profil = c.vue_profils().into_iter().last().unwrap();
+    assert!((profil.courbe.preampli_db - profil.courbe.preampli_auto_db()).abs() < 1e-9);
+    assert!((profil.courbe.preampli_db + 4.2).abs() < 0.05);
+
+    // À 0,3 dB près, rien à signaler.
+    assert!(c.importer(&ecrire("b.txt", "-4.5"), T0 + 1).is_some());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(!annonce.texte.contains("préampli"), "{}", annonce.texte);
+}
+
+// ----- Langue -----
+
+#[test]
+fn au_premier_lancement_l_appli_prend_la_langue_du_systeme() {
+    let banc = Banc::nouveau();
+    let options = Options {
+        langue_systeme: Langue::En,
+        ..banc.options()
+    };
+    let c = banc.ouvrir_avec(options.clone(), T0);
+    assert_eq!(c.langue(), Langue::En);
+    assert_eq!(c.vue_reglages().langue, "en");
+    // Le profil de départ porte son nom dans la langue de l'appli.
+    assert_eq!(c.vue_profils()[0].nom, "My profile");
+    assert_eq!(c.vue_nouveau_test().source, "What plays on the PC");
+}
+
+#[test]
+fn le_choix_de_l_utilisateur_l_emporte_ensuite_sur_la_langue_du_systeme() {
+    let banc = Banc::nouveau();
+    let systeme_anglais = Options {
+        langue_systeme: Langue::En,
+        ..banc.options()
+    };
+    let mut c = banc.ouvrir_avec(systeme_anglais.clone(), T0);
+    c.choisir_langue("fr");
+    assert_eq!(c.langue(), Langue::Fr);
+    drop(c);
+    // Au lancement suivant, le français choisi est resté, même si le système est en anglais.
+    let c = banc.ouvrir_avec(systeme_anglais, T0 + 1_000);
+    assert_eq!(c.langue(), Langue::Fr);
+    // Un code inconnu ne change rien.
+    let mut c = c;
+    c.choisir_langue("de");
+    assert_eq!(c.langue(), Langue::Fr);
+}
+
+#[test]
+fn une_langue_imposee_ne_touche_pas_aux_reglages_enregistres() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_langue("fr");
+    drop(c);
+    let imposee = Options {
+        langue_imposee: Some(Langue::En),
+        ..banc.options()
+    };
+    let c = banc.ouvrir_avec(imposee, T0 + 1_000);
+    assert_eq!(c.langue(), Langue::En);
+    drop(c);
+    assert_eq!(banc.depot().charger_reglages().unwrap().langue, Langue::Fr);
+}
+
+#[test]
+fn changer_de_langue_change_toutes_les_phrases_des_vues_et_des_annonces() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    jouer(&mut c, &banc, T0, plus_de_graves);
+    let fr = c.vue_resultat().unwrap();
+    assert!(fr.resume.contains("zone change"));
+
+    c.choisir_langue("en");
+    let en = c.vue_resultat().unwrap();
+    assert_eq!(en.resume, "1 zone changes, 2 stay as before.");
+    assert_ne!(fr.zones[0].detail, en.zones[0].detail);
+    assert!(en.zones.iter().any(|z| z.nom == "Bass"));
+    assert!(en.controles.starts_with("Out of "));
+    assert!(en.verification.starts_with("Verification duel"));
+    // Le journal du test fini, révélé, parle anglais aussi.
+    let journal = c.vue_duels(T0 + 10_000_000).journal;
+    assert!(journal.iter().any(|l| l.titre.contains("control")));
+
+    // Les annonces et les erreurs aussi.
+    c.activer_resultat();
+    assert!(c.prendre_annonce().unwrap().texte.contains("activated"));
+    c.arreter_test(T0);
+    c.regler_bande(0, 1.0);
+    c.choisir_test(choix("duels-en-jeu"));
+    assert!(!c.demarrer_test(T0 + 20_000_000));
+    let erreur = c.prendre_annonce().unwrap();
+    assert!(erreur.erreur);
+    assert_eq!(
+        erreur.texte,
+        "Save or undo your changes in the equalizer first."
+    );
+}
+
+#[test]
+fn un_fichier_illisible_donne_une_erreur_dans_la_langue_choisie() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_langue("en");
+    let fichier = banc.dossier.path().join("vide.txt");
+    std::fs::write(&fichier, "du texte sans rien d'utile").unwrap();
+    assert!(c.importer(&fichier, T0).is_none());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(annonce.erreur);
+    assert_eq!(annonce.texte, "File format not recognised.");
+    assert!(c
+        .importer(&banc.dossier.path().join("absent.txt"), T0)
+        .is_none());
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(annonce.texte.starts_with("Reading "), "{}", annonce.texte);
+}
+
+#[test]
+fn un_preset_se_cree_sous_son_nom_traduit() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_langue("en");
+    assert_eq!(c.presets(), vec!["Flat".to_string()]);
+    let id = c.creer_depuis_preset("Flat", T0).unwrap();
+    let nom = c
+        .vue_profils()
+        .into_iter()
+        .find(|p| p.id == id)
+        .unwrap()
+        .nom;
+    assert_eq!(nom, "Flat");
+    // Le nom d'origine marche aussi.
+    assert!(c.creer_depuis_preset("À plat", T0 + 1).is_some());
 }

@@ -13,3 +13,4 @@ Décision : pendant un duel, on ne repasse jamais par la référence.
 
 - Une variante peut rester active au plus 2 minutes sans que rien ne se passe, au lieu de jamais. Après un plantage, la référence est remise au démarrage suivant (ADR-0007).
 - Le nouveau tirage d'un duel rejoué est écrit dans le journal, pour que la reprise après un arrêt brutal retrouve le même test.
+- Le journal affiché pendant le test (écran Duels) est aveugle lui aussi : chaque duel jugé n'y montre que « réponse enregistrée » et la réponse donnée (A, Pareil ou B). Montrer la zone, ou qui jouait la référence, pour tous les duels sauf les contrôles, laissait repérer les contrôles par élimination. Le détail complet (zone, référence, contrôle) n'apparaît qu'une fois le test fini.

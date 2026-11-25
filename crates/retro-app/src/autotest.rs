@@ -6,6 +6,7 @@
 
 use crate::textes::{self, TexteControle};
 use retro_audio::InfoSortie;
+use retro_core::Langue;
 use retro_engine::SortieAudio;
 use std::path::{Path, PathBuf};
 
@@ -44,6 +45,8 @@ pub struct Contexte<'a> {
     pub dossier_moteur: Option<&'a Path>,
     pub conflits: &'a [String],
     pub raccourcis_disponibles: bool,
+    /// La langue des phrases.
+    pub langue: Langue,
 }
 
 pub const LIEN_EQUALIZER_APO: &str = "https://sourceforge.net/projects/equalizerapo/";
@@ -78,7 +81,7 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
     let mut liste = Vec::new();
 
     liste.push(ligne(
-        textes::controle_sortie(contexte.sortie),
+        textes::controle_sortie(contexte.sortie, contexte.langue),
         if contexte.sortie.is_some() {
             Etat::Ok
         } else {
@@ -105,12 +108,17 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
         _ => (Etat::Attention, None),
     };
     liste.push(ligne(
-        textes::controle_moteur(contexte.etat_moteur, contexte.moteur_autorise, inscriptible),
+        textes::controle_moteur(
+            contexte.etat_moteur,
+            contexte.moteur_autorise,
+            inscriptible,
+            contexte.langue,
+        ),
         etat,
         cible,
     ));
 
-    for (i, texte) in textes::controles_a_verifier_soi_meme()
+    for (i, texte) in textes::controles_a_verifier_soi_meme(contexte.langue)
         .into_iter()
         .enumerate()
     {
@@ -120,7 +128,11 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
 
     let raccourcis_bons = contexte.raccourcis_disponibles && contexte.conflits.is_empty();
     liste.push(ligne(
-        textes::controle_raccourcis(contexte.conflits, contexte.raccourcis_disponibles),
+        textes::controle_raccourcis(
+            contexte.conflits,
+            contexte.raccourcis_disponibles,
+            contexte.langue,
+        ),
         if raccourcis_bons {
             Etat::Ok
         } else {
@@ -134,6 +146,7 @@ pub fn controles(contexte: &Contexte) -> (Vec<Controle>, String) {
         compte(Etat::Ok),
         compte(Etat::Attention),
         compte(Etat::Erreur),
+        contexte.langue,
     );
     (liste, bilan)
 }
@@ -171,6 +184,7 @@ mod tests {
             dossier_moteur: dossier,
             conflits: &[],
             raccourcis_disponibles: true,
+            langue: Langue::Fr,
         }
     }
 
@@ -251,5 +265,17 @@ mod tests {
         );
         assert_eq!(nouvelle_sortie(Some(&sortie("{def-2}")), &[]), None);
         assert_eq!(nouvelle_sortie(None, &moteur), None);
+    }
+
+    #[test]
+    fn l_autotest_parle_la_langue_demandee() {
+        let dossier = tempfile::tempdir().unwrap();
+        let en = Contexte {
+            langue: Langue::En,
+            ..contexte(Some(dossier.path()), 2, true)
+        };
+        let (liste, bilan) = controles(&en);
+        assert_eq!(liste[0].titre, "Audio output detected");
+        assert_eq!(bilan, "3 good · 3 to check yourself");
     }
 }

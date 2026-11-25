@@ -127,6 +127,24 @@ pub enum Langue {
     En,
 }
 
+impl Langue {
+    /// Toutes les langues de l'interface : sert à vérifier qu'aucune n'est oubliée.
+    pub const TOUTES: [Langue; 2] = [Langue::Fr, Langue::En];
+
+    /// Le code court écrit dans `reglages.json` et utilisé par l'interface : « fr », « en ».
+    pub fn code(self) -> &'static str {
+        match self {
+            Langue::Fr => "fr",
+            Langue::En => "en",
+        }
+    }
+
+    /// La langue d'un code court. `None` si on ne la connaît pas.
+    pub fn depuis_code(code: &str) -> Option<Langue> {
+        Langue::TOUTES.into_iter().find(|l| l.code() == code)
+    }
+}
+
 /// Où se trouve la navigation principale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Navigation {
@@ -194,6 +212,16 @@ impl ReglagesAppli {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn les_langues_se_retrouvent_par_leur_code() {
+        for langue in Langue::TOUTES {
+            assert_eq!(Langue::depuis_code(langue.code()), Some(langue));
+        }
+        assert_eq!(Langue::depuis_code("de"), None);
+        // Le code est bien celui du fichier de réglages.
+        assert_eq!(serde_json::to_string(&Langue::En).unwrap(), "\"en\"");
+    }
 
     #[test]
     fn valeurs_par_defaut_d_un_test() {

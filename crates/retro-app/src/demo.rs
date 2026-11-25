@@ -1,7 +1,14 @@
 //! Données d'exemple reprises de la maquette. `--demo` remplit l'interface avec,
-//! pour travailler un écran ou le capturer sans moteur ni test en cours.
+//! pour travailler un écran ou le capturer sans moteur ni test en cours. Les phrases viennent
+//! de `textes`, comme dans l'appli : la démo existe dans les deux langues.
 
+use crate::pont::modeles_de_modes;
+use crate::textes;
 use crate::*;
+use retro_core::{
+    BilanControles, ComptesSens, Confiance, Cote, DuelFini, Langue, Origine, Preference, Reponse,
+    ResultatZone, Sens, Sujet, Zone,
+};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 fn modele<T: Clone + 'static>(lignes: Vec<T>) -> ModelRc<T> {
@@ -15,9 +22,75 @@ fn textes(lignes: &[&str]) -> ModelRc<SharedString> {
 const COURBE_A: &str = "M 0 150 C 120 150 180 96 300 104 S 480 150 600 132 S 820 70 1000 96";
 const COURBE_B: &str = "M 0 120 L 1000 120";
 
-pub fn remplir(fenetre: &FenetrePrincipale) {
+/// Un duel du journal, tel que l'interface le montre pendant le test : toutes les lignes se
+/// ressemblent, seule la réponse change.
+fn ligne_journal(numero: u32, reponse: Reponse, langue: Langue) -> LigneJournal {
+    let duel = DuelFini {
+        numero,
+        sujet: Sujet::Controle,
+        reponse: Some(reponse),
+        reference: Cote::A,
+        preference: Some(Preference::Aucune),
+    };
+    let (titre, detail) = textes::ligne_journal(&duel, false, langue);
+    LigneJournal {
+        titre: titre.into(),
+        cote: textes::cote_reponse(duel.reponse),
+        detail: detail.into(),
+    }
+}
+
+/// Une zone du résultat, avec ses réponses sens par sens.
+fn zone_resultat(
+    zone: Zone,
+    gain_db: f64,
+    plus: (u32, u32, u32),
+    moins: (u32, u32, u32),
+    indice: Option<Sens>,
+    langue: Langue,
+) -> LigneZone {
+    let comptes = |(variante, reference, pareil)| ComptesSens {
+        variante,
+        reference,
+        pareil,
+    };
+    let (plus, moins) = (comptes(plus), comptes(moins));
+    let confiance = if gain_db == 0.0 {
+        Confiance::Indice
+    } else {
+        Confiance::Probable
+    };
+    let resultat = ResultatZone {
+        zone,
+        gain_db,
+        duels: plus.total() + moins.total(),
+        pour_variante: plus.variante + moins.variante,
+        pour_reference: plus.reference + moins.reference,
+        pareil: plus.pareil + moins.pareil,
+        confiance,
+        contradictoire: false,
+        indice,
+        plus,
+        moins,
+    };
+    LigneZone {
+        nom: textes::nom_zone(zone, langue).into(),
+        plage: textes::plage_zone(zone, langue).into(),
+        gain_db: gain_db as f32,
+        change: resultat.est_changee(),
+        confiance: textes::niveau_confiance(confiance),
+        detail: textes::detail_zone(&resultat, false, langue).into(),
+    }
+}
+
+pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
+    let l = langue;
+    let en = l == Langue::En;
     let appli = fenetre.global::<Appli>();
-    appli.set_profil_actif("Mon profil 24/11".into());
+    appli.set_langue(l.code().into());
+    fenetre.global::<Reglages>().set_langue(l.code().into());
+    let nom_profil = "Mon profil 24/11";
+    appli.set_profil_actif(nom_profil.into());
     appli.set_niveau_db(-18.0);
     appli.set_etat_moteur(2);
     appli.set_sortie_audio("INZONE H9 II – Game".into());
@@ -31,264 +104,174 @@ pub fn remplir(fenetre: &FenetrePrincipale) {
     test.set_passages_b(2);
     test.set_avancement(0.55);
     test.set_compte_a_rebours("0:12".into());
-    test.set_suite("A joue son 3e passage, puis B".into());
-    test.set_source("Ce qui joue sur le PC".into());
+    test.set_suite(textes::suite(Cote::A, 3, l).into());
+    test.set_source(textes::source_pc(l).into());
     test.set_appli("Valorant".into());
-    test.set_mode("Duels en jeu".into());
-    test.set_reference("ROG Delta précis".into());
-    test.set_duree("12 duels · environ 25 min · bascule toutes les 20 s".into());
-    test.set_zones(textes(&[
-        "Sub-graves",
-        "Graves",
-        "Bas-médiums",
-        "Médiums",
-        "Présence",
-        "Aigus",
-        "Air",
-    ]));
-    test.set_profils(textes(&[
-        "Quotidien",
-        "Voix et Discord",
-        "Harman (mesuré)",
-        "ROG Delta précis",
-    ]));
+    test.set_mode(textes::nom_mode("duels-en-jeu", None, "", l).into());
+    test.set_reference(
+        if en {
+            "ROG Delta precise"
+        } else {
+            "ROG Delta précis"
+        }
+        .into(),
+    );
+    test.set_duree(textes::duree_test(12, 20, l).into());
+    test.set_zones(textes(
+        &textes::noms_zones(l)
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    ));
+    test.set_profils(textes(&if en {
+        [
+            "Everyday",
+            "Voice and Discord",
+            "Harman (measured)",
+            "ROG Delta precise",
+        ]
+    } else {
+        [
+            "Quotidien",
+            "Voix et Discord",
+            "Harman (mesuré)",
+            "ROG Delta précis",
+        ]
+    }));
+    // Du plus récent au plus ancien, comme pendant un vrai test.
     test.set_journal(modele(vec![
-        LigneJournal {
-            titre: "Duel 6 · graves 125 Hz".into(),
-            cote: 2,
-            detail: "était la variante · préférée".into(),
-        },
-        LigneJournal {
-            titre: "Duel 5 · air 16 kHz".into(),
-            cote: 1,
-            detail: "était la référence · préférée".into(),
-        },
-        LigneJournal {
-            titre: "Duel 4 · aigus 8 kHz".into(),
-            cote: 0,
-            detail: "Pareil · référence gardée".into(),
-        },
+        ligne_journal(6, Reponse::B, l),
+        ligne_journal(5, Reponse::A, l),
+        ligne_journal(4, Reponse::Pareil, l),
+        ligne_journal(3, Reponse::B, l),
+        ligne_journal(2, Reponse::A, l),
+        ligne_journal(1, Reponse::A, l),
     ]));
-    let mode = |id: &str,
-                groupe: &str,
-                nom: &str,
-                description: &str,
-                source: &str,
-                duels: &str,
-                duree: &str,
-                disponible: bool| LigneMode {
-        id: id.into(),
-        groupe: groupe.into(),
-        nom: nom.into(),
-        description: description.into(),
-        source: source.into(),
-        duels: duels.into(),
-        duree: duree.into(),
-        disponible,
-    };
-    test.set_modes(modele(vec![
-        mode(
-            "duels-en-jeu",
-            "Trouver ma courbe",
-            "Duels en jeu",
-            "Le son bascule tout seul pendant que tu joues, regardes ou parles sur Discord.",
-            "Ce qui joue sur le PC",
-            "12",
-            "25 min",
-            true,
-        ),
-        mode(
-            "parcours",
-            "Trouver ma courbe",
-            "Parcours complet",
-            "Un son préparé par zone, des graves profonds jusqu’à l’air. Le plus complet.",
-            "Échantillons préparés",
-            "21",
-            "35 min",
-            false,
-        ),
-        mode(
-            "musique",
-            "Trouver ma courbe",
-            "Sur une musique",
-            "Ton morceau préféré en boucle, sur le passage que tu choisis.",
-            "Ton fichier audio",
-            "12",
-            "15 min",
-            false,
-        ),
-        mode(
-            "echantillons",
-            "Affiner",
-            "Échantillons ciblés",
-            "Un son choisi pour une seule zone : voix, pas, cymbales, basse.",
-            "Un échantillon",
-            "6",
-            "8 min",
-            false,
-        ),
-        mode(
-            "une-zone",
-            "Affiner",
-            "Une seule zone",
-            "Tu sais ce qui cloche ? Les duels ne testent que les aigus, ou que les graves.",
-            "Ce qui joue sur le PC",
-            "6",
-            "12 min",
-            true,
-        ),
-        mode(
-            "profil-contre-profil",
-            "Affiner",
-            "Profil contre profil",
-            "Deux profils face à face, par exemple Harman contre ton profil du jour.",
-            "Ce qui joue sur le PC",
-            "6",
-            "12 min",
-            true,
-        ),
-        mode(
-            "abx",
-            "Vérifier",
-            "Test à l’aveugle",
-            "A, B, puis X au hasard : sais-tu vraiment reconnaître ton profil ?",
-            "Au choix",
-            "10",
-            "10 min",
-            false,
-        ),
-        mode(
-            "audition",
-            "Vérifier",
-            "Test d’audition",
-            "Mesure ce que tes oreilles entendent, zone par zone, pour adapter la courbe.",
-            "Sons purs",
-            "—",
-            "—",
-            false,
-        ),
-    ]));
+    test.set_modes(modeles_de_modes(l));
 
     let resultat = fenetre.global::<Resultat>();
     resultat.set_disponible(true);
-    resultat.set_titre("Mon profil 24/11 · version 3".into());
+    resultat.set_titre(textes::profil_et_version(nom_profil, 3, l).into());
     resultat.set_confiance(1);
-    resultat.set_resume("2 zones changent, 3 restent comme avant.".into());
+    resultat.set_resume(textes::resume_zones(2, 4, false, l).into());
     resultat.set_controles(
-        "2 duels de contrôle sur 2 jugés « Pareil » : tes réponses sont fiables.".into(),
+        textes::bilan_controles(
+            &BilanControles {
+                total: 2,
+                repondus: 2,
+                a_ou_b: 0,
+                pareil: 2,
+                penalise: false,
+                rien_retenu: false,
+            },
+            l,
+        )
+        .into(),
     );
-    resultat.set_verification("Nouvelle version préférée à la référence.".into());
+    resultat.set_verification(textes::verification(Some(Preference::Variante), l).into());
     resultat.set_courbe_reference(COURBE_B.into());
     resultat.set_courbe_nouvelle(COURBE_A.into());
     resultat.set_preampli_db(-4.0);
-    let zone =
-        |nom: &str, plage: &str, gain: f32, change: bool, confiance: i32, detail: &str| LigneZone {
-            nom: nom.into(),
-            plage: plage.into(),
-            gain_db: gain,
-            change,
-            confiance,
-            detail: detail.into(),
-        };
     resultat.set_zones(modele(vec![
-        zone(
-            "Graves",
-            "60–250 Hz",
-            -4.0,
-            true,
-            1,
-            "Variante préférée 2 fois sur 2",
-        ),
-        zone(
-            "Bas-médiums",
-            "250–500 Hz",
-            0.0,
-            false,
-            0,
-            "Pareil 2 fois · ton réglage est gardé",
-        ),
-        zone("Médiums", "500 Hz–2 kHz", 0.0, false, 0, "Avis partagés"),
-        zone(
-            "Présence",
-            "2–5 kHz",
-            4.0,
-            true,
-            1,
-            "Variante préférée 2 fois sur 2",
-        ),
-        zone("Aigus", "5–10 kHz", 0.0, false, 0, "Référence préférée"),
+        zone_resultat(Zone::Graves, -4.0, (0, 2, 0), (2, 0, 0), None, l),
+        zone_resultat(Zone::BasMediums, 0.0, (0, 0, 1), (0, 0, 1), None, l),
+        zone_resultat(Zone::Mediums, 0.0, (1, 1, 0), (0, 0, 0), None, l),
+        zone_resultat(Zone::Presence, 4.0, (2, 0, 0), (0, 2, 0), None, l),
+        zone_resultat(Zone::Aigus, 0.0, (0, 2, 0), (0, 0, 0), None, l),
+        zone_resultat(Zone::Air, 0.0, (1, 0, 0), (0, 0, 0), Some(Sens::Plus), l),
     ]));
     resultat.set_applis(modele(vec![
         LigneAppli {
             nom: "Valorant".into(),
             duels: 8,
-            preference: "plus de présence".into(),
+            preference: textes::preference_appli(Preference::Variante, l).into(),
         },
         LigneAppli {
             nom: "Discord".into(),
-            duels: 2,
-            preference: "pas de préférence nette".into(),
+            duels: 1,
+            preference: textes::preference_appli(Preference::Aucune, l).into(),
         },
     ]));
 
     let profils = fenetre.global::<Profils>();
-    let profil =
-        |id: &str, nom: &str, actif: bool, versions: i32, date: &str, resume: &str| LigneProfil {
+    let profil = |id: &str, nom: &str, actif: bool, versions: i32, date: &str, origine: Origine| {
+        LigneProfil {
             id: id.into(),
             nom: nom.into(),
             actif,
             versions,
             date: date.into(),
-            resume: resume.into(),
+            resume: textes::resume_profil(&origine, l).into(),
             courbe: COURBE_A.into(),
-        };
+        }
+    };
+    let importe = |format: &str| Origine::Import {
+        format: format.into(),
+    };
     profils.set_liste(modele(vec![
         profil(
             "mon-profil",
-            "Mon profil 24/11",
+            nom_profil,
             true,
             3,
             "24/11",
-            "Issu d’un test · confiance Probable",
+            Origine::Test {
+                test_id: "t1".into(),
+            },
         ),
         profil(
             "quotidien",
-            "Quotidien",
+            if en { "Everyday" } else { "Quotidien" },
             false,
             1,
             "12/10",
-            "Importé de Peace",
+            importe("peace"),
         ),
         profil(
             "voix",
-            "Voix et Discord",
+            if en {
+                "Voice and Discord"
+            } else {
+                "Voix et Discord"
+            },
             false,
             1,
             "12/10",
-            "Importé de Peace",
+            importe("peace"),
         ),
         profil(
             "harman",
-            "Harman (mesuré)",
+            if en {
+                "Harman (measured)"
+            } else {
+                "Harman (mesuré)"
+            },
             false,
             1,
             "02/10",
-            "Importé d’AutoEQ",
+            importe("autoeq"),
         ),
     ]));
     profils.set_choisi("mon-profil".into());
-    profils.set_presets(textes(&["À plat"]));
-    let version = |numero: i32, date: &str, origine: &str, active: bool| LigneVersion {
+    profils.set_presets(textes(&[&textes::nom_preset("À plat", l)]));
+    let version = |numero: i32, date: &str, origine: Origine, active: bool| LigneVersion {
         numero,
         date: date.into(),
-        origine: origine.into(),
+        origine: textes::origine(&origine, l).into(),
         active,
         courbe: COURBE_A.into(),
     };
     profils.set_versions(modele(vec![
-        version(3, "24/11 21:40", "Test · Duels en jeu · 12 duels", true),
-        version(2, "20/11 18:05", "Test · Une seule zone", false),
-        version(1, "12/10 10:12", "Import Peace", false),
+        version(
+            3,
+            "24/11 21:40",
+            Origine::Test {
+                test_id: "t1".into(),
+            },
+            true,
+        ),
+        version(2, "20/11 18:05", Origine::Manuel, false),
+        version(1, "12/10 10:12", importe("peace"), false),
     ]));
 
     let egaliseur = fenetre.global::<Egaliseur>();
@@ -314,70 +297,56 @@ pub fn remplir(fenetre: &FenetrePrincipale) {
     ));
 
     let diagnostic = fenetre.global::<Diagnostic>();
-    diagnostic.set_bilan("5 contrôles sur 6 sont bons.".into());
+    diagnostic.set_bilan(textes::bilan_autotest(2, 3, 1, l).into());
     diagnostic.set_dossier_moteur("C:\\Program Files\\EqualizerAPO\\config".into());
     diagnostic.set_dossier_donnees("C:\\Users\\Alexis\\AppData\\Roaming\\Retro EQ".into());
-    let controle = |titre: &str, detail: &str, etat: EtatControle, action: &str| LigneControle {
-        titre: titre.into(),
-        detail: detail.into(),
+    let controle = |texte: textes::TexteControle, etat: EtatControle, action: bool| LigneControle {
+        titre: texte.titre.into(),
+        detail: texte.detail.into(),
         etat,
-        action: action.into(),
+        action: if action { texte.action } else { String::new() }.into(),
     };
+    let a_verifier = textes::controles_a_verifier_soi_meme(l);
+    let mut a_verifier = a_verifier.into_iter();
+    let (inzone, spatial, ameliorations) =
+        match (a_verifier.next(), a_verifier.next(), a_verifier.next()) {
+            (Some(a), Some(b), Some(c)) => (a, b, c),
+            _ => return,
+        };
     diagnostic.set_controles(modele(vec![
         controle(
-            "INZONE H9 II branché",
-            "Sortie « INZONE H9 II – Game », 48 kHz",
+            textes::controle_sortie(Some("INZONE H9 II – Game"), l),
             EtatControle::Ok,
-            "",
+            false,
         ),
         controle(
-            "Moteur audio actif",
-            "Equalizer APO détecté et installé sur cette sortie",
+            textes::controle_moteur(2, true, Some(true), l),
             EtatControle::Ok,
-            "",
+            false,
         ),
+        controle(inzone, EtatControle::Attention, false),
+        controle(spatial, EtatControle::Attention, true),
+        controle(ameliorations, EtatControle::Attention, true),
         controle(
-            "Égaliseur d’INZONE Hub à plat",
-            "L’appli ne peut pas le lire : vérifie-le dans INZONE Hub.",
-            EtatControle::Attention,
-            "Comment faire",
-        ),
-        controle(
-            "Son spatial Windows coupé",
-            "Ni Windows Sonic ni Dolby Atmos",
-            EtatControle::Ok,
-            "",
-        ),
-        controle(
-            "Améliorations audio Windows coupées",
-            "L’égalisation du volume est active sur cette sortie.",
+            textes::controle_raccourcis(&["F10".to_string()], true, l),
             EtatControle::Erreur,
-            "Ouvrir les réglages",
-        ),
-        controle(
-            "Raccourcis libres",
-            "F6 à F10 et Ctrl+Alt+Entrée",
-            EtatControle::Ok,
-            "",
+            false,
         ),
     ]));
 
     let reglages = fenetre.global::<Reglages>();
     reglages.set_sorties(textes(&["INZONE H9 II – Game", "INZONE H9 II – Chat"]));
     reglages.set_sortie("INZONE H9 II – Game".into());
-    let raccourci = |touches: &str, action: &str, conflit: bool| LigneRaccourci {
-        touches: touches.into(),
-        action: action.into(),
-        conflit,
-    };
-    reglages.set_raccourcis(modele(vec![
-        raccourci("F6", "Je préfère A (maintenir : réécouter A)", false),
-        raccourci("F7", "Pareil", false),
-        raccourci("F8", "Je préfère B (maintenir : réécouter B)", false),
-        raccourci("F9", "Plus tard", false),
-        raccourci("F10", "Annuler ma dernière réponse", true),
-        raccourci("Ctrl+Alt+Entrée", "Démarrer ou reprendre un test", false),
-        raccourci("Ctrl+Alt+1 à 4", "Choisir un profil", false),
-        raccourci("Ctrl+Alt+0", "Couper l’égaliseur", false),
-    ]));
+    reglages.set_raccourcis(modele(
+        textes::raccourcis(l)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (touches, action))| LigneRaccourci {
+                touches: touches.into(),
+                action: action.into(),
+                // F10 est déjà pris par une autre appli : de quoi voir l'état « conflit ».
+                conflit: i == 4,
+            })
+            .collect(),
+    ));
 }

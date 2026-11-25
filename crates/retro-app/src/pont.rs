@@ -21,7 +21,7 @@ use crate::*;
 use retro_audio::{
     Bip, Capture, DetecteurAppel, Mesure, PleinEcran, PremierPlan, SortiesAudio, Trame,
 };
-use retro_core::Reponse;
+use retro_core::{Langue, Reponse};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -89,6 +89,25 @@ fn maj<T: Clone + PartialEq + 'static>(modele: &Rc<VecModel<T>>, lignes: Vec<T>)
     }
 }
 
+/// Les cassettes de l'écran « Tester », dans la langue demandée.
+pub fn modeles_de_modes(langue: Langue) -> ModelRc<LigneMode> {
+    ModelRc::new(VecModel::from(
+        textes::modes(langue)
+            .into_iter()
+            .map(|mode| LigneMode {
+                id: mode.id.into(),
+                groupe: mode.groupe.into(),
+                nom: mode.nom.into(),
+                description: mode.description.into(),
+                source: mode.source.into(),
+                duels: mode.duels.into(),
+                duree: mode.duree.into(),
+                disponible: mode.disponible,
+            })
+            .collect::<Vec<_>>(),
+    ))
+}
+
 fn textes_modele(lignes: Vec<String>) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
         lignes
@@ -127,6 +146,9 @@ pub struct Pont {
     sortie_signalee: Option<String>,
     dernier_premier_plan: Option<String>,
     dernier_appel: bool,
+    /// La langue dont les textes sont en ce moment dans l'interface : tant qu'elle diffère de
+    /// celle du contrôleur, `synchroniser` rechange les textes (voir `appliquer_langue`).
+    langue_appliquee: Option<Langue>,
 }
 
 impl Pont {
@@ -138,7 +160,7 @@ impl Pont {
         dossier_moteur: Option<PathBuf>,
     ) -> Pont {
         let modele = || Rc::new(VecModel::default());
-        let barre = Barre::nouvelle(controleur.vue_appli().egaliseur_actif);
+        let barre = Barre::nouvelle(controleur.vue_appli().egaliseur_actif, controleur.langue());
         Pont {
             controleur,
             systeme,
@@ -167,6 +189,7 @@ impl Pont {
             sortie_signalee: None,
             dernier_premier_plan: None,
             dernier_appel: false,
+            langue_appliquee: None,
         }
     }
 
@@ -184,6 +207,10 @@ impl Pont {
     /// Recopie tout ce que le contrôleur montre. Appelé après chaque action de l'utilisateur.
     pub fn synchroniser(&mut self, fenetre: &FenetrePrincipale) {
         let t = self.maintenant();
+        let langue = self.controleur.langue();
+        if self.langue_appliquee != Some(langue) {
+            self.appliquer_langue(fenetre, langue);
+        }
         let c = &self.controleur;
 
         let vue = c.vue_appli();
@@ -298,7 +325,7 @@ impl Pont {
         let conflits = self.raccourcis.conflits_par_ligne();
         maj(
             &self.modeles.raccourcis,
-            textes::raccourcis()
+            textes::raccourcis(langue)
                 .into_iter()
                 .zip(conflits)
                 .map(|((touches, action), conflit)| LigneRaccourci {
@@ -311,6 +338,36 @@ impl Pont {
 
         self.synchroniser_nouveau_test(fenetre);
         self.synchroniser_test(fenetre, t);
+    }
+
+    /// Met l'interface dans la langue du contrôleur : les textes des fichiers `.slint` (la
+    /// traduction groupée avec l'appli), puis tout ce que Rust fabrique et ne donne qu'une
+    /// fois (cassettes de l'écran « Tester », presets, menu de la barre des tâches,
+    /// autotest). Le reste est recopié par `synchroniser`, juste après.
+    fn appliquer_langue(&mut self, fenetre: &FenetrePrincipale, langue: Langue) {
+        let premiere_fois = self.langue_appliquee.is_none();
+        self.langue_appliquee = Some(langue);
+        // Le français est écrit dans les fichiers .slint : c'est la langue « d'origine », que
+        // Slint désigne par une chaîne vide. L'anglais est le dossier `lang/en`.
+        let code = match langue {
+            Langue::Fr => "",
+            Langue::En => "en",
+        };
+        if let Err(erreur) = slint::select_bundled_translation(code) {
+            eprintln!("langue : {erreur}");
+        }
+        fenetre.global::<Test>().set_modes(modeles_de_modes(langue));
+        fenetre
+            .global::<Profils>()
+            .set_presets(textes_modele(self.controleur.presets()));
+        if let Some(barre) = &self.barre {
+            barre.regler_langue(langue);
+        }
+        // Au premier affichage, `brancher` refait déjà l'autotest juste après.
+        if premiere_fois {
+            return;
+        }
+        self.autotester(fenetre);
     }
 
     fn synchroniser_nouveau_test(&self, fenetre: &FenetrePrincipale) {
@@ -369,6 +426,7 @@ impl Pont {
             dossier_moteur: self.dossier_moteur.as_deref(),
             conflits: &conflits,
             raccourcis_disponibles: self.raccourcis.disponibles(),
+            langue: self.controleur.langue(),
         });
         let diagnostic = fenetre.global::<Diagnostic>();
         diagnostic.set_bilan(bilan.into());
@@ -428,7 +486,8 @@ impl Pont {
         let nouvelle = autotest::nouvelle_sortie(defaut, &self.controleur.sorties_moteur());
         if nouvelle.is_some() && nouvelle != self.sortie_signalee {
             if let Some(nom) = &nouvelle {
-                self.annoncer(fenetre, &textes::annonce_nouvelle_sortie(nom), false);
+                let texte = textes::annonce_nouvelle_sortie(nom, self.controleur.langue());
+                self.annoncer(fenetre, &texte, false);
             }
         }
         self.sortie_signalee = nouvelle;
@@ -643,7 +702,9 @@ impl Pont {
     ///   fin du test, ou à n duels ; `finir::graves` répond comme quelqu'un qui préfère
     ///   plus de graves et entend bien que les duels de contrôle sont identiques ;
     /// - `activer`, `revenir` : l'écran Résultat ;
-    /// - `importer:<chemin>`, `exporter:<format>`.
+    /// - `importer:<chemin>`, `exporter:<format>` ;
+    /// - `langue:fr|en` : change la langue comme le fait le choix des Réglages (les textes sont
+    ///   rechangés à la fin du scénario).
     pub fn jouer_scenario(&mut self, fenetre: &FenetrePrincipale, scenario: &str) {
         for etape in scenario.split(';').map(str::trim).filter(|e| !e.is_empty()) {
             let mut morceaux = etape.splitn(3, ':');
@@ -701,6 +762,7 @@ impl Pont {
                     self.controleur.importer(std::path::Path::new(a), t);
                 }
                 "exporter" => self.controleur.exporter_profil_actif(a),
+                "langue" => self.controleur.choisir_langue(a),
                 inconnue => eprintln!("scénario : étape inconnue « {inconnue} »"),
             }
         }
@@ -823,18 +885,16 @@ fn ouvrir_lien(lien: &str) {
 /// Demande un fichier à importer. Sous Windows, la boîte « Ouvrir » du système. Ailleurs,
 /// il n'y a pas de boîte de dialogue : le chemin vient de la variable `RETRO_EQ_IMPORT`
 /// (essais seulement).
-fn choisir_fichier() -> Option<PathBuf> {
+fn choisir_fichier(langue: Langue) -> Option<PathBuf> {
     #[cfg(windows)]
     {
         rfd::FileDialog::new()
-            .add_filter(
-                "Égaliseur (Peace, Equalizer APO, AutoEQ)",
-                &["peace", "txt"],
-            )
+            .add_filter(textes::filtre_fichiers(langue), &["peace", "txt"])
             .pick_file()
     }
     #[cfg(not(windows))]
     {
+        let _ = langue;
         std::env::var_os("RETRO_EQ_IMPORT").map(PathBuf::from)
     }
 }
@@ -854,25 +914,9 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
             .set_bandes(m.bandes.clone().into());
         let test = fenetre.global::<Test>();
         test.set_journal(m.journal.clone().into());
-        test.set_modes(ModelRc::new(VecModel::from(
-            textes::modes()
-                .into_iter()
-                .map(|mode| LigneMode {
-                    id: mode.id.into(),
-                    groupe: mode.groupe.into(),
-                    nom: mode.nom.into(),
-                    description: mode.description.into(),
-                    source: mode.source.into(),
-                    duels: mode.duels.into(),
-                    duree: mode.duree.into(),
-                    disponible: mode.disponible,
-                })
-                .collect::<Vec<_>>(),
-        )));
         let profils = fenetre.global::<Profils>();
         profils.set_liste(m.profils.clone().into());
         profils.set_versions(m.versions.clone().into());
-        profils.set_presets(textes_modele(pont.controleur.presets()));
         if let Some(actif) = pont.controleur.vue_profils().into_iter().find(|p| p.actif) {
             profils.set_choisi(actif.id.into());
         }
@@ -1163,7 +1207,7 @@ fn fermer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
 }
 
 fn importer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
-    match choisir_fichier() {
+    match choisir_fichier(pont.controleur.langue()) {
         Some(chemin) => {
             let t = pont.maintenant();
             if let Some(id) = pont.controleur.importer(&chemin, t) {
@@ -1171,6 +1215,9 @@ fn importer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
             }
         }
         None if cfg!(windows) => {} // boîte de dialogue annulée
-        None => pont.annoncer(fenetre, textes::ANNONCE_IMPORT_INDISPONIBLE, true),
+        None => {
+            let texte = textes::annonce_import_indisponible(pont.controleur.langue());
+            pont.annoncer(fenetre, texte, true);
+        }
     }
 }

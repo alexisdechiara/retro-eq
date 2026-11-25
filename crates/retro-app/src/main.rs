@@ -6,7 +6,10 @@
 //! - `--demo` : données d'exemple de la maquette, sans moteur ni dossier ;
 //! - `--ecran <nom>` : ouvre directement cet écran ;
 //! - `--capture <fichier.png>` (avec `--hauteur <px>`) : enregistre l'écran et quitte ;
-//! - `--rail` : navigation dans le rail latéral.
+//! - `--rail` : navigation dans le rail latéral ;
+//! - `--langue <fr|en>` : impose la langue de l'interface pour cette exécution (sans toucher
+//!   aux réglages enregistrés). Sans elle, `--demo` est en français et l'appli suit ses
+//!   réglages, ou la langue du système au tout premier lancement.
 //!
 //! Variables d'environnement : `RETRO_EQ_DONNEES` (dossier de données),
 //! `RETRO_EQ_CONFIG_APO` (dossier `config` d'Equalizer APO, au lieu de le chercher),
@@ -33,8 +36,10 @@ mod mini;
 mod pont;
 mod raccourcis;
 mod textes;
+mod traductions;
 
 use controleur::{Controleur, Options};
+use retro_core::Langue;
 use retro_engine::{EqualizerApo, Moteur, MoteurSimule};
 use slint::ComponentHandle;
 use std::path::PathBuf;
@@ -128,11 +133,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let capture = argument(&arguments, "--capture");
     let fenetre = FenetrePrincipale::new()?;
     let ecran = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom));
+    let langue_imposee =
+        argument(&arguments, "--langue").and_then(|code| Langue::depuis_code(&code));
 
     // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`.
     let mut _vivant = None;
     if arguments.iter().any(|a| a == "--demo") {
-        demo::remplir(&fenetre);
+        let langue = langue_imposee.unwrap_or(Langue::Fr);
+        // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
+        if let Err(erreur) = slint::select_bundled_translation(match langue {
+            Langue::Fr => "",
+            Langue::En => "en",
+        }) {
+            eprintln!("langue : {erreur}");
+        }
+        demo::remplir(&fenetre, langue);
     } else {
         let donnees = dossier_donnees();
         let (moteur, dossier_moteur) = moteur();
@@ -142,6 +157,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // L'heure locale ne sert qu'à dater les versions de façon lisible.
             decalage_minutes: chrono::Local::now().offset().local_minus_utc() / 60,
             graine: None,
+            langue_systeme: textes::langue_depuis_locale(sys_locale::get_locale().as_deref()),
+            langue_imposee,
         };
         let controleur = Controleur::ouvrir(&donnees, moteur, options, maintenant_ms())?;
         let premier_lancement = !controleur.moteur_autorise();

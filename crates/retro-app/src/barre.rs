@@ -15,7 +15,9 @@ pub enum EvenementBarre {
 #[cfg(windows)]
 mod systeme {
     use super::EvenementBarre;
-    use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
+    use crate::textes;
+    use retro_core::Langue;
+    use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
     use tray_icon::{Icon, MouseButton, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
     const COTE: u32 = 32;
@@ -51,18 +53,19 @@ mod systeme {
     /// L'icône et son menu. Garder cette valeur en vie garde l'icône affichée.
     pub struct Barre {
         _icone: TrayIcon,
-        ouvrir: MenuId,
-        quitter: MenuId,
+        ouvrir: MenuItem,
+        quitter: MenuItem,
         egaliseur: CheckMenuItem,
     }
 
     impl Barre {
         /// Crée l'icône. `None` si Windows refuse (pas de barre des tâches, par exemple) :
         /// l'appli marche quand même, fermer la fenêtre la quitte alors.
-        pub fn nouvelle(egaliseur_actif: bool) -> Option<Barre> {
-            let ouvrir = MenuItem::new("Ouvrir Retro EQ", true, None);
-            let egaliseur = CheckMenuItem::new("Égaliseur actif", true, egaliseur_actif, None);
-            let quitter = MenuItem::new("Quitter", true, None);
+        pub fn nouvelle(egaliseur_actif: bool, langue: Langue) -> Option<Barre> {
+            let (texte_ouvrir, texte_egaliseur, texte_quitter) = textes::menu_barre(langue);
+            let ouvrir = MenuItem::new(texte_ouvrir, true, None);
+            let egaliseur = CheckMenuItem::new(texte_egaliseur, true, egaliseur_actif, None);
+            let quitter = MenuItem::new(texte_quitter, true, None);
             let menu = Menu::new();
             menu.append_items(&[
                 &ouvrir,
@@ -79,10 +82,18 @@ mod systeme {
                 .ok()?;
             Some(Barre {
                 _icone: icone,
-                ouvrir: ouvrir.id().clone(),
-                quitter: quitter.id().clone(),
+                ouvrir,
+                quitter,
                 egaliseur,
             })
+        }
+
+        /// Remet les libellés du menu dans la langue de l'appli.
+        pub fn regler_langue(&self, langue: Langue) {
+            let (ouvrir, egaliseur, quitter) = textes::menu_barre(langue);
+            self.ouvrir.set_text(ouvrir);
+            self.egaliseur.set_text(egaliseur);
+            self.quitter.set_text(quitter);
         }
 
         /// Met la coche « Égaliseur actif » d'accord avec l'appli.
@@ -96,9 +107,9 @@ mod systeme {
         pub fn evenements(&self) -> Vec<EvenementBarre> {
             let mut evenements = Vec::new();
             while let Ok(evenement) = MenuEvent::receiver().try_recv() {
-                if evenement.id == self.ouvrir {
+                if evenement.id == *self.ouvrir.id() {
                     evenements.push(EvenementBarre::Ouvrir);
-                } else if evenement.id == self.quitter {
+                } else if evenement.id == *self.quitter.id() {
                     evenements.push(EvenementBarre::Quitter);
                 } else if evenement.id == *self.egaliseur.id() {
                     evenements.push(EvenementBarre::BasculerEgaliseur);
@@ -122,16 +133,19 @@ mod systeme {
 #[cfg(not(windows))]
 mod systeme {
     use super::EvenementBarre;
+    use retro_core::Langue;
 
     /// Hors Windows, il n'y a pas d'icône : `nouvelle` rend toujours `None`.
     pub struct Barre;
 
     impl Barre {
-        pub fn nouvelle(_egaliseur_actif: bool) -> Option<Barre> {
+        pub fn nouvelle(_egaliseur_actif: bool, _langue: Langue) -> Option<Barre> {
             None
         }
 
         pub fn regler_egaliseur(&self, _actif: bool) {}
+
+        pub fn regler_langue(&self, _langue: Langue) {}
 
         pub fn evenements(&self) -> Vec<EvenementBarre> {
             Vec::new()

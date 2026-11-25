@@ -34,6 +34,28 @@ pub struct ResultatZone {
     /// change, le pas de la zone est gardé, et ce couple passera en tête du test suivant.
     #[serde(default)]
     pub indice: Option<Sens>,
+    /// Les réponses de la variante « en plus » (gain ajouté dans la zone), à part.
+    /// Absents des journaux plus anciens : tout à zéro, seuls les totaux ci-dessus sont connus.
+    #[serde(default)]
+    pub plus: ComptesSens,
+    /// Les réponses de la variante « en moins » (gain retiré dans la zone), à part.
+    #[serde(default)]
+    pub moins: ComptesSens,
+}
+
+/// Les réponses données à un seul sens (« en plus » ou « en moins ») d'une zone.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComptesSens {
+    pub variante: u32,
+    pub reference: u32,
+    pub pareil: u32,
+}
+
+impl ComptesSens {
+    /// Le nombre de duels répondus dans ce sens.
+    pub fn total(&self) -> u32 {
+        self.variante + self.reference + self.pareil
+    }
 }
 
 impl ResultatZone {
@@ -143,6 +165,14 @@ impl Comptes {
 
     fn total(&self) -> u32 {
         self.variante + self.reference + self.pareil
+    }
+
+    fn en_public(self) -> ComptesSens {
+        ComptesSens {
+            variante: self.variante,
+            reference: self.reference,
+            pareil: self.pareil,
+        }
     }
 
     fn preference(&self) -> Preference {
@@ -305,6 +335,8 @@ pub fn calculer_resultat(
             confiance,
             contradictoire,
             indice,
+            plus: plus.en_public(),
+            moins: moins.en_public(),
         });
     }
 
@@ -473,6 +505,54 @@ mod tests {
         assert_eq!(zone_de(&r, Zone::Graves).pour_variante, 1);
         let r = calcul(&Courbe::default(), [4.0; 7], &p, &[Some(Reponse::B)]);
         assert_eq!(zone_de(&r, Zone::Graves).pour_reference, 1);
+    }
+
+    #[test]
+    fn chaque_sens_d_une_zone_garde_ses_propres_comptes() {
+        // Plus de graves : 2 victoires. Moins de graves : 2 défaites de la variante.
+        let mut p = paire(Zone::Graves, Sens::Plus);
+        p.extend(paire(Zone::Graves, Sens::Moins));
+        let rep = [
+            pour_variante(&p[0]),
+            pour_variante(&p[1]),
+            pour_reference(&p[2]),
+            Some(Reponse::Pareil),
+        ];
+        let r = calcul(&Courbe::default(), [4.0; 7], &p, &rep);
+        let z = zone_de(&r, Zone::Graves);
+        assert_eq!(
+            z.plus,
+            ComptesSens {
+                variante: 2,
+                reference: 0,
+                pareil: 0
+            }
+        );
+        assert_eq!(
+            z.moins,
+            ComptesSens {
+                variante: 0,
+                reference: 1,
+                pareil: 1
+            }
+        );
+        // Les comptes des deux sens s'additionnent aux totaux déjà exposés.
+        assert_eq!(z.pour_variante, z.plus.variante + z.moins.variante);
+        assert_eq!(z.pour_reference, z.plus.reference + z.moins.reference);
+        assert_eq!(z.pareil, z.plus.pareil + z.moins.pareil);
+        assert_eq!(z.plus.total() + z.moins.total(), z.duels);
+    }
+
+    #[test]
+    fn un_ancien_journal_sans_comptes_par_sens_se_relit() {
+        let p = paire(Zone::Graves, Sens::Plus);
+        let r = calcul(&Courbe::default(), [4.0; 7], &p, &tous_pour_variante(&p));
+        let mut json = serde_json::to_value(zone_de(&r, Zone::Graves)).unwrap();
+        json.as_object_mut().unwrap().remove("plus");
+        json.as_object_mut().unwrap().remove("moins");
+        let z: ResultatZone = serde_json::from_value(json).unwrap();
+        assert_eq!((z.plus.total(), z.moins.total()), (0, 0));
+        assert_eq!(z.pour_variante, 2);
     }
 
     #[test]

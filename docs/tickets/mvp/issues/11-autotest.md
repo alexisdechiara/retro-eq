@@ -1,6 +1,6 @@
 # Autotest et page Diagnostic
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 09
 

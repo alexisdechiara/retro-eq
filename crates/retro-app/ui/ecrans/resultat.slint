@@ -111,7 +111,7 @@ export component EcranResultat inherits VerticalLayout {
                     for a in Resultat.applis: HorizontalLayout {
                         spacing: 12px;
                         Text { text: a.nom; width: 140px; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; vertical-alignment: center; }
-                        Paragraphe { text: @tr("{} duels · {}", a.duels, a.preference); font-size: 14px; vertical-alignment: center; horizontal-alignment: left; }
+                        Paragraphe { text: @tr("{n} duel · {}" | "{n} duels · {}" % a.duels, a.preference); font-size: 14px; vertical-alignment: center; horizontal-alignment: left; }
                     }
                 }
             }
@@ -142,7 +142,7 @@ export component EcranResultat inherits VerticalLayout {
                     }
                 }
                 Separateur { }
-                Etiquette { contenu: @tr("Exporter pour un autre logiciel"); }
+                Etiquette { contenu: @tr("Exporter pour un autre logiciel"); wrap: word-wrap; }
                 GridLayout {
                     spacing: 10px;
                     Row {

@@ -1,6 +1,6 @@
 # Les douze écrans, fidèles à la maquette
 
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 06
 
