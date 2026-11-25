@@ -893,7 +893,10 @@ mod tests {
         let yml = nom_dans(RELEASE, "installateur/sortie/").replace("$env:VERSION", version);
 
         assert_eq!(iss, "retro-eq-0.2.0-installateur-x64.exe");
-        assert_eq!(ps1, iss, "construire.ps1 attend un autre nom que Inno Setup");
+        assert_eq!(
+            ps1, iss,
+            "construire.ps1 attend un autre nom que Inno Setup"
+        );
         assert_eq!(yml, iss, "release.yml joint un autre nom que Inno Setup");
         assert!(est_un_installateur(&iss), "{iss} n'est pas reconnu");
 

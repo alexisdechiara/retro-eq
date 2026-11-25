@@ -8,7 +8,9 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 use std::cell::Cell;
 use std::rc::Rc;
 
-use crate::{Appli, Ecran, FenetrePrincipale, LigneMode, LigneProfil, Profils, Test};
+use crate::{
+    Appli, AutoEq, Ecran, FenetrePrincipale, LigneAutoEq, LigneMode, LigneProfil, Profils, Test,
+};
 
 slint::slint! {
     #[edition = "1.19"]
@@ -284,4 +286,45 @@ fn un_clic_sur_une_reponse_de_duel_repond_au_premier_clic() {
     Appli::get(&f).set_ecran(Ecran::Duels);
     clique(&f, "Version B");
     assert_eq!(*reponses.borrow(), vec![2]);
+}
+
+#[test]
+fn le_bouton_chercher_mon_casque_ouvre_le_panneau_au_premier_clic() {
+    let f = fenetre_principale();
+    Appli::get(&f).set_ecran(Ecran::Profils);
+    assert!(!AutoEq::get(&f).get_ouvert());
+    clique(&f, "Chercher mon casque (AutoEQ)");
+    assert!(
+        AutoEq::get(&f).get_ouvert(),
+        "un seul clic ouvre le panneau"
+    );
+}
+
+#[test]
+fn un_clic_sur_un_resultat_autoeq_le_choisit_au_premier_clic() {
+    let f = fenetre_principale();
+    let ligne = |nom: &str| LigneAutoEq {
+        nom: nom.into(),
+        source: "Rtings".into(),
+        ..Default::default()
+    };
+    let choisis = Rc::new(std::cell::RefCell::new(Vec::<i32>::new()));
+    let c = choisis.clone();
+    let autoeq = AutoEq::get(&f);
+    autoeq.on_choisir(move |i| c.borrow_mut().push(i));
+    autoeq.set_etat(1);
+    autoeq.set_ouvert(true);
+    autoeq.set_resultats(ModelRc::new(VecModel::from(vec![
+        ligne("Casque un"),
+        ligne("Casque deux"),
+    ])));
+    Appli::get(&f).set_ecran(Ecran::Profils);
+    // Chaque ligne a son bouton « Créer un profil » : on clique celui de la dernière (la seconde).
+    let bouton = ElementHandle::find_by_accessible_label(&f, "Créer un profil")
+        .last()
+        .expect("le bouton de la dernière ligne existe");
+    let position = centre(&bouton);
+    appuie(&f, position);
+    relache(&f, position);
+    assert_eq!(*choisis.borrow(), vec![1], "un seul clic choisit la ligne");
 }
