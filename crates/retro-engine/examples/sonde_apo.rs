@@ -264,7 +264,7 @@ mod windows {
         }
         // 32 768 échantillons (≈ 0,7 s) : assez fin pour séparer 20 Hz de 30 Hz.
         const N: usize = 32_768;
-        let blocs: Vec<&[f32]> = tampon.chunks_exact(N).collect();
+        let (blocs, _) = tampon.as_chunks::<N>();
         frequences
             .iter()
             .map(|&f| {
