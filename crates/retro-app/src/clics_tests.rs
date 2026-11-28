@@ -271,6 +271,45 @@ fn un_clic_sur_la_reduction_de_bruit_la_choisit_au_premier_clic() {
     assert_eq!(*choisis.borrow(), vec![false, true]);
 }
 
+// ---- La mini-fenêtre (tickets 29 et 30) ----
+
+fn mini_fenetre() -> crate::MiniFenetre {
+    i_slint_backend_testing::init_no_event_loop();
+    let m = crate::MiniFenetre::new().expect("la mini-fenêtre se crée");
+    slint::select_bundled_translation("").expect("le français (langue source) se sélectionne");
+    m.show().expect("la mini-fenêtre s'affiche");
+    m
+}
+
+fn montre(fenetre: &impl ComponentHandle, texte: &str) -> bool {
+    ElementHandle::find_by_accessible_label(fenetre, texte)
+        .next()
+        .is_some()
+}
+
+const CONSEIL_PAUSE: &str = "Plus de 40 min d’écoute : F9 pour faire une pause";
+const TOUCHE_MORTE: &str = "Sans effet : F8 (une autre appli les garde)";
+
+#[test]
+fn la_mini_fenetre_conseille_la_pause_apres_40_minutes() {
+    let m = mini_fenetre();
+    let test = Test::get(&m);
+    test.set_etat(crate::EtatTest::Ecoute);
+    assert!(!montre(&m, CONSEIL_PAUSE));
+    test.set_pause_conseillee(true);
+    assert!(montre(&m, CONSEIL_PAUSE));
+}
+
+#[test]
+fn dans_la_mini_fenetre_une_touche_morte_passe_avant_le_conseil_de_pause() {
+    let m = mini_fenetre();
+    let test = Test::get(&m);
+    test.set_pause_conseillee(true);
+    test.set_touches_mortes("F8".into());
+    assert!(montre(&m, TOUCHE_MORTE));
+    assert!(!montre(&m, CONSEIL_PAUSE));
+}
+
 #[test]
 fn un_clic_sur_une_cassette_de_profil_la_choisit() {
     let f = fenetre_principale();

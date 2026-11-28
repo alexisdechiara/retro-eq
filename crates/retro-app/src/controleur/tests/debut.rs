@@ -140,3 +140,35 @@ fn chaque_nouveau_test_redit_le_conflit() {
     c.signaler_touches_mortes(vec!["F6".to_string()]);
     assert!(c.prendre_annonce().unwrap().texte.contains("F6"));
 }
+
+// ----- Conseil de pause (ticket 29) -----
+
+#[test]
+fn apres_40_minutes_d_ecoute_la_vue_du_test_conseille_une_pause() {
+    // La même vue remplit l'écran Duels et la mini-fenêtre (`pousser_duels`, pont.rs).
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(ChoixTest {
+        intervalle_s: 120,
+        ..choix("duels-en-jeu")
+    });
+    c.demarrer_test(T0);
+    let mut t = T0;
+    while t < T0 + 38 * 60_000 {
+        t += 120_000;
+        c.tic(t);
+        if c.vue_duels(t).etat == EtatTestVue::AttenteReponse {
+            c.repondre(Reponse::Pareil, t);
+        }
+        assert!(
+            !c.vue_duels(t).pause_conseillee,
+            "trop tôt, à {} s",
+            (t - T0) / 1000
+        );
+    }
+    for _ in 0..2 {
+        t += 120_000;
+        c.tic(t);
+    }
+    assert!(c.vue_duels(t).pause_conseillee);
+}

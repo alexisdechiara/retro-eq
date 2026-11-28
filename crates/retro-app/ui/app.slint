@@ -328,7 +328,15 @@ export component MiniFenetre inherits Window {
                 color: Theme.erreur;
                 overflow: elide;
             }
-            if Test.touches-mortes == "": Segments { total: Test.total; faits: Test.duel - 1; en-cours: Test.etat != EtatTest.termine; avancement: 1; }
+            // 40 minutes d'écoute : le conseil de pause, visible aussi en jeu (ticket 29).
+            if Test.touches-mortes == "" && Test.pause-conseillee: Text {
+                text: @tr("Plus de 40 min d’écoute : F9 pour faire une pause");
+                font-size: 14px;
+                font-weight: 600;
+                color: Theme.texte;
+                overflow: elide;
+            }
+            if Test.touches-mortes == "" && !Test.pause-conseillee: Segments { total: Test.total; faits: Test.duel - 1; en-cours: Test.etat != EtatTest.termine; avancement: 1; }
             HorizontalLayout {
                 spacing: 8px;
                 alignment: start;

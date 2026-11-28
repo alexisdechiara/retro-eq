@@ -376,6 +376,9 @@ msgstr "Shortcuts with no effect during this test: {}. Another app is holding th
 msgid "Sans effet : {} (une autre appli les garde)"
 msgstr "No effect: {} (another app is holding them)"
 
+msgid "Plus de 40 min d’écoute : F9 pour faire une pause"
+msgstr "Over 40 min of listening: F9 to take a break"
+
 msgid "Mettre en pause"
 msgstr "Pause"
 
