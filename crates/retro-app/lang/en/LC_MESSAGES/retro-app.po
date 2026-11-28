@@ -770,6 +770,26 @@ msgid_plural "{n} duels · {}"
 msgstr[0] "{n} duel · {}"
 msgstr[1] "{n} duels · {}"
 
+msgid "Comparer à l’aveugle"
+msgstr "Compare blind"
+
+msgid "Empreinte de « {} »"
+msgstr "“{}” fingerprint"
+
+msgid "appli au premier plan pendant les duels"
+msgstr "app in the foreground during the duels"
+
+msgid "Ce que tes tests disent de tes goûts selon ce que tu faisais. Seuls comptent les duels sur une zone, dans les tests terminés dont les duels de contrôle n’ont pas tout bloqué."
+msgstr "What your tests say about your taste depending on what you were doing. Only duels on a zone count, in finished tests whose control duels did not block everything."
+
+msgid "Pas encore de réponse à regrouper : l’Empreinte se remplit à chaque test terminé."
+msgstr "No answers to group yet: the fingerprint fills up with each finished test."
+
+msgid "{n} duel"
+msgid_plural "{n} duels"
+msgstr[0] "{n} duel"
+msgstr[1] "{n} duels"
+
 msgid "Garder ce profil"
 msgstr "Keep this profile"
 

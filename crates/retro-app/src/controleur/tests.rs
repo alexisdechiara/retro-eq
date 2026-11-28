@@ -9,6 +9,10 @@ use retro_dsp::TypeFiltre;
 use retro_engine::{Appel, MoteurSimule};
 use tempfile::TempDir;
 
+// Les tests des tickets 26 à 28, dans leur propre fichier (`tests/mesures_versions_empreinte.rs`) :
+// un sous-module voit les outils privés de celui-ci (`Banc`, `jouer`…).
+mod mesures_versions_empreinte;
+
 /// 24 novembre 2025, 20:40 UTC.
 const T0: u64 = 1_764_016_800_000;
 /// L'intervalle le plus court permis : 10 s par passage.

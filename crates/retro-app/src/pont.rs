@@ -336,6 +336,18 @@ impl Pont {
                 })
                 .collect(),
         );
+        // L'Empreinte du profil ouvert (ticket 28), relue dans les journaux.
+        profils.set_empreinte(ModelRc::new(VecModel::from(
+            c.vue_empreinte(&profils.get_choisi())
+                .into_iter()
+                .map(|g| LigneEmpreinte {
+                    appli: g.nom.into(),
+                    duels: g.duels as i32,
+                    tendances: g.tendances.into(),
+                    confiance: g.confiance,
+                })
+                .collect::<Vec<_>>(),
+        )));
 
         self.synchroniser_autoeq(fenetre);
 
@@ -354,6 +366,19 @@ impl Pont {
                 resultat.set_active(vue.active);
                 resultat.set_recommandee(vue.recommandee);
                 resultat.set_preampli_db(vue.preampli_db as f32);
+                // Écart de volume mesuré (ticket 26). Un modèle neuf à chaque fois : ces
+                // lignes ne contiennent rien qu'on puisse saisir ou faire défiler.
+                resultat.set_volume(vue.volume.into());
+                resultat.set_ecarts_volume(ModelRc::new(VecModel::from(
+                    vue.ecarts_volume
+                        .into_iter()
+                        .map(|e| LigneEcartVolume {
+                            titre: e.titre.into(),
+                            ecart: e.ecart.into(),
+                            detail: e.detail.into(),
+                        })
+                        .collect::<Vec<_>>(),
+                )));
                 maj(
                     &self.modeles.zones,
                     vue.zones
@@ -760,15 +785,22 @@ impl Pont {
     fn observer(&mut self, fenetre: &FenetrePrincipale, t: u64) {
         self.controleur
             .signaler_plein_ecran(self.systeme.plein_ecran.exclusif());
+        // L'appli au premier plan est relevée test ou pas : un test qui démarre reçoit tout de
+        // suite la dernière connue, et son premier passage la note (ticket 28).
+        let appli = self.systeme.premier_plan.appli();
+        if appli != self.dernier_premier_plan {
+            fenetre
+                .global::<Test>()
+                .set_appli(appli.clone().unwrap_or_default().into());
+            self.controleur.signaler_premier_plan(appli.clone(), t);
+            self.dernier_premier_plan = appli;
+        }
         if self.controleur.test_en_cours() {
-            let appli = self.systeme.premier_plan.appli();
-            if appli != self.dernier_premier_plan {
-                fenetre
-                    .global::<Test>()
-                    .set_appli(appli.clone().unwrap_or_default().into());
-                self.controleur.signaler_premier_plan(appli.clone(), t);
-                self.dernier_premier_plan = appli;
-            }
+            // Le volume perçu de ce qui joue, pour l'écart mesuré de chaque duel (ticket 26) :
+            // le même chiffre que le « volume » du visualiseur. Le silence est écarté par le
+            // déroulement lui-même.
+            let volume = self.mesure.niveau_db() + ecart_pondere_db(self.mesure.spectre());
+            self.controleur.signaler_volume_mesure(f64::from(volume), t);
             let appel = self.systeme.appel.appel_en_cours();
             if appel != self.dernier_appel {
                 self.controleur.signaler_appel(appel, t);
@@ -780,7 +812,6 @@ impl Pont {
             }
         } else {
             self.dernier_appel = false;
-            self.dernier_premier_plan = None;
         }
         if self.images.is_multiple_of(150) {
             self.synchroniser_sorties(fenetre);
@@ -1168,6 +1199,22 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     }));
     profils.on_activer_version(agir!(|p, f, id, numero| {
         p.controleur.activer_version(&id, numero.max(0) as u32);
+    }));
+    // « Comparer à l'aveugle » une version avec la version active (ticket 27). La référence
+    // d'un test est le profil actif : on l'active d'abord s'il ne l'est pas.
+    profils.on_comparer_version(agir!(|p, f, id, numero| {
+        let deja = p
+            .controleur
+            .vue_profils()
+            .iter()
+            .any(|v| v.actif && v.id == id.as_str());
+        if !deja {
+            p.controleur.activer_profil(&id);
+        }
+        let t = p.maintenant();
+        if p.controleur.comparer_version(numero.max(0) as u32, t) {
+            f.global::<Appli>().set_ecran(Ecran::Duels);
+        }
     }));
     profils.on_renommer(agir!(|p, f, id, nom| {
         p.controleur.renommer_profil(&id, &nom);

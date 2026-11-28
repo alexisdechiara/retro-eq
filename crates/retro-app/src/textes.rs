@@ -1231,6 +1231,12 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
             "Pick the other profile to compare.",
         )
         .to_string(),
+        ErreurControleur::VersionAComparerInvalide => choisir(
+            l,
+            "Choisis une autre version que la version active à comparer.",
+            "Pick a version other than the active one to compare.",
+        )
+        .to_string(),
         ErreurControleur::FormatInconnu => choisir(
             l,
             "Format de fichier non reconnu.",
@@ -1899,3 +1905,5 @@ pub fn detail_resultat_autoeq(banc: Option<&str>, type_casque: Option<&str>) -> 
 
 mod mises_a_jour;
 pub use mises_a_jour::*;
+mod mesures;
+pub use mesures::*;

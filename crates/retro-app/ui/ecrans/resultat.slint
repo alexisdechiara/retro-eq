@@ -105,6 +105,22 @@ export component EcranResultat inherits VerticalLayout {
                 Separateur { }
                 if Resultat.controles != "": Paragraphe { text: Resultat.controles; font-size: 15px; }
                 if Resultat.verification != "": Paragraphe { text: Resultat.verification; font-size: 15px; }
+                // Écart de volume mesuré sur ce qui jouait (ticket 26) : le bilan, puis les duels
+                // qui dépassent le seuil, marqués comme un avertissement.
+                if Resultat.volume != "": Paragraphe { text: Resultat.volume; font-size: 15px; }
+                for e in Resultat.ecarts-volume: HorizontalLayout {
+                    spacing: 12px;
+                    VerticalLayout {
+                        alignment: start;
+                        horizontal-stretch: 0;
+                        Pastille { texte: e.ecart; couleur: Theme.fond-erreur; encre: Theme.erreur; taille: 14px; }
+                    }
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text { text: e.titre; font-family: Theme.courant; font-weight: 600; font-size: 15px; color: Theme.texte; wrap: word-wrap; }
+                        Paragraphe { text: e.detail; font-size: 14px; }
+                    }
+                }
                 if Resultat.applis.length > 0: VerticalLayout {
                     spacing: 6px;
                     Etiquette { contenu: @tr("Selon l’appli"); }

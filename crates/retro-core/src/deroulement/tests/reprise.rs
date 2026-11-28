@@ -526,6 +526,7 @@ fn a_chaque_instant_le_journal_suffit_a_retrouver_les_reponses() {
             assert_eq!(d.vue(b.t).historique, b.vue().historique);
             assert_eq!(d.plan, b.d.plan);
             assert_eq!(d.applis, b.d.applis);
+            assert_eq!(d.duels_clos(), b.d.duels_clos());
             assert_eq!(d.tirages, b.d.tirages);
         }
     }

@@ -9,4 +9,7 @@ mod volume;
 
 pub use courbe::{frequences_log, Courbe, Filtre, TypeFiltre};
 pub use spectre::Spectre;
-pub use volume::{compensation_db, egaliser_volumes, ponderation_k_db, volume_percu_db};
+pub use volume::{
+    compensation_db, egaliser_volumes, ponderation_k_db, volume_percu_db, VolumeIntegre,
+    PORTE_SILENCE_DB,
+};

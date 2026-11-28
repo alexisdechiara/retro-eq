@@ -83,3 +83,47 @@ pub trait Bip: Send {
     /// Ne bloque jamais l'appelant.
     fn bip(&self);
 }
+
+/// L'appli à noter au premier plan, d'après le processus (`pid_fenetre`) de la fenêtre au
+/// premier plan : rien quand c'est Retro EQ lui-même (`pid_retro_eq`, sa fenêtre principale
+/// ou sa mini-fenêtre). Répondre dans Retro EQ ne dit rien de l'activité en cours, et
+/// l'Empreinte ne doit pas montrer « Retro EQ » comme une activité. `nom` n'est appelé que
+/// pour un autre processus.
+pub fn appli_a_noter(
+    pid_fenetre: u32,
+    pid_retro_eq: u32,
+    nom: impl FnOnce(u32) -> Option<String>,
+) -> Option<String> {
+    if pid_fenetre == 0 || pid_fenetre == pid_retro_eq {
+        return None;
+    }
+    nom(pid_fenetre)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn nom(pid: u32) -> Option<String> {
+        Some(format!("appli-{pid}"))
+    }
+
+    #[test]
+    fn retro_eq_lui_meme_n_est_jamais_note_au_premier_plan() {
+        // Fenêtre principale ou mini-fenêtre : même processus que l'appli.
+        assert_eq!(appli_a_noter(42, 42, nom), None);
+    }
+
+    #[test]
+    fn une_autre_appli_est_notee_sous_son_nom() {
+        assert_eq!(appli_a_noter(7, 42, nom), Some("appli-7".into()));
+    }
+
+    #[test]
+    fn sans_processus_on_ne_demande_pas_de_nom() {
+        assert_eq!(
+            appli_a_noter(0, 42, |_| -> Option<String> { panic!("pas d'appel") }),
+            None
+        );
+    }
+}
