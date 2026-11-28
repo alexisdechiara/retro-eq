@@ -65,6 +65,8 @@ export global Test {
     in-out property <string> autre-profil: "";
     in property <[string]> zones;
     in property <[string]> profils;
+    in property <int> reduction-bruit: -1;       // réduction de bruit du casque : -1 jamais répondu, 0 coupée, 1 activée (ticket 24)
+    callback choisir-reduction-bruit(bool);
     in property <bool> pause-conseillee: false;
     in property <bool> pause-sans-reponse: false; // la pause vient d'un délai de réponse dépassé
     callback demarrer();

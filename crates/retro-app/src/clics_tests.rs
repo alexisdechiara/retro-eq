@@ -258,6 +258,20 @@ fn un_clic_sur_une_cassette_du_tester_la_choisit() {
 }
 
 #[test]
+fn un_clic_sur_la_reduction_de_bruit_la_choisit_au_premier_clic() {
+    let f = fenetre_principale();
+    // Fenêtre haute : la carte « Réglages du test » est sous le pli.
+    f.window().set_size(slint::LogicalSize::new(1280., 2400.));
+    let choisis = Rc::new(std::cell::RefCell::new(Vec::<bool>::new()));
+    let c = choisis.clone();
+    Test::get(&f).on_choisir_reduction_bruit(move |v| c.borrow_mut().push(v));
+    Appli::get(&f).set_ecran(Ecran::NouveauTest);
+    clique(&f, "Coupée");
+    clique(&f, "Activée");
+    assert_eq!(*choisis.borrow(), vec![false, true]);
+}
+
+#[test]
 fn un_clic_sur_une_cassette_de_profil_la_choisit() {
     let f = fenetre_principale();
     let profil = |id: &str, nom: &str| LigneProfil {

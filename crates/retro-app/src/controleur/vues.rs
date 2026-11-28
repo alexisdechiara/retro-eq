@@ -142,6 +142,9 @@ pub struct VueNouveauTest {
     pub zones: Vec<String>,
     /// Les autres profils, pour « profil contre profil ».
     pub profils: Vec<String>,
+    /// La réduction de bruit du casque : le choix en cours, sinon ce que le profil actif a
+    /// retenu. `None` : jamais répondu, aucune option n'est cochée (ticket 24).
+    pub reduction_bruit: Option<bool>,
 }
 
 /// Une zone du résultat.

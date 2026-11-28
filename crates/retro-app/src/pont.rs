@@ -506,6 +506,11 @@ impl Pont {
         test.set_source(vue.source.into());
         test.set_mode(vue.mode.into());
         test.set_duree(vue.duree.into());
+        test.set_reduction_bruit(match vue.reduction_bruit {
+            None => -1,
+            Some(false) => 0,
+            Some(true) => 1,
+        });
         // Ces deux listes ne changent presque jamais : on ne remplace le modèle que s'il le faut.
         let memes = |modele: ModelRc<SharedString>, lignes: &[String]| {
             modele.row_count() == lignes.len()
@@ -1233,6 +1238,9 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         if p.controleur.demarrer_test(t) {
             f.global::<Appli>().set_ecran(Ecran::Duels);
         }
+    }));
+    test.on_choisir_reduction_bruit(agir!(|p, f, activee| {
+        p.controleur.choisir_reduction_bruit(activee);
     }));
     test.on_pause(agir!(|p, f| {
         let t = p.maintenant();

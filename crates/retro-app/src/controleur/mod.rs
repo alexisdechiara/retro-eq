@@ -11,6 +11,7 @@
 
 mod autoeq;
 mod dates;
+mod debut;
 mod mises_a_jour;
 #[cfg(test)]
 mod tests;
@@ -249,6 +250,9 @@ pub struct Controleur {
     autoeq: autoeq::Etat,
     /// La vérification des mises à jour (voir `mises_a_jour.rs`).
     maj: mises_a_jour::EtatVerification,
+    /// La réduction de bruit choisie sur l'écran « Nouveau test » (identifiant du profil,
+    /// activée), pas encore écrite dans le profil (voir `debut.rs`).
+    reduction_bruit_choisie: Option<(String, bool)>,
 }
 
 impl Controleur {
@@ -338,6 +342,7 @@ impl Controleur {
             tirages: 0,
             autoeq: autoeq::Etat::default(),
             maj: mises_a_jour::EtatVerification::default(),
+            reduction_bruit_choisie: None,
         };
         c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
@@ -1399,6 +1404,7 @@ impl Controleur {
             let (mode, autre) = c.mode_choisi()?;
             let profil = c.profil_actif()?;
             let (profil_id, reference) = (profil.id().to_string(), profil.version_active().clone());
+            c.retenir_reduction_bruit(&profil_id)?;
             let historique = c.historique_plan(&profil_id);
             let mut hasard = c.hasard();
             let duels = plan_avec_historique(&mode, &reference, &historique, &mut hasard);
@@ -1857,6 +1863,7 @@ impl Controleur {
                 .filter(|p| Some(p.id()) != self.actif.as_deref())
                 .map(|p| p.nom().to_string())
                 .collect(),
+            reduction_bruit: self.reduction_bruit_affichee(),
         }
     }
 

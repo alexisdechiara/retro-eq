@@ -9,6 +9,11 @@ use retro_dsp::TypeFiltre;
 use retro_engine::{Appel, MoteurSimule};
 use tempfile::TempDir;
 
+// Le début d'un test (réduction de bruit, duel d'essai, conseil de pause, touches mortes :
+// tickets 24, 25, 29 et 30) est testé à part, dans `tests/debut.rs`. C'est un module enfant :
+// il se sert du banc d'essai et des outils définis ici.
+mod debut;
+
 /// 24 novembre 2025, 20:40 UTC.
 const T0: u64 = 1_764_016_800_000;
 /// L'intervalle le plus court permis : 10 s par passage.

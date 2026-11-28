@@ -526,6 +526,18 @@ msgstr "More duels, a more reliable curve."
 msgid "Un premier résultat en une vingtaine de minutes."
 msgstr "A first result in about twenty minutes."
 
+msgid "Réduction de bruit du casque"
+msgstr "Headset noise cancelling"
+
+msgid "Retro EQ ne peut pas la lire. Garde-la ainsi pendant tout le test : ton profil retiendra ce choix."
+msgstr "Retro EQ can’t read it. Keep it this way for the whole test: your profile will remember this choice."
+
+msgid "Activée"
+msgstr "On"
+
+msgid "Coupée"
+msgstr "Off"
+
 msgid "Rapide · 12 duels"
 msgstr "Quick · 12 duels"
 
