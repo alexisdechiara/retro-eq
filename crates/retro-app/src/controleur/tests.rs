@@ -954,6 +954,37 @@ fn pendant_un_test_l_egaliseur_et_les_profils_sont_proteges() {
 }
 
 #[test]
+fn pendant_un_test_l_import_est_refuse_avant_meme_d_ouvrir_la_boite_de_dialogue() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let fichier = banc.dossier.path().join("casque.txt");
+    std::fs::write(
+        &fichier,
+        "Preamp: -3 dB\nFilter: ON PK Fc 1000 Hz Gain 2 dB Q 1\n",
+    )
+    .unwrap();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    c.prendre_annonce();
+
+    // La boîte de dialogue bloquerait tout : le pont demande d'abord.
+    assert!(!c.preparer_import());
+    assert!(c.prendre_annonce().unwrap().erreur);
+    // Et le contrôleur refuse de toute façon.
+    let profils = c.vue_profils().len();
+    assert!(c.importer(&fichier, T0 + 1).is_none());
+    assert!(c.prendre_annonce().unwrap().erreur);
+    assert_eq!(c.vue_profils().len(), profils);
+
+    // Hors test, l'import marche.
+    c.arreter_test(T0 + 2);
+    c.prendre_annonce();
+    assert!(c.preparer_import());
+    assert!(c.prendre_annonce().is_none());
+    assert!(c.importer(&fichier, T0 + 3).is_some());
+}
+
+#[test]
 fn un_test_ne_demarre_pas_sans_accord_ni_avec_un_brouillon() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir(T0);
@@ -1127,6 +1158,34 @@ fn apres_un_arret_brutal_la_reference_revient_et_le_test_se_reprend() {
 }
 
 #[test]
+fn la_reference_est_remise_avant_ce_qui_peut_empecher_d_ouvrir() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.regler_bande(7, -3.0);
+    c.enregistrer_egaliseur(T0 + 1);
+    let reference = c.vue_egaliseur().courbe;
+    let (_, t) = variante_en_train_de_jouer(&mut c, &banc);
+    drop(c);
+    // Le fichier du profil devient un dossier : il ne se lit plus, et le profil à plat
+    // que l'appli voudrait créer à sa place ne peut pas s'écrire. L'ouverture échoue.
+    let profil = banc.dossier.path().join("donnees/profils/mon-profil.json");
+    std::fs::remove_file(&profil).unwrap();
+    std::fs::create_dir(&profil).unwrap();
+
+    let moteur = MoteurSimule::nouveau();
+    let ouverture = Controleur::ouvrir(
+        banc.dossier.path().join("donnees"),
+        Box::new(moteur.clone()),
+        banc.options(),
+        t + 60_000,
+    );
+
+    assert!(ouverture.is_err());
+    // La courbe notée dans etat-moteur.json a été remise avant l'échec.
+    assert_eq!(moteur.appels(), vec![Appel::Appliquer(reference)]);
+}
+
+#[test]
 fn seul_le_test_interrompu_le_plus_recent_est_propose() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();
@@ -1169,6 +1228,54 @@ fn un_journal_inutilisable_n_empeche_pas_de_demarrer() {
     assert!(!c.test_en_cours());
     assert!(c.prendre_annonce().unwrap().erreur);
     assert!(banc.depot().tests_interrompus().unwrap().is_empty());
+}
+
+// ----- Quitter l'appli -----
+
+/// Démarre un test et avance jusqu'à ce qu'une variante joue. Rend (référence, heure).
+fn variante_en_train_de_jouer(c: &mut Controleur, banc: &Banc) -> (Courbe, u64) {
+    let reference = c.vue_egaliseur().courbe;
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    let mut t = T0;
+    let mut garde = 0;
+    while banc.derniere_courbe() == reference {
+        t += PASSAGE;
+        c.tic(t);
+        garde += 1;
+        assert!(garde < 12, "aucune variante ne joue");
+    }
+    (reference, t)
+}
+
+#[test]
+fn quitter_pendant_un_duel_remet_la_reference_et_met_le_test_en_pause() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+
+    c.avant_de_quitter(t + 500);
+
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference.clone()))
+    );
+    assert_eq!(c.vue_duels(t + 500).etat, EtatTestVue::Pause);
+    // Au prochain lancement, le test est proposé en pause, sur la référence.
+    drop(c);
+    let c = banc.ouvrir(t + 60_000);
+    assert!(c.test_en_cours());
+    assert_eq!(c.vue_duels(t + 60_000).etat, EtatTestVue::Pause);
+    assert_eq!(banc.derniere_courbe(), reference);
+}
+
+#[test]
+fn quitter_hors_test_ne_change_pas_ce_qu_on_entend() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let avant = banc.moteur.appels().len();
+    c.avant_de_quitter(T0 + 1);
+    assert_eq!(banc.moteur.appels().len(), avant);
 }
 
 // ----- Pannes du moteur et du disque -----
@@ -1225,6 +1332,54 @@ fn une_panne_du_moteur_pendant_un_test_met_en_pause_sur_la_reference() {
 }
 
 #[test]
+fn une_reference_refusee_est_retentee_a_chaque_tic_jusqu_a_ce_qu_elle_passe() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    let variante = banc.derniere_courbe();
+    // La pause et le secours échouent, puis la première nouvelle tentative aussi.
+    banc.moteur
+        .echouer_aux_prochains_appels(3, "fichier verrouillé");
+    c.mettre_en_pause(t + 100);
+    assert_eq!(c.vue_duels(t + 100).etat, EtatTestVue::Pause);
+    assert!(c.reference_a_remettre());
+    assert_eq!(banc.derniere_courbe(), variante);
+
+    c.tic(t + 1_200);
+    assert!(c.reference_a_remettre());
+    c.tic(t + 2_400);
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference))
+    );
+    assert!(!c.reference_a_remettre());
+    // Une fois remise, plus rien n'est écrit.
+    let avant = banc.moteur.appels().len();
+    c.tic(t + 3_600);
+    assert_eq!(banc.moteur.appels().len(), avant);
+}
+
+#[test]
+fn une_reference_refusee_est_retentee_meme_test_arrete_et_en_quittant() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    banc.moteur
+        .echouer_aux_prochains_appels(2, "fichier verrouillé");
+    c.arreter_test(t + 100);
+    assert!(!c.test_en_cours());
+    assert!(c.reference_a_remettre());
+
+    // Tout de suite en quittant, sans attendre le délai entre deux tentatives.
+    c.avant_de_quitter(t + 150);
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference))
+    );
+    assert!(!c.reference_a_remettre());
+}
+
+#[test]
 fn un_journal_impossible_a_ouvrir_empeche_le_test_et_le_dit() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();
@@ -1253,6 +1408,71 @@ fn des_reglages_illisibles_sont_remplaces_par_les_valeurs_par_defaut() {
     assert!(c.prendre_annonce().unwrap().erreur);
     assert_eq!(c.vue_reglages().intervalle_s, 20);
     assert!(!c.moteur_autorise());
+}
+
+/// Les fichiers « reglages-illisible-*.json » mis de côté dans le dossier de données.
+fn reglages_mis_de_cote(banc: &Banc) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(banc.dossier.path().join("donnees"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("reglages-illisible-")
+        })
+        .collect()
+}
+
+#[test]
+fn des_reglages_illisibles_sont_mis_de_cote_et_jamais_ecrases() {
+    let banc = Banc::nouveau();
+    drop(banc.ouvrir_autorise());
+    let reglages = banc.dossier.path().join("donnees/reglages.json");
+    std::fs::write(&reglages, "{ pas du json").unwrap();
+
+    let mut c = banc.ouvrir(T0 + 1);
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(annonce.erreur);
+    // Un changement de réglage ne fait pas perdre le fichier d'origine.
+    c.regler_bip(false);
+
+    let mis_de_cote = reglages_mis_de_cote(&banc);
+    assert_eq!(mis_de_cote.len(), 1, "{mis_de_cote:?}");
+    assert_eq!(
+        std::fs::read_to_string(&mis_de_cote[0]).unwrap(),
+        "{ pas du json"
+    );
+    // L'annonce dit où il est.
+    let nom = mis_de_cote[0].file_name().unwrap().to_string_lossy();
+    assert!(annonce.texte.contains(nom.as_ref()), "{}", annonce.texte);
+    // Le nouveau fichier est lisible.
+    assert!(banc.depot().charger_reglages().is_ok());
+}
+
+#[test]
+fn des_reglages_illisibles_n_empechent_pas_de_remettre_la_reference_d_un_test_interrompu() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    // Plantage, et les réglages sont abîmés au passage.
+    drop(c);
+    std::fs::write(
+        banc.dossier.path().join("donnees/reglages.json"),
+        "{ pas du json",
+    )
+    .unwrap();
+
+    let banc2 = Banc {
+        dossier: banc.dossier,
+        moteur: MoteurSimule::nouveau(),
+    };
+    let c = banc2.ouvrir(t + 60_000);
+    assert_eq!(banc2.moteur.courbes_appliquees().first(), Some(&reference));
+    assert_eq!(banc2.derniere_courbe(), reference);
+    // Un test n'a pu commencer qu'avec l'accord : il est gardé.
+    assert!(c.moteur_autorise());
+    assert_eq!(c.vue_duels(t + 60_000).etat, EtatTestVue::Pause);
 }
 
 #[test]

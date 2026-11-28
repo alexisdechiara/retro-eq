@@ -146,28 +146,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         std::process::exit(sans_fenetre::lancer_rendre_son_origine());
     }
-    // Dit à l'installateur que l'appli tourne (voir `instance.rs`).
-    instance::poser();
+    // Dit à l'installateur que l'appli tourne, et apprend si une autre Retro EQ tourne
+    // déjà (voir `instance.rs`).
+    let autre_instance = instance::poser();
     let capture = argument(&arguments, "--capture");
-    let fenetre = FenetrePrincipale::new()?;
     let ecran = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom));
     let langue_imposee =
         argument(&arguments, "--langue").and_then(|code| Langue::depuis_code(&code));
+    let demo = arguments.iter().any(|a| a == "--demo");
 
-    // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`.
+    // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`, `_verrou`
+    // le verrou d'instance unique.
     let mut _vivant = None;
-    if arguments.iter().any(|a| a == "--demo") {
-        let langue = langue_imposee.unwrap_or(Langue::Fr);
-        // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
-        if let Err(erreur) = slint::select_bundled_translation(match langue {
-            Langue::Fr => "",
-            Langue::En => "en",
-        }) {
-            eprintln!("langue : {erreur}");
-        }
-        demo::remplir(&fenetre, langue);
-    } else {
+    let mut _verrou = None;
+    // Le contrôleur s'ouvre avant la fenêtre : c'est lui qui remet la référence dans le
+    // moteur, et rien de ce qui peut échouer ensuite (la fenêtre comprise) ne passe avant.
+    let mut ouvert = None;
+    if !demo {
         let donnees = dossier_donnees();
+        // Une seule instance, vérifiée avant de toucher au moteur : une seconde réécrirait
+        // la courbe pendant un duel de la première et reprendrait son journal de test.
+        if autre_instance {
+            eprintln!("Retro EQ est déjà ouverte.");
+            return Ok(());
+        }
+        match instance::verrouiller(&donnees) {
+            Ok(verrou) => _verrou = Some(verrou),
+            Err(instance::ErreurVerrou::DejaOuverte) => {
+                eprintln!("Retro EQ est déjà ouverte.");
+                return Ok(());
+            }
+            // Sans verrou possible (dossier protégé...), on continue : le contrôleur dira
+            // ce qui ne va pas avec le dossier de données.
+            Err(instance::ErreurVerrou::Fichier(e)) => {
+                eprintln!("verrou d'instance impossible : {e}");
+            }
+        }
         let (moteur, dossier_moteur) = moteur();
         let options = Options {
             dossier_export: dossier_export(&donnees),
@@ -179,6 +193,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             langue_imposee,
         };
         let controleur = Controleur::ouvrir(&donnees, moteur, options, maintenant_ms())?;
+        ouvert = Some((controleur, dossier_moteur));
+    }
+    let fenetre = FenetrePrincipale::new()?;
+
+    if let Some((controleur, dossier_moteur)) = ouvert {
         let premier_lancement = !controleur.moteur_autorise();
 
         // Pour une capture d'écran : ni raccourcis globaux ni mini-fenêtre.
@@ -216,6 +235,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         _vivant = Some((pont, minuteur));
+    } else {
+        let langue = langue_imposee.unwrap_or(Langue::Fr);
+        // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
+        if let Err(erreur) = slint::select_bundled_translation(match langue {
+            Langue::Fr => "",
+            Langue::En => "en",
+        }) {
+            eprintln!("langue : {erreur}");
+        }
+        demo::remplir(&fenetre, langue);
     }
 
     if let Some(ecran) = ecran {
@@ -239,7 +268,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fenetre.show()?;
     // `run_event_loop_until_quit` et non `run` : la boucle continue quand la fenêtre est
     // cachée dans la barre des tâches. Elle s'arrête sur « Quitter ».
-    slint::run_event_loop_until_quit()?;
+    let fin = slint::run_event_loop_until_quit();
+    // Quelle que soit la façon dont la boucle s'est arrêtée (« Quitter », fermeture de
+    // session, erreur), un test en plein duel est mis en pause sur la référence.
+    if let Some((pont, _)) = &_vivant {
+        if let Ok(mut pont) = pont.try_borrow_mut() {
+            let t = pont.maintenant();
+            pont.controleur.avant_de_quitter(t);
+        }
+    }
+    fin?;
     Ok(())
 }
 

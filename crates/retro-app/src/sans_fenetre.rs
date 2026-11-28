@@ -39,20 +39,30 @@ impl Bilan {
 ///   de Réglages : il retire aussi l'accord d'écriture, pour une éventuelle réinstallation.
 /// - Sinon (jamais lancée, ou données effacées), on ne crée rien dans le dossier de données :
 ///   on demande seulement au moteur de se retirer.
+/// - Si le contrôleur ne peut pas s'ouvrir (dossier de données abîmé ou protégé), on se
+///   rabat sur ce second chemin : le désinstalleur doit pouvoir rendre le son d'origine
+///   quoi qu'il arrive aux données.
+///
+/// `fabriquer_moteur` donne un moteur neuf : le contrôleur garde le premier, même quand son
+/// ouverture échoue.
 pub fn rendre_son_origine(
     donnees: &Path,
-    moteur: Box<dyn Moteur>,
+    mut fabriquer_moteur: impl FnMut() -> Box<dyn Moteur>,
     options: Options,
     maintenant_ms: u64,
 ) -> Bilan {
     let langue = options.langue_systeme;
+    let moteur_absent = options.moteur_absent;
     if !donnees.join("reglages.json").is_file() {
-        return direct(moteur, options.moteur_absent, langue);
+        return direct(fabriquer_moteur(), moteur_absent, langue);
     }
-    let mut controleur = match Controleur::ouvrir(donnees, moteur, options, maintenant_ms) {
-        Ok(c) => c,
-        Err(e) => return echec(&e, langue),
-    };
+    let mut controleur =
+        match Controleur::ouvrir(donnees, fabriquer_moteur(), options, maintenant_ms) {
+            Ok(c) => c,
+            // L'accord d'écriture reste noté dans les réglages : sans conséquence, l'appli
+            // est en train d'être désinstallée.
+            Err(_) => return direct(fabriquer_moteur(), moteur_absent, langue),
+        };
     // Ce que l'ouverture a pu annoncer (test repris, profil ignoré...) n'est pas le résultat.
     let _ = controleur.prendre_annonce();
     controleur.rendre_son_origine(maintenant_ms);
@@ -94,6 +104,9 @@ pub fn lancer_rendre_son_origine() -> i32 {
     rattacher_console();
     let donnees = crate::dossier_donnees();
     let (moteur, dossier_moteur) = crate::moteur();
+    // Le premier moteur sert d'abord ; un second est monté si le contrôleur a gardé le premier.
+    let mut premier = Some(moteur);
+    let fabriquer_moteur = move || premier.take().unwrap_or_else(|| crate::moteur().0);
     let options = Options {
         dossier_export: crate::dossier_export(&donnees),
         moteur_absent: dossier_moteur.is_none(),
@@ -102,7 +115,7 @@ pub fn lancer_rendre_son_origine() -> i32 {
         langue_systeme: textes::langue_depuis_locale(sys_locale::get_locale().as_deref()),
         langue_imposee: None,
     };
-    let bilan = rendre_son_origine(&donnees, moteur, options, crate::maintenant_ms());
+    let bilan = rendre_son_origine(&donnees, fabriquer_moteur, options, crate::maintenant_ms());
     if bilan.reussi {
         println!("{}", bilan.message);
     } else {
@@ -166,7 +179,7 @@ mod tests {
 
         let bilan = rendre_son_origine(
             &donnees,
-            Box::new(moteur.clone()),
+            || Box::new(moteur.clone()),
             options(t.path(), false),
             T0 + 1,
         );
@@ -214,7 +227,7 @@ mod tests {
 
         let bilan = rendre_son_origine(
             &donnees,
-            Box::new(RetirerRefuse),
+            || Box::new(RetirerRefuse),
             options(t.path(), false),
             T0 + 1,
         );
@@ -225,6 +238,35 @@ mod tests {
     }
 
     #[test]
+    fn un_dossier_de_donnees_inutilisable_n_empeche_pas_de_retirer_le_moteur() {
+        let t = TempDir::new().unwrap();
+        let moteur = MoteurSimule::nouveau();
+        let donnees = donnees_autorisees(t.path(), &moteur);
+        // Le dossier des profils est remplacé par un fichier : le contrôleur ne s'ouvre plus.
+        let profils = donnees.join("profils");
+        std::fs::remove_dir_all(&profils).unwrap();
+        std::fs::write(&profils, "").unwrap();
+        assert!(Controleur::ouvrir(
+            &donnees,
+            Box::new(MoteurSimule::nouveau()),
+            options(t.path(), false),
+            T0
+        )
+        .is_err());
+
+        let bilan = rendre_son_origine(
+            &donnees,
+            || Box::new(moteur.clone()),
+            options(t.path(), false),
+            T0 + 1,
+        );
+
+        assert!(bilan.reussi, "{bilan:?}");
+        assert_eq!(bilan.code_sortie(), 0);
+        assert_eq!(moteur.appels().last(), Some(&Appel::Retirer));
+    }
+
+    #[test]
     fn sans_donnees_le_moteur_est_retire_sans_rien_creer() {
         let t = TempDir::new().unwrap();
         let donnees = t.path().join("jamais-cree");
@@ -232,7 +274,7 @@ mod tests {
 
         let bilan = rendre_son_origine(
             &donnees,
-            Box::new(moteur.clone()),
+            || Box::new(moteur.clone()),
             options(t.path(), false),
             T0,
         );
@@ -252,7 +294,7 @@ mod tests {
 
         let bilan = rendre_son_origine(
             &t.path().join("vide"),
-            Box::new(moteur.clone()),
+            || Box::new(moteur.clone()),
             options(t.path(), true),
             T0,
         );

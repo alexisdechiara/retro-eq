@@ -46,6 +46,8 @@ const GAIN_MAX_DB: f64 = 12.0;
 const PREAMPLI_MIN_DB: f64 = -24.0;
 /// Nombre de points du spectre par défaut (bruit rose).
 const POINTS_SPECTRE: usize = 96;
+/// Délai entre deux tentatives de remettre une référence que le moteur a refusée, en ms.
+const DELAI_NOUVELLE_TENTATIVE_MS: u64 = 1_000;
 
 /// Ce qui peut empêcher une action. Le texte (`Display`) est en français et sert aux
 /// journaux et aux tests ; ce que l'utilisateur lit vient de `textes::erreur`, dans sa langue.
@@ -100,6 +102,8 @@ pub enum ErreurControleur {
     BaseAutoEq(#[from] ErreurBase),
     #[error("Ce résultat n’est plus dans la base : refais la recherche.")]
     ResultatAutoEqInconnu,
+    #[error("Le téléchargement AutoEQ s’est arrêté sur une erreur inattendue.")]
+    AutoEqInterrompu,
 }
 
 /// Ce que l'appli faisait d'un fichier quand une erreur est survenue.
@@ -232,6 +236,10 @@ pub struct Controleur {
     generation_moteur: u64,
     /// `generation_moteur` au moment du dernier spectre reçu.
     generation_spectre: u64,
+    /// La référence que le moteur a refusée pendant un secours, et l'heure de la prochaine
+    /// tentative. Retentée à chaque `tic` jusqu'à ce qu'elle passe : une variante ne doit
+    /// pas rester active parce que le fichier d'Equalizer APO était verrouillé un instant.
+    reference_a_remettre: Option<(Courbe, u64)>,
     choix: ChoixTest,
     plein_ecran: bool,
     annonce: Option<Annonce>,
@@ -247,11 +255,13 @@ impl Controleur {
     /// Ouvre le dossier de données et remet l'appli dans l'état où elle doit être.
     ///
     /// C'est ici que se joue « une variante ne reste jamais active » : si l'utilisateur a
-    /// autorisé l'écriture, la courbe de référence est réécrite dans le moteur à chaque
-    /// démarrage (ADR-0007), puis un test interrompu est retrouvé et mis en pause.
+    /// autorisé l'écriture, la courbe notée dans `etat-moteur.json` est réécrite dans le
+    /// moteur à chaque démarrage (ADR-0007), **avant** tout ce qui peut échouer (lecture des
+    /// profils, création du profil à plat...). Puis un test interrompu est retrouvé et mis
+    /// en pause.
     pub fn ouvrir(
         dossier: impl AsRef<Path>,
-        moteur: Box<dyn Moteur>,
+        mut moteur: Box<dyn Moteur>,
         options: Options,
         maintenant_ms: u64,
     ) -> Result<Controleur, ErreurControleur> {
@@ -261,11 +271,16 @@ impl Controleur {
         let premier_lancement = !depot.dossier().join("reglages.json").exists();
         let mut annonce = None;
         let mut reglages = depot.charger_reglages().unwrap_or_else(|e| {
+            let (reglages, mis_de_cote) = reprendre_reglages_illisibles(&depot, maintenant_ms);
             annonce = Some(Annonce {
-                texte: textes::annonce_reglages_illisibles(&e, options.langue_systeme),
+                texte: textes::annonce_reglages_illisibles(
+                    &e,
+                    mis_de_cote.as_deref(),
+                    options.langue_systeme,
+                ),
                 erreur: true,
             });
-            ReglagesAppli::default()
+            reglages
         });
         if premier_lancement {
             reglages.langue = options.langue_systeme;
@@ -274,6 +289,15 @@ impl Controleur {
             reglages.langue = langue;
         }
         let langue = reglages.langue;
+        // La référence d'abord, quoi qu'il se soit passé avant, et avant tout `?`.
+        let (remise, echec_remise) =
+            remettre_courbe_sauvee(&depot, &mut *moteur, &options, &reglages);
+        if let Some(e) = echec_remise {
+            annonce = Some(Annonce {
+                texte: textes::erreur(&e, langue),
+                erreur: true,
+            });
+        }
         let liste = depot.lister_profils()?;
         if let Some(ignore) = liste.ignores.first() {
             annonce = Some(Annonce {
@@ -303,9 +327,10 @@ impl Controleur {
             test: None,
             resultat: None,
             spectre: Spectre::rose(POINTS_SPECTRE),
-            courbe_moteur: Courbe::default(),
-            generation_moteur: 0,
+            courbe_moteur: remise.clone().unwrap_or_default(),
+            generation_moteur: u64::from(remise.is_some()),
             generation_spectre: 0,
+            reference_a_remettre: None,
             choix,
             plein_ecran: false,
             annonce,
@@ -316,9 +341,17 @@ impl Controleur {
         };
         c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
-        // La référence d'abord, quoi qu'il se soit passé avant.
-        if let Err(e) = c.appliquer_courbe_du_jour() {
-            c.signaler(e);
+        // Si `etat-moteur.json` manquait ou ne dit plus la même chose que les profils (fichier
+        // réparé à la main, profil disparu), on remet ce qu'ils disent.
+        let attendue = if c.reglages.egaliseur_coupe {
+            Some(Courbe::default())
+        } else {
+            c.courbe_du_jour()
+        };
+        if remise.is_none() || remise != attendue {
+            if let Err(e) = c.appliquer_courbe_du_jour() {
+                c.signaler(e);
+            }
         }
         c.retrouver_test_interrompu(maintenant_ms);
         c.retrouver_dernier_resultat();
@@ -657,6 +690,28 @@ impl Controleur {
     fn noter_courbe_moteur(&mut self, courbe: Courbe) {
         self.courbe_moteur = courbe;
         self.generation_moteur += 1;
+        // Le moteur vient d'accepter ce que le contrôleur voulait : plus rien à retenter.
+        self.reference_a_remettre = None;
+    }
+
+    /// Une référence refusée attend-elle encore d'être remise ?
+    pub fn reference_a_remettre(&self) -> bool {
+        self.reference_a_remettre.is_some()
+    }
+
+    /// Retente de remettre la référence refusée, si son heure est venue (ou tout de suite
+    /// si `forcer`). En cas de nouvel échec, la tentative suivante est repoussée.
+    fn retenter_reference(&mut self, t: u64, forcer: bool) {
+        let Some((courbe, prochaine)) = self.reference_a_remettre.clone() else {
+            return;
+        };
+        if !forcer && t < prochaine {
+            return;
+        }
+        // Une réussite vide `reference_a_remettre` (voir `noter_courbe_moteur`).
+        if self.appliquer_au_moteur(&courbe).is_err() {
+            self.reference_a_remettre = Some((courbe, t + DELAI_NOUVELLE_TENTATIVE_MS));
+        }
     }
 
     /// La courbe de tous les jours : le brouillon de l'égaliseur s'il y en a un, sinon la
@@ -997,11 +1052,23 @@ impl Controleur {
 
     // ----- Import et export -----
 
+    /// À demander avant d'ouvrir la boîte de dialogue d'import : pas pendant un test. La
+    /// boîte bloque la boucle d'événements tant qu'elle est ouverte ; en plein duel, plus
+    /// rien ne changerait de passage ni ne mettrait le test en pause, et la variante
+    /// resterait active. Rend faux (et le dit) si l'import doit attendre.
+    pub fn preparer_import(&mut self) -> bool {
+        self.tenter(|c| {
+            c.exiger_pas_de_test()?;
+            Ok(None)
+        })
+    }
+
     /// Importe un fichier Peace, Equalizer APO ou AutoEQ comme nouveau profil (pas activé).
-    /// Rend l'identifiant du profil créé.
+    /// Rend l'identifiant du profil créé. Refusé pendant un test (voir `preparer_import`).
     pub fn importer(&mut self, chemin: &Path, t: u64) -> Option<String> {
         let mut nouveau = None;
         self.tenter(|c| {
+            c.exiger_pas_de_test()?;
             let l = c.reglages.langue;
             let octets = std::fs::read(chemin).map_err(|source| ErreurControleur::Fichier {
                 action: ActionFichier::Lecture,
@@ -1452,8 +1519,10 @@ impl Controleur {
                 }
             }
         }
-        if !reference_remise {
-            let _ = self.appliquer_au_moteur(&reference);
+        if !reference_remise && self.appliquer_au_moteur(&reference).is_err() {
+            // Le test est en pause et plus rien ne réécrirait le moteur : on retentera à
+            // chaque `tic`, et en quittant.
+            self.reference_a_remettre = Some((reference, t + DELAI_NOUVELLE_TENTATIVE_MS));
         }
         // On garde le message précis du moteur s'il y en a un, complété par ce qu'on a fait.
         let cause = self.annonce.take().map(|a| a.texte).unwrap_or_default();
@@ -1519,7 +1588,9 @@ impl Controleur {
     }
 
     /// Le temps passe : à appeler plusieurs fois par seconde pendant un test.
+    /// Retente aussi de remettre une référence refusée, test en cours ou non.
     pub fn tic(&mut self, t: u64) {
+        self.retenter_reference(t, false);
         if !self.test_en_cours() {
             return;
         }
@@ -1577,6 +1648,19 @@ impl Controleur {
         self.envoyer(Evenement::Abandonner, t);
         self.test = None;
         self.annoncer(textes::annonce_test_arrete(self.reglages.langue));
+    }
+
+    /// L'appli va se fermer (« Quitter », ✕ sans icône pour revenir, fin de la boucle
+    /// d'événements). Un test en plein duel est mis en pause, ce qui remet la référence
+    /// (ADR-0012) : une variante ne reste jamais active une fois l'appli fermée. Le test
+    /// sera proposé en pause au prochain lancement. Une référence refusée plus tôt est
+    /// retentée. Sans effet sinon, et sans risque si on l'appelle deux fois.
+    pub fn avant_de_quitter(&mut self, t: u64) {
+        if self.test_en_cours() {
+            self.envoyer(Evenement::Pause, t);
+        }
+        // Une dernière chance pour une référence que le moteur avait refusée.
+        self.retenter_reference(t, true);
     }
 
     /// Un appel vocal commence ou se termine. Sans effet si le réglage est coupé.
@@ -1933,6 +2017,62 @@ impl Controleur {
             verifier_mises_a_jour: self.reglages.verifier_mises_a_jour,
         }
     }
+}
+
+/// Au démarrage, avant tout le reste : remet dans le moteur la courbe notée dans
+/// `etat-moteur.json` (ou coupe l'égaliseur si c'est le réglage). Une variante restée active
+/// après un plantage, ou un « Quitter » raté, est ainsi remplacée par la référence même si
+/// la suite de l'ouverture échoue. Rien n'est écrit sans l'accord de l'utilisateur.
+///
+/// Rend la courbe que le moteur fait entendre désormais (à plat s'il est coupé), ou aucune
+/// si rien n'a été écrit, et l'erreur du moteur s'il a refusé.
+fn remettre_courbe_sauvee(
+    depot: &Depot,
+    moteur: &mut dyn Moteur,
+    options: &Options,
+    reglages: &ReglagesAppli,
+) -> (Option<Courbe>, Option<ErreurControleur>) {
+    if options.moteur_absent || !reglages.moteur_autorise {
+        return (None, None);
+    }
+    let ecriture = if reglages.egaliseur_coupe {
+        moteur.couper().map(|_| Courbe::default())
+    } else {
+        match depot.charger_etat_moteur() {
+            Ok(Some(sauve)) => moteur.appliquer(&sauve.courbe).map(|_| sauve.courbe),
+            // Rien de noté, ou fichier illisible : les profils diront quoi remettre.
+            Ok(None) | Err(_) => return (None, None),
+        }
+    };
+    match ecriture {
+        Ok(courbe) => (Some(courbe), None),
+        Err(e) => (None, Some(e.into())),
+    }
+}
+
+/// `reglages.json` existe mais ne se lit pas. Le fichier est mis de côté sous un autre nom
+/// (rien n'est effacé, ADR-0007 : il reste réparable à la main), et l'appli repart des
+/// valeurs par défaut, écrites tout de suite dans un `reglages.json` neuf.
+///
+/// Une exception aux valeurs par défaut : l'accord d'écrire dans le moteur. Un test
+/// interrompu n'a pu commencer qu'avec cet accord ; sans lui, la référence ne serait pas
+/// remise et la variante resterait active. Il est donc gardé dans ce cas.
+///
+/// Rend les réglages repris et le nom du fichier mis de côté (aucun si le renommage a
+/// échoué : rien n'est écrit tout de suite, pour ne pas écraser le fichier d'origine).
+fn reprendre_reglages_illisibles(depot: &Depot, t: u64) -> (ReglagesAppli, Option<String>) {
+    let reglages = ReglagesAppli {
+        moteur_autorise: depot.tests_interrompus().is_ok_and(|ids| !ids.is_empty()),
+        ..ReglagesAppli::default()
+    };
+    let nom = format!("reglages-illisible-{t}.json");
+    let source = depot.dossier().join("reglages.json");
+    if std::fs::rename(&source, depot.dossier().join(&nom)).is_err() {
+        return (reglages, None);
+    }
+    // Un échec ici sera revu à la prochaine sauvegarde ; le fichier d'origine est à l'abri.
+    let _ = depot.sauver_reglages(&reglages);
+    (reglages, Some(nom))
 }
 
 /// Vrai hasard ou hasard à graine, derrière un seul type : `plan` veut un type concret

@@ -257,6 +257,14 @@ impl Pont {
         horloge_systeme() + self.avance_ms
     }
 
+    /// Quitte l'appli : un test en plein duel est d'abord mis en pause sur la référence
+    /// (voir `Controleur::avant_de_quitter`), puis la boucle d'événements s'arrête.
+    pub fn quitter(&mut self) {
+        let t = self.maintenant();
+        self.controleur.avant_de_quitter(t);
+        let _ = slint::quit_event_loop();
+    }
+
     /// Y a-t-il une icône dans la barre des tâches pour retrouver l'appli une fois cachée ?
     fn peut_se_reduire(&self) -> bool {
         self.barre.is_some() && self.controleur.fermer_reduit()
@@ -677,14 +685,12 @@ impl Pont {
                     self.controleur.basculer_egaliseur();
                     self.synchroniser(fenetre);
                 }
-                EvenementBarre::Quitter => {
-                    let _ = slint::quit_event_loop();
-                }
+                EvenementBarre::Quitter => self.quitter(),
             }
         }
 
         // Une fois par seconde : ce qui coûte un appel au système.
-        if self.images % 30 == 0 {
+        if self.images.is_multiple_of(30) {
             self.observer(fenetre, t);
         }
 
@@ -701,6 +707,9 @@ impl Pont {
             } else {
                 self.synchroniser_test(fenetre, t);
             }
+        } else if self.controleur.reference_a_remettre() {
+            // Le test est arrêté mais le moteur a refusé la référence : on retente.
+            self.controleur.tic(t);
         }
         self.relever_annonce(fenetre);
     }
@@ -741,7 +750,7 @@ impl Pont {
         visualiseur.set_crete_max_db(self.suivi.crete_max_db().unwrap_or(-60.0));
         fenetre.global::<Appli>().set_niveau_db(niveau);
         maj(&self.modeles.bandes, self.mesure.bandes().to_vec());
-        if self.images % 6 == 0 {
+        if self.images.is_multiple_of(6) {
             visualiseur.set_volume_lufs(niveau + ecart_pondere_db(self.mesure.spectre()));
         }
     }
@@ -773,7 +782,7 @@ impl Pont {
             self.dernier_appel = false;
             self.dernier_premier_plan = None;
         }
-        if self.images % 150 == 0 {
+        if self.images.is_multiple_of(150) {
             self.synchroniser_sorties(fenetre);
             fenetre
                 .global::<Appli>()
@@ -1114,12 +1123,14 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         let pont = pont.clone();
         let faible = fenetre.as_weak();
         fenetre.window().on_close_requested(move || {
-            let reduire = pont
-                .try_borrow()
-                .map(|p| p.peut_se_reduire())
-                .unwrap_or(false);
-            if !reduire {
-                let _ = slint::quit_event_loop();
+            match pont.try_borrow_mut() {
+                Ok(mut p) if !p.peut_se_reduire() => p.quitter(),
+                Ok(_) => {}
+                // Le pont est occupé : on quitte quand même, `main` remet la référence
+                // une fois la boucle arrêtée.
+                Err(_) => {
+                    let _ = slint::quit_event_loop();
+                }
             }
             let _ = faible.upgrade();
             slint::CloseRequestResponse::HideWindow
@@ -1365,17 +1376,21 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
 }
 
 /// Le bouton ✕ : réduire dans la barre des tâches si c'est le réglage (et qu'une icône
-/// existe pour revenir), sinon quitter. Dans les deux cas l'égaliseur reste comme il est :
-/// le moteur garde la dernière courbe de référence.
+/// existe pour revenir), sinon quitter. Réduite, l'appli continue le test ; en quittant,
+/// un test en plein duel est mis en pause et la référence remise.
 fn fermer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
     if pont.peut_se_reduire() {
         let _ = fenetre.hide();
     } else {
-        let _ = slint::quit_event_loop();
+        pont.quitter();
     }
 }
 
 fn importer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
+    // Pas de boîte de dialogue pendant un test : elle bloquerait la boucle d'événements.
+    if !pont.controleur.preparer_import() {
+        return;
+    }
     match choisir_fichier(pont.controleur.langue()) {
         Some(chemin) => {
             let t = pont.maintenant();

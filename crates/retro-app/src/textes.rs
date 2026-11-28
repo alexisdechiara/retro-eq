@@ -375,7 +375,7 @@ pub fn plage_zone(zone: Zone, l: Langue) -> String {
 /// Résumé de la durée d'un test : « 12 duels · environ 24 min · bascule toutes les 20 s ».
 pub fn duree_test(nombre_duels: u32, intervalle_s: u32, l: Langue) -> String {
     let minutes = (nombre_duels * 6 * intervalle_s).div_ceil(60);
-    let bascule = if intervalle_s >= 60 && intervalle_s % 60 == 0 {
+    let bascule = if intervalle_s >= 60 && intervalle_s.is_multiple_of(60) {
         format!("{} min", intervalle_s / 60)
     } else {
         format!("{intervalle_s} s")
@@ -1110,16 +1110,23 @@ pub fn annonce_nouvelle_sortie(nom: &str, l: Langue) -> String {
 }
 
 /// Au démarrage : les réglages n'ont pas pu être relus.
-pub fn annonce_reglages_illisibles(erreur: &ErreurDepot, l: Langue) -> String {
-    match l {
-        Langue::Fr => format!(
-            "Réglages illisibles, valeurs par défaut reprises : {}",
-            erreur_depot(erreur, l)
+pub fn annonce_reglages_illisibles(
+    erreur: &ErreurDepot,
+    mis_de_cote: Option<&str>,
+    l: Langue,
+) -> String {
+    let detail = erreur_depot(erreur, l);
+    match (l, mis_de_cote) {
+        (Langue::Fr, Some(nom)) => format!(
+            "Réglages illisibles, valeurs par défaut reprises. L’ancien fichier est gardé sous le nom {nom} : {detail}"
         ),
-        Langue::En => format!(
-            "Settings unreadable, default values restored: {}",
-            erreur_depot(erreur, l)
+        (Langue::Fr, None) => {
+            format!("Réglages illisibles, valeurs par défaut reprises : {detail}")
+        }
+        (Langue::En, Some(nom)) => format!(
+            "Settings unreadable, default values restored. The old file is kept as {nom}: {detail}"
         ),
+        (Langue::En, None) => format!("Settings unreadable, default values restored: {detail}"),
     }
 }
 
@@ -1286,6 +1293,12 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
             l,
             "Ce résultat n’est plus dans la base : refais la recherche.",
             "This result is no longer in the database: search again.",
+        )
+        .to_string(),
+        ErreurControleur::AutoEqInterrompu => choisir(
+            l,
+            "Le téléchargement AutoEQ s’est arrêté sur une erreur inattendue. Réessaie.",
+            "The AutoEQ download stopped on an unexpected error. Try again.",
         )
         .to_string(),
     }
@@ -1844,7 +1857,7 @@ fn milliers(n: usize, l: Langue) -> String {
     };
     let mut sortie = String::new();
     for (i, c) in chiffres.chars().enumerate() {
-        if i > 0 && (chiffres.len() - i) % 3 == 0 {
+        if i > 0 && (chiffres.len() - i).is_multiple_of(3) {
             sortie.push(separateur);
         }
         sortie.push(c);
