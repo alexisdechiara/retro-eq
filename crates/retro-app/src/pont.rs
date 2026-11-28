@@ -690,7 +690,7 @@ impl Pont {
         }
 
         // Une fois par seconde : ce qui coûte un appel au système.
-        if self.images % 30 == 0 {
+        if self.images.is_multiple_of(30) {
             self.observer(fenetre, t);
         }
 
@@ -747,7 +747,7 @@ impl Pont {
         visualiseur.set_crete_max_db(self.suivi.crete_max_db().unwrap_or(-60.0));
         fenetre.global::<Appli>().set_niveau_db(niveau);
         maj(&self.modeles.bandes, self.mesure.bandes().to_vec());
-        if self.images % 6 == 0 {
+        if self.images.is_multiple_of(6) {
             visualiseur.set_volume_lufs(niveau + ecart_pondere_db(self.mesure.spectre()));
         }
     }
@@ -779,7 +779,7 @@ impl Pont {
             self.dernier_appel = false;
             self.dernier_premier_plan = None;
         }
-        if self.images % 150 == 0 {
+        if self.images.is_multiple_of(150) {
             self.synchroniser_sorties(fenetre);
             fenetre
                 .global::<Appli>()

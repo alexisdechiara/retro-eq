@@ -375,7 +375,7 @@ pub fn plage_zone(zone: Zone, l: Langue) -> String {
 /// Résumé de la durée d'un test : « 12 duels · environ 24 min · bascule toutes les 20 s ».
 pub fn duree_test(nombre_duels: u32, intervalle_s: u32, l: Langue) -> String {
     let minutes = (nombre_duels * 6 * intervalle_s).div_ceil(60);
-    let bascule = if intervalle_s >= 60 && intervalle_s % 60 == 0 {
+    let bascule = if intervalle_s >= 60 && intervalle_s.is_multiple_of(60) {
         format!("{} min", intervalle_s / 60)
     } else {
         format!("{intervalle_s} s")
@@ -1844,7 +1844,7 @@ fn milliers(n: usize, l: Langue) -> String {
     };
     let mut sortie = String::new();
     for (i, c) in chiffres.chars().enumerate() {
-        if i > 0 && (chiffres.len() - i) % 3 == 0 {
+        if i > 0 && (chiffres.len() - i).is_multiple_of(3) {
             sortie.push(separateur);
         }
         sortie.push(c);

@@ -146,16 +146,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         std::process::exit(sans_fenetre::lancer_rendre_son_origine());
     }
-    // Dit à l'installateur que l'appli tourne (voir `instance.rs`).
-    instance::poser();
+    // Dit à l'installateur que l'appli tourne, et apprend si une autre Retro EQ tourne
+    // déjà (voir `instance.rs`).
+    let autre_instance = instance::poser();
     let capture = argument(&arguments, "--capture");
     let fenetre = FenetrePrincipale::new()?;
     let ecran = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom));
     let langue_imposee =
         argument(&arguments, "--langue").and_then(|code| Langue::depuis_code(&code));
 
-    // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`.
+    // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`, `_verrou`
+    // le verrou d'instance unique.
     let mut _vivant = None;
+    let mut _verrou = None;
     if arguments.iter().any(|a| a == "--demo") {
         let langue = langue_imposee.unwrap_or(Langue::Fr);
         // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
@@ -168,6 +171,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         demo::remplir(&fenetre, langue);
     } else {
         let donnees = dossier_donnees();
+        // Une seule instance, vérifiée avant de toucher au moteur : une seconde réécrirait
+        // la courbe pendant un duel de la première et reprendrait son journal de test.
+        if autre_instance {
+            eprintln!("Retro EQ est déjà ouverte.");
+            return Ok(());
+        }
+        match instance::verrouiller(&donnees) {
+            Ok(verrou) => _verrou = Some(verrou),
+            Err(instance::ErreurVerrou::DejaOuverte) => {
+                eprintln!("Retro EQ est déjà ouverte.");
+                return Ok(());
+            }
+            // Sans verrou possible (dossier protégé...), on continue : le contrôleur dira
+            // ce qui ne va pas avec le dossier de données.
+            Err(instance::ErreurVerrou::Fichier(e)) => {
+                eprintln!("verrou d'instance impossible : {e}");
+            }
+        }
         let (moteur, dossier_moteur) = moteur();
         let options = Options {
             dossier_export: dossier_export(&donnees),
