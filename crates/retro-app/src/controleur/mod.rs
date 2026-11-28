@@ -261,11 +261,16 @@ impl Controleur {
         let premier_lancement = !depot.dossier().join("reglages.json").exists();
         let mut annonce = None;
         let mut reglages = depot.charger_reglages().unwrap_or_else(|e| {
+            let (reglages, mis_de_cote) = reprendre_reglages_illisibles(&depot, maintenant_ms);
             annonce = Some(Annonce {
-                texte: textes::annonce_reglages_illisibles(&e, options.langue_systeme),
+                texte: textes::annonce_reglages_illisibles(
+                    &e,
+                    mis_de_cote.as_deref(),
+                    options.langue_systeme,
+                ),
                 erreur: true,
             });
-            ReglagesAppli::default()
+            reglages
         });
         if premier_lancement {
             reglages.langue = options.langue_systeme;
@@ -1944,6 +1949,31 @@ impl Controleur {
             verifier_mises_a_jour: self.reglages.verifier_mises_a_jour,
         }
     }
+}
+
+/// `reglages.json` existe mais ne se lit pas. Le fichier est mis de côté sous un autre nom
+/// (rien n'est effacé, ADR-0007 : il reste réparable à la main), et l'appli repart des
+/// valeurs par défaut, écrites tout de suite dans un `reglages.json` neuf.
+///
+/// Une exception aux valeurs par défaut : l'accord d'écrire dans le moteur. Un test
+/// interrompu n'a pu commencer qu'avec cet accord ; sans lui, la référence ne serait pas
+/// remise et la variante resterait active. Il est donc gardé dans ce cas.
+///
+/// Rend les réglages repris et le nom du fichier mis de côté (aucun si le renommage a
+/// échoué : rien n'est écrit tout de suite, pour ne pas écraser le fichier d'origine).
+fn reprendre_reglages_illisibles(depot: &Depot, t: u64) -> (ReglagesAppli, Option<String>) {
+    let reglages = ReglagesAppli {
+        moteur_autorise: depot.tests_interrompus().is_ok_and(|ids| !ids.is_empty()),
+        ..ReglagesAppli::default()
+    };
+    let nom = format!("reglages-illisible-{t}.json");
+    let source = depot.dossier().join("reglages.json");
+    if std::fs::rename(&source, depot.dossier().join(&nom)).is_err() {
+        return (reglages, None);
+    }
+    // Un échec ici sera revu à la prochaine sauvegarde ; le fichier d'origine est à l'abri.
+    let _ = depot.sauver_reglages(&reglages);
+    (reglages, Some(nom))
 }
 
 /// Vrai hasard ou hasard à graine, derrière un seul type : `plan` veut un type concret

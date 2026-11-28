@@ -1303,6 +1303,71 @@ fn des_reglages_illisibles_sont_remplaces_par_les_valeurs_par_defaut() {
     assert!(!c.moteur_autorise());
 }
 
+/// Les fichiers « reglages-illisible-*.json » mis de côté dans le dossier de données.
+fn reglages_mis_de_cote(banc: &Banc) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(banc.dossier.path().join("donnees"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("reglages-illisible-")
+        })
+        .collect()
+}
+
+#[test]
+fn des_reglages_illisibles_sont_mis_de_cote_et_jamais_ecrases() {
+    let banc = Banc::nouveau();
+    drop(banc.ouvrir_autorise());
+    let reglages = banc.dossier.path().join("donnees/reglages.json");
+    std::fs::write(&reglages, "{ pas du json").unwrap();
+
+    let mut c = banc.ouvrir(T0 + 1);
+    let annonce = c.prendre_annonce().unwrap();
+    assert!(annonce.erreur);
+    // Un changement de réglage ne fait pas perdre le fichier d'origine.
+    c.regler_bip(false);
+
+    let mis_de_cote = reglages_mis_de_cote(&banc);
+    assert_eq!(mis_de_cote.len(), 1, "{mis_de_cote:?}");
+    assert_eq!(
+        std::fs::read_to_string(&mis_de_cote[0]).unwrap(),
+        "{ pas du json"
+    );
+    // L'annonce dit où il est.
+    let nom = mis_de_cote[0].file_name().unwrap().to_string_lossy();
+    assert!(annonce.texte.contains(nom.as_ref()), "{}", annonce.texte);
+    // Le nouveau fichier est lisible.
+    assert!(banc.depot().charger_reglages().is_ok());
+}
+
+#[test]
+fn des_reglages_illisibles_n_empechent_pas_de_remettre_la_reference_d_un_test_interrompu() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    // Plantage, et les réglages sont abîmés au passage.
+    drop(c);
+    std::fs::write(
+        banc.dossier.path().join("donnees/reglages.json"),
+        "{ pas du json",
+    )
+    .unwrap();
+
+    let banc2 = Banc {
+        dossier: banc.dossier,
+        moteur: MoteurSimule::nouveau(),
+    };
+    let c = banc2.ouvrir(t + 60_000);
+    assert_eq!(banc2.moteur.courbes_appliquees().first(), Some(&reference));
+    assert_eq!(banc2.derniere_courbe(), reference);
+    // Un test n'a pu commencer qu'avec l'accord : il est gardé.
+    assert!(c.moteur_autorise());
+    assert_eq!(c.vue_duels(t + 60_000).etat, EtatTestVue::Pause);
+}
+
 #[test]
 fn les_reglages_sont_gardes_d_un_lancement_a_l_autre() {
     let banc = Banc::nouveau();

@@ -1110,16 +1110,23 @@ pub fn annonce_nouvelle_sortie(nom: &str, l: Langue) -> String {
 }
 
 /// Au démarrage : les réglages n'ont pas pu être relus.
-pub fn annonce_reglages_illisibles(erreur: &ErreurDepot, l: Langue) -> String {
-    match l {
-        Langue::Fr => format!(
-            "Réglages illisibles, valeurs par défaut reprises : {}",
-            erreur_depot(erreur, l)
+pub fn annonce_reglages_illisibles(
+    erreur: &ErreurDepot,
+    mis_de_cote: Option<&str>,
+    l: Langue,
+) -> String {
+    let detail = erreur_depot(erreur, l);
+    match (l, mis_de_cote) {
+        (Langue::Fr, Some(nom)) => format!(
+            "Réglages illisibles, valeurs par défaut reprises. L’ancien fichier est gardé sous le nom {nom} : {detail}"
         ),
-        Langue::En => format!(
-            "Settings unreadable, default values restored: {}",
-            erreur_depot(erreur, l)
+        (Langue::Fr, None) => {
+            format!("Réglages illisibles, valeurs par défaut reprises : {detail}")
+        }
+        (Langue::En, Some(nom)) => format!(
+            "Settings unreadable, default values restored. The old file is kept as {nom}: {detail}"
         ),
+        (Langue::En, None) => format!("Settings unreadable, default values restored: {detail}"),
     }
 }
 
