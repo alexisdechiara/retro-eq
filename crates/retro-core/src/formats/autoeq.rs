@@ -93,6 +93,20 @@ mod tests {
     }
 
     #[test]
+    fn des_valeurs_hors_limites_sont_signalees_comme_pour_equalizer_apo() {
+        let i = lire(
+            "Preamp: 1e308 dB\nPreamp: 1e308 dB\nFilter 1: ON PK Fc 1000 Hz Gain 1e300 dB Q 1\n\
+             Filter 2: ON PK Fc 30000 Hz Gain 6 dB Q 1\nFilter 3: ON PK Fc 100 Hz Gain 2 dB Q 1\n",
+            "x ParametricEQ.txt",
+        )
+        .expect("lecture");
+        assert_eq!(i.courbe.preampli_db, 0.0);
+        assert_eq!(i.courbe.filtres.len(), 1);
+        assert_eq!(i.ignores.len(), 4);
+        assert!(i.partiel);
+    }
+
+    #[test]
     fn lire_sans_ligne_utilisable_donne_une_erreur() {
         assert!(lire("rien", "x ParametricEQ.txt").is_err());
     }

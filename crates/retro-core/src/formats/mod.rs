@@ -1,8 +1,9 @@
 //! Import et export des réglages d'égaliseur dans les formats que les gens s'échangent.
 //!
-//! Un module par format : [`equalizer_apo`], [`autoeq`], [`peace`] (lecture et
-//! écriture), [`wavelet`] (écriture seulement). Chaque lecture rend un [`Import`] :
-//! la courbe, un nom de profil éventuel et le rapport des lignes ignorées.
+//! Un module par format : [`equalizer_apo`], [`autoeq`], [`peace`] et [`wavelet`] (lecture
+//! et écriture ; la lecture d'une courbe `GraphicEQ:` est une approximation par les 10 bandes).
+//! Chaque lecture rend un [`Import`] : la courbe, un nom de profil éventuel et le rapport des
+//! lignes ignorées.
 //! [`detecter_format`] devine le format d'un fichier.
 
 pub mod autoeq;
@@ -22,7 +23,8 @@ pub enum Format {
     AutoEq,
     /// Préréglage `.peace` de l'interface Peace.
     Peace,
-    /// Ligne `GraphicEQ:` (export pour Wavelet).
+    /// Courbe de points `GraphicEQ:` seulement (export pour Wavelet, ou fichier Equalizer APO
+    /// sans autre réglage). Se lit par approximation : voir [`wavelet::lire`].
     Wavelet,
 }
 
@@ -64,6 +66,48 @@ pub enum RaisonIgnoree {
     /// Note : la ligne est importée, mais sous une forme approchée (par exemple les
     /// plateaux Peace dont Q est une pente). Rien n'est perdu, la courbe peut juste différer un peu.
     Approximation,
+    /// Filtre dont la fréquence atteint ou dépasse [`FREQUENCE_MAX_HZ`] (la moitié de
+    /// 44,1 kHz) : une sortie audio à cette fréquence d'échantillonnage ne peut pas le jouer,
+    /// et le calcul du filtre y serait instable ou en donnerait le reflet. La ligne n'est pas importée.
+    FrequenceTropHaute,
+    /// Préampli, gain ou Q en dehors des limites raisonnables ([`PREAMPLI_MAX_DB`],
+    /// [`GAIN_MAX_DB`], [`Q_MIN`] et [`Q_MAX`]), ou qui ne serait plus un nombre fini une fois
+    /// additionné aux précédents. La ligne n'est pas importée : elle rendrait la courbe
+    /// inaudible, instable, ou impossible à enregistrer.
+    HorsLimites,
+}
+
+/// Fréquence (Hz, exclue) au-delà de laquelle un filtre n'est pas importé : Nyquist de
+/// 44,1 kHz, la plus basse des fréquences d'échantillonnage courantes d'une sortie audio.
+pub const FREQUENCE_MAX_HZ: f64 = 22_050.0;
+
+/// Préampli total le plus fort admis à l'import, en valeur absolue (dB). Au-delà de -60 dB on
+/// n'entend plus rien ; aucun fichier réel ne demande +60 dB.
+pub const PREAMPLI_MAX_DB: f64 = 60.0;
+
+/// Gain d'un filtre le plus fort admis à l'import, en valeur absolue (dB). Les curseurs de
+/// Peace s'arrêtent à ±30 dB, et les corrections d'AutoEQ restent bien en deçà.
+pub const GAIN_MAX_DB: f64 = 30.0;
+
+/// Plus petit Q admis à l'import : une cloche de plus de dix octaves de large.
+pub const Q_MIN: f64 = 0.01;
+
+/// Plus grand Q admis à l'import : une cloche d'environ un centième d'octave.
+pub const Q_MAX: f64 = 100.0;
+
+/// Vrai si `q` est dans [`Q_MIN`, `Q_MAX`] (faux pour NaN).
+pub(crate) fn q_dans_les_limites(q: f64) -> bool {
+    (Q_MIN..=Q_MAX).contains(&q)
+}
+
+/// Vrai si `gain_db` est dans [-`GAIN_MAX_DB`, `GAIN_MAX_DB`] (faux pour NaN).
+pub(crate) fn gain_dans_les_limites(gain_db: f64) -> bool {
+    (-GAIN_MAX_DB..=GAIN_MAX_DB).contains(&gain_db)
+}
+
+/// Vrai si `preampli_db` est dans [-`PREAMPLI_MAX_DB`, `PREAMPLI_MAX_DB`] (faux pour NaN).
+pub(crate) fn preampli_dans_les_limites(preampli_db: f64) -> bool {
+    (-PREAMPLI_MAX_DB..=PREAMPLI_MAX_DB).contains(&preampli_db)
 }
 
 impl RaisonIgnoree {
@@ -86,7 +130,9 @@ impl RaisonIgnoree {
             | RaisonIgnoree::Illisible
             | RaisonIgnoree::PenteNonGeree
             | RaisonIgnoree::CanalParticulier
-            | RaisonIgnoree::PeripheriqueParticulier => true,
+            | RaisonIgnoree::PeripheriqueParticulier
+            | RaisonIgnoree::FrequenceTropHaute
+            | RaisonIgnoree::HorsLimites => true,
         }
     }
 }
@@ -114,6 +160,10 @@ pub struct Import {
     /// le son n'a pas été prise en compte (par exemple un réglage propre à un canal).
     /// L'interface doit alors prévenir l'utilisateur.
     pub partiel: bool,
+    /// `Some` quand la courbe n'est qu'une approximation du fichier (courbe `GraphicEQ:`
+    /// ramenée aux 10 bandes) : le plus grand écart (dB, positif) entre les points du fichier
+    /// et la courbe importée. L'interface doit le dire. `None` : la courbe est celle du fichier.
+    pub ecart_max_db: Option<f64>,
 }
 
 impl Import {
@@ -125,6 +175,7 @@ impl Import {
             nom: None,
             ignores,
             partiel,
+            ecart_max_db: None,
         }
     }
 }

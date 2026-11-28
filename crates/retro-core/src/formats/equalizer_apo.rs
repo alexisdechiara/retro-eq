@@ -20,6 +20,11 @@
 //! [`RaisonIgnoree::PenteNonGeree`]. La largeur `BW Oct` d'une cloche est convertie en Q
 //! par `Q = sqrt(2^bw) / (2^bw - 1)`.
 //!
+//! Un filtre à 22 050 Hz ou plus (Nyquist de 44,1 kHz) n'est pas importé
+//! ([`RaisonIgnoree::FrequenceTropHaute`]) : une sortie audio à 44,1 kHz ne peut pas le jouer.
+//! Un gain au-delà de ±30 dB, un Q hors de 0,01 à 100, ou un préampli dont la somme avec les
+//! précédents sort de ±60 dB ne l'est pas non plus ([`RaisonIgnoree::HorsLimites`]).
+//!
 //! # Canaux et périphériques
 //!
 //! L'appli n'a qu'une courbe pour tous les canaux et tous les périphériques.
@@ -37,7 +42,10 @@
 //! erreur. Un `#` en milieu de ligne commence un commentaire (comme dans les exemples
 //! d'Equalizer APO). On n'accepte que la syntaxe d'Equalizer APO : pas de `1k` pour 1000 Hz.
 
-use super::{ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree};
+use super::{
+    ecrire_nombre, gain_dans_les_limites, lire_nombre, preampli_dans_les_limites,
+    q_dans_les_limites, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree, FREQUENCE_MAX_HZ,
+};
 use retro_dsp::{Courbe, Filtre, TypeFiltre};
 
 /// Ce qu'une ligne `Filter` ou `Preamp` apporte à la courbe.
@@ -202,9 +210,20 @@ pub fn lire(texte: &str) -> Result<Import, ErreurFormat> {
     for ligne in &appliquees {
         match ligne.element {
             Element::Preampli(db) => {
-                // Equalizer APO additionne les préamplis.
-                courbe.preampli_db += db;
-                preampli_vu = true;
+                // Equalizer APO additionne les préamplis. Chaque valeur est finie, mais pas
+                // forcément leur somme : c'est elle qu'on vérifie.
+                let somme = courbe.preampli_db + db;
+                if preampli_dans_les_limites(somme) {
+                    courbe.preampli_db = somme;
+                    preampli_vu = true;
+                } else {
+                    noter(
+                        &mut ignores,
+                        ligne.numero,
+                        &ligne.texte,
+                        RaisonIgnoree::HorsLimites,
+                    );
+                }
             }
             Element::Filtre(filtre) => courbe.filtres.push(filtre),
         }
@@ -400,6 +419,9 @@ fn lire_filtre(reste: &str) -> Result<Option<Filtre>, RaisonIgnoree> {
         .frequence
         .filter(|f| *f > 0.0)
         .ok_or(RaisonIgnoree::Illisible)?;
+    if frequence_hz >= FREQUENCE_MAX_HZ {
+        return Err(RaisonIgnoree::FrequenceTropHaute);
+    }
     let gain_db = lu.gain.ok_or(RaisonIgnoree::Illisible)?;
 
     let q = if est_plateau {
@@ -419,6 +441,9 @@ fn lire_filtre(reste: &str) -> Result<Option<Filtre>, RaisonIgnoree> {
             _ => return Err(RaisonIgnoree::Illisible),
         }
     };
+    if !gain_dans_les_limites(gain_db) || !q_dans_les_limites(q) {
+        return Err(RaisonIgnoree::HorsLimites);
+    }
     Ok(Some(Filtre {
         type_filtre,
         frequence_hz,
@@ -808,6 +833,67 @@ mod tests {
                 "{texte:?}"
             );
         }
+    }
+
+    #[test]
+    fn des_preamplis_dont_la_somme_deborde_ne_donnent_jamais_un_preampli_infini() {
+        // Chaque valeur est finie, mais leur somme ne l'est pas.
+        assert_eq!(
+            lire("Preamp: 1e308 dB\nPreamp: 1e308 dB\n"),
+            Err(ErreurFormat::AucuneLigneUtilisable)
+        );
+        let (i, r) = raisons("Preamp: 1e308 dB\nPreamp: 1e308 dB");
+        assert_eq!(r, [RaisonIgnoree::HorsLimites, RaisonIgnoree::HorsLimites]);
+        assert_eq!(i.courbe.preampli_db, 0.0);
+        assert!(i.partiel);
+        // La somme est vérifiée, pas seulement chaque ligne.
+        let (i, r) = raisons("Preamp: -40 dB\nPreamp: -40 dB");
+        assert_eq!(r, [RaisonIgnoree::HorsLimites]);
+        assert_eq!(i.courbe.preampli_db, -40.0);
+        assert_eq!(i.ignores[0].numero, 2);
+    }
+
+    #[test]
+    fn un_gain_ou_un_q_hors_limites_est_signale() {
+        for ligne in [
+            "Filter 1: ON PK Fc 1000 Hz Gain 1e300 dB Q 1",
+            "Filter 1: ON PK Fc 1000 Hz Gain 31 dB Q 1",
+            "Filter 1: ON LSC Fc 100 Hz Gain -31 dB Q 0.7",
+            "Filter 1: ON PK Fc 1000 Hz Gain 3 dB Q 1000",
+            "Filter 1: ON PK Fc 1000 Hz Gain 3 dB Q 0.001",
+            "Filter 1: ON PK Fc 1000 Hz Gain 3 dB BW Oct 2000",
+            "Filter 1: ON PK Fc 1000 Hz Gain 3 dB BW Oct 1e-12",
+        ] {
+            let (i, r) = raisons(ligne);
+            assert_eq!(r, [RaisonIgnoree::HorsLimites], "{ligne}");
+            assert_eq!(i.courbe.filtres.len(), 1, "{ligne}");
+            assert!(i.partiel);
+        }
+        // Les bornes elles-mêmes sont acceptées.
+        let i = lire_ok(
+            "Preamp: -60 dB\nFilter 1: ON PK Fc 1000 Hz Gain 30 dB Q 100\n\
+             Filter 2: ON PK Fc 1000 Hz Gain -30 dB Q 0.01\n",
+        );
+        assert_eq!(i.courbe.filtres.len(), 2);
+        assert!(i.ignores.is_empty());
+    }
+
+    #[test]
+    fn un_filtre_a_ou_au_dela_de_nyquist_est_signale_au_lieu_d_etre_importe() {
+        for hz in ["30000", "22050", "96000"] {
+            let (i, r) = raisons(&format!("Filter 1: ON PK Fc {hz} Hz Gain 6 dB Q 1"));
+            assert_eq!(r, [RaisonIgnoree::FrequenceTropHaute], "{hz}");
+            assert_eq!(
+                i.courbe.filtres.len(),
+                1,
+                "seule la cloche témoin est importée"
+            );
+            assert!(i.partiel);
+        }
+        // Juste sous Nyquist à 44,1 kHz : jouable partout, importé.
+        let i = lire_ok("Filter 1: ON HSC Fc 22000 Hz Gain 2 dB Q 0.7\n");
+        assert_eq!(i.courbe.filtres.len(), 1);
+        assert!(!i.partiel);
     }
 
     #[test]
