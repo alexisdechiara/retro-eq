@@ -18,7 +18,7 @@ Utilisateur principal : **Alexis lui-même** (développeur front-end Nuxt et des
 
 ## Product Purpose
 
-Trouver le réglage d'égaliseur qu'on préfère **à l'oreille**, par comparaisons A/B à l'aveugle, au lieu de régler des curseurs au hasard ou de copier une courbe mesurée qui ne correspond pas à sa tête. Succès : un profil Retro EQ que l'utilisateur garde au quotidien et qu'il préfère à ses réglages précédents. Retro EQ réunit trois outils : tests A/B, égaliseur intégré et visualiseur (niveau estimé en dB, spectre, réglages de base).
+Trouver le réglage d'égaliseur qu'on préfère **à l'oreille**, par duels A/B à l'aveugle, au lieu de régler des curseurs au hasard ou de copier une courbe mesurée qui ne correspond pas à sa tête. Succès : un profil Retro EQ que l'utilisateur garde au quotidien et qu'il préfère à ses réglages précédents. Retro EQ réunit trois outils : tests A/B, égaliseur intégré et visualiseur (niveau estimé en dB, spectre, réglages de base).
 
 ## Positioning
 
@@ -39,9 +39,9 @@ Le test se fait **en conditions réelles** : l'égaliseur bascule automatiquemen
 MVP confirmé :
 - Choisir A (un preset existant) et B (variantes automatiques zone par zone, ou un autre preset).
 - Bascule automatique A/B à intervalle réglable (10 s à 2 min), 3 passages chacun par duel, ordre tiré au hasard.
-- Réponse par raccourcis globaux et mini-fenêtre par-dessus les jeux ; pause, passer et recommencer un duel ; pause automatique pendant les appels Discord ; remise du preset d'origine à la fin.
+- Réponse par raccourcis globaux et mini-fenêtre par-dessus les jeux ; pause, passer et recommencer un duel ; pause automatique pendant les appels Discord ; remise de la référence à la fin.
 - Point de départ : presets de base calculés pour le casque, import depuis AutoEQ (recherche du casque dans la base, gardée en local) ou d'un fichier Peace / Equalizer APO.
-- Résultat activé directement comme profil Retro EQ (annulable) ; export possible en Peace, Equalizer APO, AutoEQ, Wavelet.
+- Résultat proposé comme nouvelle version du profil : elle s'active d'un clic et l'ancienne reste restaurable ; export possible en Peace, Equalizer APO, AutoEQ, Wavelet.
 - Premier lancement avec autotest, puis **duel d'essai** (différence énorme, vérifie de bout en bout que le son change) ; page Diagnostic, page Réglages ; échelle de confiance unique (Indice / Probable / Sûr selon le risque de hasard).
 - **Français et anglais dès la v1** (langue de Windows par défaut, choix au premier lancement et dans Réglages › Apparence). Textes traduits avec le système de traduction intégré de Slint ; le français, plus long, sert de cas le plus exigeant pour les mises en page.
 - Fiabilité : reprise après plantage ou PC éteint (référence remise au démarrage, réponses gardées, duel interrompu rejoué), détection d'une nouvelle sortie audio (dongle sur un autre port), fermeture de la fenêtre sans couper l'égaliseur (réduction dans la barre des tâches par défaut), désinstallation qui rend le son d'origine.
@@ -72,5 +72,5 @@ Hors MVP (prévu plus tard) : connexions de services (Spotify, Deezer, YouTube M
 1. **L'oreille décide.** Les mesures servent de point de départ ; le choix final vient des préférences entendues en usage réel.
 2. **Ne pas interrompre.** Le test doit se dérouler pendant que l'utilisateur joue ou regarde ; chaque interaction tient en un raccourci.
 3. **Comparer à armes égales.** Même préampli, ordre aléatoire, test à l'aveugle.
-4. **Réversible.** Le preset d'origine est toujours récupérable ; rien n'est supprimé (archives).
+4. **Réversible.** La référence est toujours récupérable ; rien n'est supprimé (chaque test crée une version).
 5. **Honnête sur les limites.** Signaler les approximations (bancs de mesure différents, aigus peu fiables) plutôt que promettre une précision qui n'existe pas.
