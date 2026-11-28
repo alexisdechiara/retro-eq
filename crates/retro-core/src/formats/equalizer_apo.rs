@@ -20,6 +20,9 @@
 //! [`RaisonIgnoree::PenteNonGeree`]. La largeur `BW Oct` d'une cloche est convertie en Q
 //! par `Q = sqrt(2^bw) / (2^bw - 1)`.
 //!
+//! Un filtre à 22 050 Hz ou plus (Nyquist de 44,1 kHz) n'est pas importé
+//! ([`RaisonIgnoree::FrequenceTropHaute`]) : une sortie audio à 44,1 kHz ne peut pas le jouer.
+//!
 //! # Canaux et périphériques
 //!
 //! L'appli n'a qu'une courbe pour tous les canaux et tous les périphériques.
@@ -37,7 +40,9 @@
 //! erreur. Un `#` en milieu de ligne commence un commentaire (comme dans les exemples
 //! d'Equalizer APO). On n'accepte que la syntaxe d'Equalizer APO : pas de `1k` pour 1000 Hz.
 
-use super::{ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree};
+use super::{
+    ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree, FREQUENCE_MAX_HZ,
+};
 use retro_dsp::{Courbe, Filtre, TypeFiltre};
 
 /// Ce qu'une ligne `Filter` ou `Preamp` apporte à la courbe.
@@ -400,6 +405,9 @@ fn lire_filtre(reste: &str) -> Result<Option<Filtre>, RaisonIgnoree> {
         .frequence
         .filter(|f| *f > 0.0)
         .ok_or(RaisonIgnoree::Illisible)?;
+    if frequence_hz >= FREQUENCE_MAX_HZ {
+        return Err(RaisonIgnoree::FrequenceTropHaute);
+    }
     let gain_db = lu.gain.ok_or(RaisonIgnoree::Illisible)?;
 
     let q = if est_plateau {
@@ -808,6 +816,24 @@ mod tests {
                 "{texte:?}"
             );
         }
+    }
+
+    #[test]
+    fn un_filtre_a_ou_au_dela_de_nyquist_est_signale_au_lieu_d_etre_importe() {
+        for hz in ["30000", "22050", "96000"] {
+            let (i, r) = raisons(&format!("Filter 1: ON PK Fc {hz} Hz Gain 6 dB Q 1"));
+            assert_eq!(r, [RaisonIgnoree::FrequenceTropHaute], "{hz}");
+            assert_eq!(
+                i.courbe.filtres.len(),
+                1,
+                "seule la cloche témoin est importée"
+            );
+            assert!(i.partiel);
+        }
+        // Juste sous Nyquist à 44,1 kHz : jouable partout, importé.
+        let i = lire_ok("Filter 1: ON HSC Fc 22000 Hz Gain 2 dB Q 0.7\n");
+        assert_eq!(i.courbe.filtres.len(), 1);
+        assert!(!i.partiel);
     }
 
     #[test]

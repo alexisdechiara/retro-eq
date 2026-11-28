@@ -32,7 +32,8 @@
 //! « Q comme pente », traités comme des plateaux ordinaires : approximation
 //! sur la forme exacte du plateau, signalée au rapport par
 //! [`RaisonIgnoree::Approximation`]). Les autres types vont au rapport d'ignorés
-//! sous la forme `Peace <code>`. Les bandes éteintes ou sans gain y vont aussi.
+//! sous la forme `Peace <code>`. Les bandes éteintes ou sans gain y vont aussi, comme
+//! celles à 22 050 Hz ou plus ([`RaisonIgnoree::FrequenceTropHaute`]).
 //!
 //! Les sections propres à un haut-parleur (`[Gains1]`…`[Gains8]`, et leurs
 //! équivalents `[Frequencies1]`…) ne sont lues que pour être comparées au réglage
@@ -50,7 +51,9 @@
 //! pas été essayée dans Peace lui-même : elle n'écrit pas les sections par
 //! haut-parleur (`[Frequencies1]`…) que Peace ajoute lui-même.
 
-use super::{ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree};
+use super::{
+    ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree, FREQUENCE_MAX_HZ,
+};
 use retro_dsp::{Courbe, Filtre, TypeFiltre};
 
 /// Q d'une bande dont le fichier ne donne pas de `Quality` (valeur par défaut de Peace).
@@ -244,6 +247,9 @@ fn lire_bande(
         .is_some_and(|e| !matches!(e.valeur.as_str(), "" | "0"));
     if eteinte {
         return Err(RaisonIgnoree::Desactive);
+    }
+    if frequence_hz >= FREQUENCE_MAX_HZ {
+        return Err(RaisonIgnoree::FrequenceTropHaute);
     }
 
     let code = match chercher(sections, "filters", &cle("filter")) {
@@ -503,6 +509,18 @@ mod tests {
         assert_eq!(i.ignores.len(), 1);
         assert_eq!(i.ignores[0].raison, RaisonIgnoree::HautParleurParticulier);
         assert_eq!(i.ignores[0].numero, 6);
+        assert!(i.partiel);
+    }
+
+    #[test]
+    fn une_bande_a_ou_au_dela_de_nyquist_est_signalee_au_lieu_d_etre_importee() {
+        let texte = "[Frequencies]\nFrequency1=1000\nFrequency2=30000\n[Gains]\nGain1=1\nGain2=6\n";
+        let i = lire(texte).expect("lecture");
+        assert_eq!(i.courbe.filtres.len(), 1);
+        assert_eq!(i.courbe.filtres[0].frequence_hz, 1000.0);
+        assert_eq!(i.ignores.len(), 1);
+        assert_eq!(i.ignores[0].raison, RaisonIgnoree::FrequenceTropHaute);
+        assert_eq!(i.ignores[0].texte, "Frequency2=30000");
         assert!(i.partiel);
     }
 

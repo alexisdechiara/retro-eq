@@ -934,6 +934,11 @@ pub fn raison_ignoree(raison: &RaisonIgnoree, l: Langue) -> &'static str {
             "speaker-specific setting",
         ),
         RaisonIgnoree::CommandeNonGeree => choisir(l, "commande non gérée", "unsupported command"),
+        RaisonIgnoree::FrequenceTropHaute => choisir(
+            l,
+            "fréquence trop haute pour une sortie audio",
+            "frequency too high for an audio output",
+        ),
         _ => choisir(l, "ligne illisible", "unreadable line"),
     }
 }

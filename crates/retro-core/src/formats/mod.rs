@@ -64,7 +64,15 @@ pub enum RaisonIgnoree {
     /// Note : la ligne est importée, mais sous une forme approchée (par exemple les
     /// plateaux Peace dont Q est une pente). Rien n'est perdu, la courbe peut juste différer un peu.
     Approximation,
+    /// Filtre dont la fréquence atteint ou dépasse [`FREQUENCE_MAX_HZ`] (la moitié de
+    /// 44,1 kHz) : une sortie audio à cette fréquence d'échantillonnage ne peut pas le jouer,
+    /// et le calcul du filtre y serait instable ou en donnerait le reflet. La ligne n'est pas importée.
+    FrequenceTropHaute,
 }
+
+/// Fréquence (Hz, exclue) au-delà de laquelle un filtre n'est pas importé : Nyquist de
+/// 44,1 kHz, la plus basse des fréquences d'échantillonnage courantes d'une sortie audio.
+pub const FREQUENCE_MAX_HZ: f64 = 22_050.0;
 
 impl RaisonIgnoree {
     /// Cette ligne laissée de côté change-t-elle le son par rapport au fichier d'origine ?
@@ -86,7 +94,8 @@ impl RaisonIgnoree {
             | RaisonIgnoree::Illisible
             | RaisonIgnoree::PenteNonGeree
             | RaisonIgnoree::CanalParticulier
-            | RaisonIgnoree::PeripheriqueParticulier => true,
+            | RaisonIgnoree::PeripheriqueParticulier
+            | RaisonIgnoree::FrequenceTropHaute => true,
         }
     }
 }

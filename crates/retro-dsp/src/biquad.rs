@@ -38,9 +38,47 @@ impl Coefficients {
         }
     }
 
+    /// Un biquad qui laisse passer le signal tel quel.
+    pub const TRANSPARENTS: Coefficients = Coefficients {
+        b0: 1.0,
+        b1: 0.0,
+        b2: 0.0,
+        a1: 0.0,
+        a2: 0.0,
+    };
+
     /// Coefficients du « Audio EQ Cookbook » pour ce filtre (mêmes formules qu'Equalizer APO
     /// pour `PK`, `LSC` et `HSC`).
+    ///
+    /// Un filtre que cette fréquence d'échantillonnage ne peut pas représenter est **ignoré**
+    /// (coefficients transparents) : fréquence nulle, négative, à Nyquist (`fe / 2`) ou au-delà,
+    /// Q nul ou négatif, valeur non finie, ou coefficients qui ne seraient pas finis et stables.
+    /// Au-delà de Nyquist, les formules donnent un filtre instable ou le reflet du filtre sous
+    /// Nyquist (une cloche à 30 kHz devient une cloche à 18 kHz à 48 kHz) : un son et une courbe
+    /// affichée faux. On n'en ramène pas la fréquence juste sous Nyquist : ce serait inventer un
+    /// renfort tout en haut du spectre, différent à chaque fréquence d'échantillonnage, que le
+    /// fichier ne demandait pas à cet endroit. Ignorer donne une courbe vraie (rien entre 20 Hz
+    /// et Nyquist) ; l'import signale ces filtres à part.
     pub fn depuis(filtre: &Filtre, fe: f64) -> Self {
+        let representable = filtre.frequence_hz > 0.0
+            && filtre.frequence_hz < fe / 2.0
+            && filtre.q > 0.0
+            && filtre.q.is_finite()
+            && filtre.gain_db.is_finite();
+        if !representable {
+            return Self::TRANSPARENTS;
+        }
+        let c = Self::du_cookbook(filtre, fe);
+        let finis = [c.b0, c.b1, c.b2, c.a1, c.a2].iter().all(|x| x.is_finite());
+        let stable = c.a2.abs() < 1.0 && c.a1.abs() < 1.0 + c.a2;
+        if finis && stable {
+            c
+        } else {
+            Self::TRANSPARENTS
+        }
+    }
+
+    fn du_cookbook(filtre: &Filtre, fe: f64) -> Self {
         let a = 10f64.powf(filtre.gain_db / 40.0);
         let w0 = 2.0 * PI * filtre.frequence_hz / fe;
         let (sin, cos) = w0.sin_cos();
@@ -196,6 +234,68 @@ mod tests {
                     "{f:?} à {freq} Hz : calculé {attendu}, mesuré {mesure}"
                 );
             }
+        }
+    }
+
+    /// Les deux pôles de `1 + a1 z^-1 + a2 z^-2` sont dans le cercle unité (triangle de stabilité).
+    fn est_stable(c: &Coefficients) -> bool {
+        c.a2.abs() < 1.0 && c.a1.abs() < 1.0 + c.a2
+    }
+
+    #[test]
+    fn un_filtre_a_nyquist_ou_au_dela_est_ignore_et_reste_stable() {
+        let fe = FREQUENCE_ECHANTILLONNAGE;
+        for type_filtre in [
+            TypeFiltre::Cloche,
+            TypeFiltre::PlateauBas,
+            TypeFiltre::PlateauHaut,
+        ] {
+            for hz in [24_000.0, 30_000.0, 47_000.0, 100_000.0] {
+                let f = filtre(type_filtre, hz, 6.0, 1.0);
+                let c = Coefficients::depuis(&f, fe);
+                assert!(est_stable(&c), "{f:?} : {c:?}");
+                // Pas de reflet sous Nyquist : la réponse reste plate partout.
+                for mesure in [100.0, 1000.0, 18_000.0, 23_000.0] {
+                    let g = c.gain_db_a(mesure, fe);
+                    assert!(g.abs() < 1e-9, "{f:?} à {mesure} Hz : {g} dB");
+                }
+                let mut b = Biquad::depuis(&f, fe);
+                for i in 0..10_000 {
+                    let y = b.traiter(if i % 2 == 0 { 1.0 } else { -1.0 });
+                    assert!(y.abs() <= 1.0 + 1e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn un_filtre_aux_valeurs_absurdes_est_ignore() {
+        let fe = FREQUENCE_ECHANTILLONNAGE;
+        for f in [
+            filtre(TypeFiltre::Cloche, 0.0, 6.0, 1.0),
+            filtre(TypeFiltre::Cloche, -100.0, 6.0, 1.0),
+            filtre(TypeFiltre::Cloche, f64::NAN, 6.0, 1.0),
+            filtre(TypeFiltre::Cloche, 1000.0, f64::INFINITY, 1.0),
+            filtre(TypeFiltre::Cloche, 1000.0, 1e300, 1.0),
+            filtre(TypeFiltre::Cloche, 1000.0, 6.0, 0.0),
+            filtre(TypeFiltre::PlateauBas, 1000.0, 6.0, f64::NAN),
+        ] {
+            let c = Coefficients::depuis(&f, fe);
+            assert!(est_stable(&c), "{f:?} : {c:?}");
+            assert_eq!(c.gain_db_a(1000.0, fe), 0.0, "{f:?}");
+        }
+    }
+
+    #[test]
+    fn un_filtre_juste_sous_nyquist_reste_stable() {
+        let fe = FREQUENCE_ECHANTILLONNAGE;
+        for type_filtre in [
+            TypeFiltre::Cloche,
+            TypeFiltre::PlateauBas,
+            TypeFiltre::PlateauHaut,
+        ] {
+            let c = Coefficients::depuis(&filtre(type_filtre, 23_900.0, 6.0, 1.0), fe);
+            assert!(est_stable(&c), "{c:?}");
         }
     }
 
