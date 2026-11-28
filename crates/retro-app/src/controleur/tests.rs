@@ -500,7 +500,7 @@ fn exporter_puis_importer_rend_la_meme_courbe() {
 }
 
 #[test]
-fn l_export_wavelet_s_ecrit_mais_ne_se_reimporte_pas() {
+fn l_export_wavelet_se_reimporte_par_approximation_et_le_dit() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();
     c.exporter_profil_actif("wavelet");
@@ -513,10 +513,12 @@ fn l_export_wavelet_s_ecrit_mais_ne_se_reimporte_pas() {
         .unwrap()
         .starts_with("GraphicEQ: 20 "));
 
-    assert!(c.importer(&fichier, T0 + 1).is_none());
+    assert!(c.importer(&fichier, T0 + 1).is_some());
     let annonce = c.prendre_annonce().unwrap();
-    assert!(annonce.erreur);
-    assert!(annonce.texte.contains("Wavelet"));
+    assert!(!annonce.erreur, "{}", annonce.texte);
+    assert!(annonce.texte.contains("Wavelet"), "{}", annonce.texte);
+    assert!(annonce.texte.contains("approchée"), "{}", annonce.texte);
+    assert!(annonce.texte.contains("écart maximal"), "{}", annonce.texte);
 }
 
 #[test]

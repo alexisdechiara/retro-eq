@@ -934,6 +934,12 @@ pub fn raison_ignoree(raison: &RaisonIgnoree, l: Langue) -> &'static str {
             "speaker-specific setting",
         ),
         RaisonIgnoree::CommandeNonGeree => choisir(l, "commande non gérée", "unsupported command"),
+        RaisonIgnoree::FrequenceTropHaute => choisir(
+            l,
+            "fréquence trop haute pour une sortie audio",
+            "frequency too high for an audio output",
+        ),
+        RaisonIgnoree::HorsLimites => choisir(l, "valeur hors limites", "value out of range"),
         _ => choisir(l, "ligne illisible", "unreadable line"),
     }
 }
@@ -1001,6 +1007,21 @@ pub fn annonce_import(
         });
     }
     texte
+}
+
+/// Ajouté au compte rendu d'un import approché (courbe `GraphicEQ:` ramenée aux 10 bandes) :
+/// le plus grand écart entre les points du fichier et la courbe importée.
+pub fn annonce_ecart_import(ecart_db: f64, l: Langue) -> String {
+    let ecart = db(ecart_db.abs(), l);
+    let ecart = ecart.trim_start_matches('+');
+    match l {
+        Langue::Fr => format!(
+            "Courbe GraphicEQ ramenée aux 10 bandes de l’égaliseur : écart maximal {ecart} avec le fichier."
+        ),
+        Langue::En => format!(
+            "GraphicEQ curve fitted to the equalizer’s 10 bands: largest deviation from the file {ecart}."
+        ),
+    }
 }
 
 /// Après « Rendre le son d'origine ». `copie` : une ancienne copie de la configuration
@@ -1222,12 +1243,6 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
             "File format not recognised.",
         )
         .to_string(),
-        ErreurControleur::ImportWavelet => choisir(
-            l,
-            "Un fichier Wavelet ne peut pas être importé : c’est un format d’export seulement.",
-            "A Wavelet file can’t be imported: it’s an export-only format.",
-        )
-        .to_string(),
         ErreurControleur::AucunResultat => choisir(
             l,
             "Pas de résultat de test pour l’instant.",
@@ -1351,6 +1366,14 @@ fn erreur_depot(e: &ErreurDepot, l: Langue) -> String {
         (ErreurDepot::Json { chemin, source }, Langue::En) => {
             format!("Invalid JSON in {}: {source}", chemin.display())
         }
+        (ErreurDepot::NonRelisible { chemin, .. }, Langue::Fr) => format!(
+            "Rien n’est écrit dans {} : une valeur n’est pas un nombre utilisable (infini ou indéfini), le fichier ne pourrait plus être relu.",
+            chemin.display()
+        ),
+        (ErreurDepot::NonRelisible { chemin, .. }, Langue::En) => format!(
+            "Nothing was written to {}: a value isn’t a usable number (infinite or undefined), so the file could no longer be read.",
+            chemin.display()
+        ),
         (ErreurDepot::IdentifiantInvalide(id), Langue::Fr) => {
             format!("Identifiant invalide : {id:?}")
         }

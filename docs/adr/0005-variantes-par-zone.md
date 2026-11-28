@@ -22,3 +22,7 @@ Le pas de 4 dB, le plancher de 1 dB et la largeur des filtres sont des valeurs d
 ## Ce que dit la confiance
 
 Indice, Probable et Sûr mesurent une comparaison prise seule : « cette comparaison avait au plus 1 chance sur 4 (ou moins de 6 %) de tomber ainsi par hasard ». Ils ne corrigent pas le fait qu'un test fait plusieurs comparaisons, et ne veulent pas dire « ce changement est probablement réel ». L'écran de résultat doit le dire dans ces termes. « Sûr » demande 5 victoires sur 5 : il n'est atteignable qu'en mode « Une seule zone » ou en cumulant des tests.
+
+## Note du 28/11/2026 : la confiance après le duel de vérification
+
+Jusqu'ici, un duel de vérification répondu donnait à lui seul la confiance du test. Un seul duel ne dépasse jamais Indice : confirmer la nouvelle version faisait donc tomber le test à Indice, alors que passer la vérification gardait la confiance la plus basse des zones changées (Sûr après Graves 5 sur 5). Répondre honnêtement était puni. Règle retenue : une vérification qui préfère la nouvelle version laisse la confiance du test à celle de la zone changée la plus basse, comme une vérification passée, et la version est recommandée ; une vérification qui préfère la référence, ou « Pareil », donne Indice et la version n'est pas recommandée.
