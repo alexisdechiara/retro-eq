@@ -367,8 +367,8 @@ msgstr "B"
 msgid "Annuler"
 msgstr "Undo"
 
-msgid "Maintiens F6 ou F8 pour réécouter A ou B avant de voter."
-msgstr "Hold F6 or F8 to listen to A or B again before voting."
+msgid "Maintiens F6 ou F8 pour réécouter A ou B avant de répondre."
+msgstr "Hold F6 or F8 to listen to A or B again before answering."
 
 msgid "Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre."
 msgstr "Shortcuts with no effect during this test: {}. Another app is holding them: close it, or answer from this window."
@@ -795,8 +795,8 @@ msgstr "Side rail"
 msgid "Importer et exporter"
 msgstr "Import and export"
 
-msgid "Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt) et AutoEQ (ParametricEQ.txt). Les fichiers importés deviennent des profils."
-msgstr "Retro EQ reads Peace (.peace), Equalizer APO (.txt) and AutoEQ (ParametricEQ.txt) files. Imported files become profiles."
+msgid "Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt), AutoEQ (ParametricEQ.txt) et Wavelet (GraphicEQ, reproduit de façon approchée). Les fichiers importés deviennent des profils."
+msgstr "Retro EQ reads Peace (.peace), Equalizer APO (.txt), AutoEQ (ParametricEQ.txt) and Wavelet (GraphicEQ, reproduced approximately) files. Imported files become profiles."
 
 msgid "Exporter le profil actif"
 msgstr "Export the active profile"

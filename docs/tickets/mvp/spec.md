@@ -142,7 +142,7 @@ Règles (ADR-0005) :
 - `equalizer_apo` : lit et écrit `Preamp: -6 dB` et `Filter 1: ON PK Fc 1000 Hz Gain -3 dB Q 1.41` (`PK`, `LSC`, `HSC` ; `LS`/`HS` acceptés à la lecture ; lignes `OFF`, commentaires `#` et lignes inconnues ignorées sans erreur, mais comptées dans un rapport).
 - `autoeq` : le fichier `ParametricEQ.txt` d'AutoEQ est ce même format ; module qui délègue et nomme le profil d'après le fichier.
 - `peace` : lit et écrit les fichiers `.peace` (format INI de Peace). À défaut de spécification publique, implémenter d'après des fichiers réels et documenter ce qui n'est pas géré.
-- `wavelet` : export seulement, ligne `GraphicEQ: 20 -1.2; 21 -1.1; …` sur les 127 fréquences d'AutoEQ.
+- `wavelet` : export en ligne `GraphicEQ: 20 -1.2; 21 -1.1; …` sur les 127 fréquences d'AutoEQ. Import : la courbe en points est reproduite de façon approchée sur les 10 bandes, avec l'écart maximal annoncé.
 - `detecter_format(contenu, nom_de_fichier)`.
 
 ## `retro-engine`

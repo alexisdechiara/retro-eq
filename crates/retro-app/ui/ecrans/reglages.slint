@@ -156,7 +156,7 @@ export component EcranReglages inherits VerticalLayout {
     Carte {
         TitreSection { contenu: @tr("Importer et exporter"); }
         Separateur { }
-        Paragraphe { text: @tr("Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt) et AutoEQ (ParametricEQ.txt). Les fichiers importés deviennent des profils."); }
+        Paragraphe { text: @tr("Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt), AutoEQ (ParametricEQ.txt) et Wavelet (GraphicEQ, reproduit de façon approchée). Les fichiers importés deviennent des profils."); }
         HorizontalLayout {
             alignment: start;
             Bouton { texte: @tr("Importer un fichier…"); prefixe: "↧"; active => { Reglages.importer(); } }
