@@ -12,6 +12,8 @@ export struct LigneVersion { numero: int, date: string, origine: string, active:
 export struct LigneControle { titre: string, detail: string, etat: EtatControle, action: string }
 export struct LigneRaccourci { touches: string, action: string, conflit: bool }
 export struct LigneAppli { nom: string, duels: int, preference: string }
+export struct LigneEcartVolume { titre: string, ecart: string, detail: string }
+export struct LigneEmpreinte { appli: string, duels: int, tendances: string, confiance: int }
 export struct LigneMode { id: string, groupe: string, nom: string, description: string, source: string, duels: string, duree: string, disponible: bool }
 
 export global Appli {
@@ -92,6 +94,8 @@ export global Resultat {
     in property <bool> active: false;
     in property <bool> recommandee: true;        // faux : rien ne pousse à activer (aucun changement, ou référence préférée à la vérification)
     in property <float> preampli-db: 0;
+    in property <string> volume: "";             // bilan de l'écart de volume mesuré (ticket 26)
+    in property <[LigneEcartVolume]> ecarts-volume; // duels dont l'écart dépasse le seuil
     callback activer();
     callback revenir-reference();
     callback exporter(string);                   // « peace », « apo », « autoeq », « wavelet »
@@ -103,6 +107,7 @@ export global Profils {
     in property <[LigneVersion]> versions;
     in-out property <string> choisi: "";
     in property <[string]> presets;
+    in property <[LigneEmpreinte]> empreinte;    // réponses du profil ouvert, par appli (ticket 28)
     callback choisir(string);
     callback activer(string);
     callback activer-version(string, int);
@@ -112,6 +117,7 @@ export global Profils {
     callback importer();
     callback exporter(string, string);
     callback tester(string);
+    callback comparer-version(string, int);      // compare à l'aveugle cette version à la version active (ticket 27)
 }
 
 export global Egaliseur {

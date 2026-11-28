@@ -65,6 +65,15 @@ pub enum Entree {
         reponse: Reponse,
         horodatage_ms: u64,
     },
+    /// L'écart de volume perçu mesuré sur ce qui jouait pendant les passages du duel
+    /// répondu juste avant : variante moins référence, en dB (ticket 26, ADR-0006). Écrit
+    /// juste après la `ReponseDonnee`, seulement si les deux côtés ont été assez mesurés.
+    /// Absent des journaux plus anciens : leurs duels n'ont simplement pas d'écart mesuré.
+    EcartVolumeMesure {
+        duel: u32,
+        ecart_db: f64,
+        horodatage_ms: u64,
+    },
     /// La dernière réponse est annulée : le duel sera rejoué.
     ReponseAnnulee { duel: u32, horodatage_ms: u64 },
     /// Le duel est passé, sans réponse.
@@ -105,6 +114,7 @@ impl Entree {
             | Entree::DuelDemarre { horodatage_ms, .. }
             | Entree::PassageDemarre { horodatage_ms, .. }
             | Entree::ReponseDonnee { horodatage_ms, .. }
+            | Entree::EcartVolumeMesure { horodatage_ms, .. }
             | Entree::ReponseAnnulee { horodatage_ms, .. }
             | Entree::DuelPasse { horodatage_ms, .. }
             | Entree::DuelRecommence { horodatage_ms, .. }
@@ -394,6 +404,20 @@ mod tests {
         })
         .unwrap();
         assert_eq!(v["type"], "duel_retire");
+    }
+
+    #[test]
+    fn l_ecart_de_volume_mesure_passe_par_json() {
+        let e = Entree::EcartVolumeMesure {
+            duel: 3,
+            ecart_db: -1.25,
+            horodatage_ms: 42,
+        };
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!(v["type"], "ecart_volume_mesure");
+        assert_eq!(serde_json::from_value::<Entree>(v).unwrap(), e);
+        assert_eq!(e.horodatage_ms(), 42);
+        assert!(!e.est_finale());
     }
 
     #[test]

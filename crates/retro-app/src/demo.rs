@@ -6,8 +6,8 @@ use crate::pont::modeles_de_modes;
 use crate::textes;
 use crate::*;
 use retro_core::{
-    BilanControles, ComptesSens, Confiance, Cote, DuelFini, Langue, Origine, Preference, Reponse,
-    ResultatZone, Sens, Sujet, Zone,
+    BilanControles, ComptesSens, Confiance, Cote, DuelClos, DuelFini, GoutsAppli, Langue, Origine,
+    Preference, Reponse, ResultatZone, Sens, Sujet, TendanceAppli, Zone,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -193,6 +193,8 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
         },
     ]));
 
+    remplir_ecarts_volume(fenetre, l);
+
     let profils = fenetre.global::<Profils>();
     let profil = |id: &str, nom: &str, actif: bool, versions: i32, date: &str, origine: Origine| {
         LigneProfil {
@@ -273,6 +275,7 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
         version(2, "20/11 18:05", Origine::Manuel, false),
         version(1, "12/10 10:12", importe("peace"), false),
     ]));
+    remplir_empreinte(fenetre, l);
 
     let egaliseur = fenetre.global::<Egaliseur>();
     egaliseur.set_gains(modele(vec![
@@ -355,6 +358,95 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
 
     remplir_autoeq(fenetre, l);
     remplir_mise_a_jour(fenetre, l);
+}
+
+/// L'écart de volume mesuré de l'écran Résultat (ticket 26) : 10 duels mesurés, dont un
+/// au-delà du seuil.
+fn remplir_ecarts_volume(fenetre: &FenetrePrincipale, l: Langue) {
+    let duel = |numero: u32, sujet: Sujet, ecart: f64| DuelClos {
+        numero,
+        sujet,
+        reponse: Some(Reponse::B),
+        preference: Some(Preference::Variante),
+        appli: Some("Valorant".into()),
+        ecart_volume_db: Some(ecart),
+    };
+    let mut duels: Vec<DuelClos> = [0.4, -0.6, 0.2, 0.9, -0.3, 0.5, -1.1, 0.7, 0.1]
+        .iter()
+        .enumerate()
+        .map(|(i, &e)| duel(i as u32 + 1, Sujet::Controle, e))
+        .collect();
+    duels.push(duel(
+        10,
+        Sujet::Zone {
+            zone: Zone::Graves,
+            sens: Sens::Plus,
+        },
+        2.6,
+    ));
+    let resultat = fenetre.global::<Resultat>();
+    resultat.set_volume(textes::volume_mesure(&duels, l).into());
+    resultat.set_ecarts_volume(modele(
+        duels
+            .iter()
+            .filter(|d| d.ecart_signale())
+            .map(|d| {
+                let (titre, ecart, detail) = textes::ecart_volume(d, l);
+                LigneEcartVolume {
+                    titre: titre.into(),
+                    ecart: ecart.into(),
+                    detail: detail.into(),
+                }
+            })
+            .collect(),
+    ));
+}
+
+/// L'Empreinte du profil ouvert dans Mes profils (ticket 28), comme la maquette « Selon ce
+/// que tu faisais ».
+fn remplir_empreinte(fenetre: &FenetrePrincipale, l: Langue) {
+    let tendance = |zone, sens, pour_variante, pour_reference, confiance| TendanceAppli {
+        zone,
+        sens,
+        pour_variante,
+        pour_reference,
+        pareil: 0,
+        confiance,
+    };
+    let gouts = [
+        GoutsAppli {
+            appli: "VALORANT-Win64-Shipping".into(),
+            duels: 14,
+            tendances: vec![
+                tendance(Zone::Presence, Sens::Plus, 3, 0, Confiance::Probable),
+                tendance(Zone::Graves, Sens::Moins, 2, 1, Confiance::Indice),
+            ],
+        },
+        GoutsAppli {
+            appli: "chrome".into(),
+            duels: 6,
+            tendances: vec![tendance(Zone::Graves, Sens::Plus, 2, 1, Confiance::Indice)],
+        },
+        GoutsAppli {
+            appli: "Discord".into(),
+            duels: 2,
+            tendances: Vec::new(),
+        },
+    ];
+    fenetre.global::<Profils>().set_empreinte(modele(
+        gouts
+            .iter()
+            .map(|g| LigneEmpreinte {
+                appli: g.appli.as_str().into(),
+                duels: g.duels as i32,
+                tendances: textes::tendances_appli(g, l).into(),
+                confiance: g
+                    .tendances
+                    .first()
+                    .map_or(0, |t| textes::niveau_confiance(t.confiance)),
+            })
+            .collect(),
+    ));
 }
 
 /// Le panneau de recherche AutoEQ. Les résultats sont de vraies entrées de la base (relevées

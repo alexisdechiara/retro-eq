@@ -41,9 +41,10 @@ pub(super) fn evenement_au_hasard(h: &mut HasardGraine, reponses: u32, abandon: 
             appuye: h.pile_ou_face(),
         },
         89..=93 => Evenement::AppelEnCours(h.pile_ou_face()),
-        94..=98 => Evenement::PremierPlan(
+        94..=96 => Evenement::PremierPlan(
             ["Jeu.exe", "Discord.exe", "Navigateur.exe", ""][h.entier(4) as usize].into(),
         ),
+        97..=98 => Evenement::VolumeMesure(-40.0 + f64::from(h.entier(30))),
         _ => Evenement::Demarrer,
     }
 }

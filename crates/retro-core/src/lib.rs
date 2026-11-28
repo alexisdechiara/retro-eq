@@ -12,6 +12,7 @@ pub mod confiance;
 pub mod depot;
 pub mod deroulement;
 pub mod egaliseur;
+pub mod empreinte;
 pub mod formats;
 pub mod hasard;
 pub mod journal;
@@ -26,10 +27,11 @@ pub mod zone;
 pub use confiance::{risque_hasard, Confiance};
 pub use depot::{Depot, ErreurDepot, EtatMoteurSauve, FichierIgnore, ProfilsListes};
 pub use deroulement::{
-    ContexteReprise, Deroulement, DuelFini, Effet, ErreurReprise, EtatTest, Evenement,
-    ParametresTest, VueTest,
+    duels_clos_du_journal, duels_pour_empreinte, ContexteReprise, Deroulement, DuelClos, DuelFini,
+    Effet, ErreurReprise, EtatTest, Evenement, ParametresTest, VueTest, SEUIL_ECART_VOLUME_DB,
 };
 pub use egaliseur::{courbe_10_bandes, FadersEtSupplementaires, BANDES_HZ, Q_BANDES};
+pub use empreinte::{empreinte, GoutsAppli, TendanceAppli};
 pub use hasard::{Hasard, HasardGraine, HasardReel};
 pub use journal::{Entree, Journal, LectureJournal, RaisonPause};
 pub use plan::{

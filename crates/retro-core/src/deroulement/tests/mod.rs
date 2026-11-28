@@ -5,6 +5,7 @@
 mod proprietes;
 mod reprise;
 mod scenarios;
+mod volume;
 
 use super::*;
 use crate::profil::Origine;

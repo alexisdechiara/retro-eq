@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Appli, Ecran, Profils, LigneProfil, AutoEq } from "../etat.slint";
 import { PanneauAutoEq } from "autoeq.slint";
-import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Separateur, EcranCourbe } from "../composants.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Separateur, EcranCourbe, Confiance } from "../composants.slint";
 
 // Une cassette : un profil. Cliquable et activable au clavier.
 component Cassette inherits Rectangle {
@@ -83,7 +83,11 @@ component Detail inherits Carte {
                 horizontal-stretch: 0;
                 HorizontalLayout {
                     alignment: end;
+                    spacing: 10px;
                     if v.active: Pastille { texte: @tr("✓ Actuelle"); couleur: Theme.fond-ok; encre: Theme.ok; taille: 14px; }
+                    // Ticket 27 : la même comparaison à l'aveugle que « profil contre profil »,
+                    // entre la version active et celle-ci.
+                    if !v.active: Bouton { texte: @tr("Comparer à l’aveugle"); active => { Profils.comparer-version(Profils.choisi, v.numero); } }
                     if !v.active: Bouton { texte: @tr("Activer cette version"); active => { Profils.activer-version(Profils.choisi, v.numero); } }
                 }
             }
@@ -105,6 +109,34 @@ component Detail inherits Carte {
         Bouton { texte: "Equalizer APO"; active => { Profils.exporter(p.id, "apo"); } }
         Bouton { texte: "AutoEQ"; active => { Profils.exporter(p.id, "autoeq"); } }
         Bouton { texte: "Wavelet"; active => { Profils.exporter(p.id, "wavelet"); } }
+    }
+}
+
+// L'Empreinte d'un profil (ticket 28) : les réponses de tous ses tests terminés, regroupées
+// par appli au premier plan. Reprend la section « Selon ce que tu faisais » de la maquette.
+component CarteEmpreinte inherits Carte {
+    in property <LigneProfil> p;
+    HorizontalLayout {
+        spacing: 12px;
+        TitreSection { contenu: @tr("Empreinte de « {} »", p.nom); vertical-alignment: center; }
+        Etiquette { contenu: @tr("appli au premier plan pendant les duels"); horizontal-stretch: 0; horizontal-alignment: right; vertical-alignment: center; }
+    }
+    Paragraphe { text: @tr("Ce que tes tests disent de tes goûts selon ce que tu faisais. Seuls comptent les duels sur une zone, dans les tests terminés dont les duels de contrôle n’ont pas tout bloqué."); font-size: 15px; }
+    if Profils.empreinte.length == 0: Paragraphe { text: @tr("Pas encore de réponse à regrouper : l’Empreinte se remplit à chaque test terminé."); font-size: 15px; color: Theme.discret; }
+    for g in Profils.empreinte: VerticalLayout {
+        spacing: 8px;
+        Separateur { }
+        HorizontalLayout {
+            spacing: 14px;
+            VerticalLayout {
+                spacing: 2px;
+                width: 200px;
+                Text { text: g.appli; font-family: Theme.courant; font-weight: 700; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+                Chiffres { text: @tr("{n} duel" | "{n} duels" % g.duels); font-size: 13px; color: Theme.discret; }
+            }
+            Paragraphe { text: g.tendances; font-size: 15px; vertical-alignment: center; }
+            VerticalLayout { alignment: center; horizontal-stretch: 0; Confiance { niveau: g.confiance; } }
+        }
     }
 }
 
@@ -158,8 +190,12 @@ export component EcranProfils inherits VerticalLayout {
     }
 
     VerticalLayout {
+        // Pas d'espacement ici : chaque profil non ouvert donne une ligne vide, qui
+        // ajouterait un trou. L'écart entre les deux cartes vient de la ligne du profil ouvert.
         for p in Profils.liste: VerticalLayout {
+            spacing: 24px;
             if p.id == Profils.choisi: Detail { p: p; }
+            if p.id == Profils.choisi: CarteEmpreinte { p: p; }
         }
     }
     if Profils.liste.length > 0 && Profils.choisi == "": Paragraphe { text: @tr("Choisis une cassette pour voir ses versions et ses actions."); }

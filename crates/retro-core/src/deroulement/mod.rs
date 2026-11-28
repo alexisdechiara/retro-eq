@@ -21,12 +21,14 @@
 //! Remettre la référence pendant un duel peut trahir un côté : tout duel interrompu par
 //! une pause est donc rejoué avec un **nouveau tirage** (qui est A, ordre des passages).
 
+mod clos;
 mod reprise;
 mod vue;
 
 #[cfg(test)]
 mod tests;
 
+pub use clos::{duels_clos_du_journal, duels_pour_empreinte, DuelClos, SEUIL_ECART_VOLUME_DB};
 pub use reprise::{ContexteReprise, ErreurReprise};
 pub use vue::{DuelFini, EtatTest, VueTest};
 
@@ -37,12 +39,25 @@ use crate::profil::Version;
 use crate::reglages::ReglagesTest;
 use crate::resultat::{calculer_resultat, ResultatTest};
 use crate::zone::{variante, ReglagesVariantes};
-use retro_dsp::{egaliser_volumes, Courbe, Spectre};
+use retro_dsp::{egaliser_volumes, Courbe, Spectre, VolumeIntegre};
+
+/// Une mesure de volume prise moins de ce délai après le début d'un passage ne compte pas :
+/// le moteur vient de changer de courbe (fondu, rechargement d'Equalizer APO) et la mesure,
+/// lissée sur les dernières centaines de millisecondes, mêle encore les deux côtés.
+pub const STABILISATION_VOLUME_MS: u64 = 2_000;
+
+/// Il faut au moins ce nombre de mesures retenues de chaque côté pour donner un écart
+/// mesuré : en dessous (peu de son, passages très courts), on ne dit rien plutôt que
+/// d'afficher un chiffre au hasard.
+pub const MESURES_MIN_PAR_COTE: u32 = 3;
 
 /// Ce que l'appli signale au déroulement. Un événement qui n'a pas de sens dans l'état
 /// courant (une réponse pendant une pause, « reprendre » en pleine écoute…) est ignoré :
 /// aucun effet, jamais d'erreur. L'appli peut donc transmettre les touches sans filtrer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Pas de `Eq` (seulement `PartialEq`) : `VolumeMesure` porte un `f64`, et un nombre à
+/// virgule n'est pas toujours égal à lui-même (`NaN != NaN`).
+#[derive(Debug, Clone, PartialEq)]
 pub enum Evenement {
     /// Lance le test (seulement depuis l'état `Pret`).
     Demarrer,
@@ -78,6 +93,11 @@ pub enum Evenement {
     AppelEnCours(bool),
     /// L'appli au premier plan a changé. Une chaîne vide veut dire « inconnue ».
     PremierPlan(String),
+    /// Le volume perçu mesuré sur ce qui joue en ce moment (dB, pondéré K), à envoyer
+    /// régulièrement (une fois par seconde suffit). Il est cumulé pour le côté en train de
+    /// jouer, hors des [`STABILISATION_VOLUME_MS`] qui suivent chaque bascule, et sert à
+    /// donner l'écart mesuré du duel (ADR-0006). Ignoré hors de l'écoute.
+    VolumeMesure(f64),
     /// Abandonne le test : la référence est remise, aucun résultat n'est calculé.
     Abandonner,
 }
@@ -190,6 +210,11 @@ pub struct Deroulement {
     courbes_duel: Option<(Courbe, Courbe)>,
     /// L'appli au premier plan au début de chaque passage du duel courant.
     applis_duel: Vec<Option<String>>,
+    /// Le volume mesuré pendant les passages du duel courant : `[A, B]`.
+    volumes_duel: [VolumeIntegre; 2],
+    /// L'écart de volume mesuré de chaque duel clos (même longueur que `issues`) :
+    /// variante moins référence, en dB ; `None` s'il n'a pas pu être mesuré.
+    ecarts: Vec<Option<f64>>,
     premier_plan: Option<String>,
     appel: bool,
     /// Écoute cumulée des passages déjà fermés (ms). Les pauses n'y entrent pas.
@@ -231,6 +256,8 @@ impl Deroulement {
             phase: Phase::Pret,
             courbes_duel: None,
             applis_duel: Vec::new(),
+            volumes_duel: [VolumeIntegre::default(); 2],
+            ecarts: Vec::new(),
             premier_plan: None,
             appel: false,
             ecoute_ms: 0,
@@ -277,6 +304,7 @@ impl Deroulement {
             Evenement::PremierPlan(nom) => {
                 self.premier_plan = Some(nom).filter(|n| !n.is_empty());
             }
+            Evenement::VolumeMesure(volume_db) => self.mesurer_volume(volume_db, t),
             Evenement::Abandonner => self.abandonner(t, &mut effets),
         }
         self.conseiller_pause(t, &mut effets);
@@ -414,6 +442,43 @@ impl Deroulement {
             .map(|(nom, _)| nom.clone())
     }
 
+    // ----- Volume mesuré -----
+
+    /// Cumule une mesure pour le côté qui joue, si le passage est assez avancé.
+    fn mesurer_volume(&mut self, volume_db: f64, t: u64) {
+        let Phase::Ecoute { passage, debut_ms } = self.phase else {
+            return;
+        };
+        if t.saturating_sub(debut_ms) < STABILISATION_VOLUME_MS {
+            return;
+        }
+        let Some(cote) = self
+            .duel_courant()
+            .and_then(|d| d.ordre_passages.get(passage).copied())
+        else {
+            return;
+        };
+        self.volumes_duel[indice_cote(cote)].ajouter(volume_db);
+    }
+
+    /// L'écart mesuré du duel courant : volume de la variante moins celui de la référence
+    /// (dB). Rien si l'un des deux côtés n'a pas assez de mesures.
+    fn ecart_du_duel(&self) -> Option<f64> {
+        let duel = self.duel_courant()?;
+        let cote_ref = duel.cote_reference();
+        let cote_var = match cote_ref {
+            Cote::A => Cote::B,
+            Cote::B => Cote::A,
+        };
+        let moyenne = |cote: Cote| {
+            let v = self.volumes_duel[indice_cote(cote)];
+            (v.mesures() >= MESURES_MIN_PAR_COTE)
+                .then(|| v.moyenne_db())
+                .flatten()
+        };
+        Some(moyenne(cote_var)? - moyenne(cote_ref)?)
+    }
+
     // ----- Temps d'écoute -----
 
     /// Ferme le passage en cours, s'il y en a un : son temps d'écoute (au plus un
@@ -477,8 +542,10 @@ impl Deroulement {
             return self.attendre_reponse(t, effets);
         };
         if passage == 0 {
-            // Nouveau départ du duel : courbes recalculées avec le spectre du moment.
+            // Nouveau départ du duel : courbes recalculées avec le spectre du moment, et
+            // volume remesuré (un nouveau tirage a pu changer qui est A).
             self.courbes_duel = None;
+            self.volumes_duel = [VolumeIntegre::default(); 2];
         }
         self.applis_duel.truncate(passage);
         self.applis_duel.push(self.premier_plan.clone());
@@ -524,11 +591,19 @@ impl Deroulement {
         retirer_duel(duel, &mut HasardGraine::new(graine))
     }
 
-    /// Clôt le duel courant avec son issue et passe à la suite.
-    fn clore_duel(&mut self, issue: Option<Reponse>, t: u64, effets: &mut Vec<Effet>) {
+    /// Clôt le duel courant avec son issue (et son écart de volume mesuré) et passe à la suite.
+    fn clore_duel(
+        &mut self,
+        issue: Option<Reponse>,
+        ecart: Option<f64>,
+        t: u64,
+        effets: &mut Vec<Effet>,
+    ) {
         self.applis.push(self.appli_majoritaire());
         self.issues.push(issue);
+        self.ecarts.push(ecart);
         self.applis_duel.clear();
+        self.volumes_duel = [VolumeIntegre::default(); 2];
         self.courbes_duel = None;
         self.a_retirer = false;
         self.demarrer_duel(t, effets);
@@ -570,6 +645,7 @@ impl Deroulement {
     fn revenir_au_duel(&mut self, duel: usize) {
         self.issues.truncate(duel);
         self.applis.truncate(duel);
+        self.ecarts.truncate(duel);
         self.applis_duel.clear();
         self.courbes_duel = None;
         self.a_retirer = false;
@@ -648,6 +724,15 @@ impl Deroulement {
             reponse,
             horodatage_ms: t,
         }));
+        // Puis l'écart de volume mesuré pendant ses passages, s'il y en a un (ticket 26).
+        let ecart = self.ecart_du_duel();
+        if let Some(ecart_db) = ecart {
+            effets.push(Effet::Journaliser(Entree::EcartVolumeMesure {
+                duel: self.indice_courant() as u32,
+                ecart_db,
+                horodatage_ms: t,
+            }));
+        }
         if self.reglages.bip() {
             effets.push(Effet::Bip);
         }
@@ -655,7 +740,7 @@ impl Deroulement {
             effets.push(Effet::MasquerQuestion);
         }
         self.fermer_passage(t);
-        self.clore_duel(Some(reponse), t, effets);
+        self.clore_duel(Some(reponse), ecart, t, effets);
     }
 
     /// Met le test en pause : la référence est remise *avant* toute écriture. Si un duel
@@ -765,7 +850,7 @@ impl Deroulement {
             effets.push(Effet::MasquerQuestion);
         }
         self.fermer_passage(t);
-        self.clore_duel(None, t, effets);
+        self.clore_duel(None, None, t, effets);
     }
 
     fn recommencer_duel(&mut self, t: u64, effets: &mut Vec<Effet>) {
@@ -829,6 +914,14 @@ impl Deroulement {
             }
         }
         self.phase = Phase::Abandonne;
+    }
+}
+
+/// La place d'un côté dans `volumes_duel`.
+fn indice_cote(cote: Cote) -> usize {
+    match cote {
+        Cote::A => 0,
+        Cote::B => 1,
     }
 }
 
