@@ -318,7 +318,17 @@ export component MiniFenetre inherits Window {
                     vertical-alignment: center;
                 }
             }
-            Segments { total: Test.total; faits: Test.duel - 1; en-cours: Test.etat != EtatTest.termine; avancement: 1; }
+            // Une seule ligne entre le titre et les touches : l'alerte la plus utile prend la
+            // place de la barre d'avancement, pour ne pas changer la taille de la fenêtre
+            // (elle est placée une fois pour toutes en bas à droite de l'écran, voir mini.rs).
+            if Test.touches-mortes != "": Text {
+                text: @tr("Sans effet : {} (une autre appli les garde)", Test.touches-mortes);
+                font-size: 14px;
+                font-weight: 600;
+                color: Theme.erreur;
+                overflow: elide;
+            }
+            if Test.touches-mortes == "": Segments { total: Test.total; faits: Test.duel - 1; en-cours: Test.etat != EtatTest.termine; avancement: 1; }
             HorizontalLayout {
                 spacing: 8px;
                 alignment: start;

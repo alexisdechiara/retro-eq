@@ -668,6 +668,10 @@ impl Pont {
         let mut actions = self
             .raccourcis
             .regler_touches_de_test(self.controleur.touches_de_test_actives());
+        // Une touche de réponse refusée par le système au moment où le test la réserve : le
+        // contrôleur le dit, une fois par test (ticket 30).
+        self.controleur
+            .signaler_touches_mortes(self.raccourcis.touches_de_test_mortes());
         actions.extend(
             self.raccourcis
                 .actions(t, self.controleur.reecoute_possible()),
@@ -1006,6 +1010,7 @@ fn pousser_duels(test: &Test, vue: &VueDuels) {
     test.set_suite(vue.suite.as_str().into());
     test.set_pause_conseillee(vue.pause_conseillee);
     test.set_pause_sans_reponse(vue.pause_sans_reponse);
+    test.set_touches_mortes(vue.touches_mortes.as_str().into());
 }
 
 /// Ramène la fenêtre principale devant, depuis l'icône de la barre des tâches.

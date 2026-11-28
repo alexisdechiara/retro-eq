@@ -253,6 +253,10 @@ pub struct Controleur {
     /// La réduction de bruit choisie sur l'écran « Nouveau test » (identifiant du profil,
     /// activée), pas encore écrite dans le profil (voir `debut.rs`).
     reduction_bruit_choisie: Option<(String, bool)>,
+    /// Les touches de réponse qu'une autre appli garde pour elle (« F8 »), signalées par le
+    /// pont, et le test pour lequel on l'a déjà dit (voir `debut.rs`).
+    touches_mortes: Vec<String>,
+    touches_mortes_annoncees: Option<String>,
 }
 
 impl Controleur {
@@ -343,6 +347,8 @@ impl Controleur {
             autoeq: autoeq::Etat::default(),
             maj: mises_a_jour::EtatVerification::default(),
             reduction_bruit_choisie: None,
+            touches_mortes: Vec::new(),
+            touches_mortes_annoncees: None,
         };
         c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
@@ -1931,6 +1937,7 @@ impl Controleur {
                 == EtatTest::EnPause {
                     raison: RaisonPause::SansReponse,
                 },
+            touches_mortes: self.touches_mortes_affichees(),
         }
     }
 

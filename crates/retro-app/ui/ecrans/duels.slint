@@ -239,6 +239,11 @@ export component Duels inherits VerticalLayout {
             Raccourci { touche: "F9"; action: @tr("Plus tard"); }
             Raccourci { touche: "F10"; action: @tr("Annuler"); }
         }
+        // Une touche refusée par le système ne répondra pas : on le dit là où on lit les touches.
+        if Test.touches-mortes != "": Paragraphe {
+            text: @tr("Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre.", Test.touches-mortes);
+            color: Theme.erreur;
+        }
         Paragraphe { text: @tr("Maintiens F6 ou F8 pour réécouter A ou B avant de voter."); }
         HorizontalLayout {
             padding-top: 10px;

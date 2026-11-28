@@ -82,3 +82,61 @@ fn changer_de_profil_reprend_la_reduction_de_bruit_de_ce_profil() {
         Some(true)
     );
 }
+
+// ----- Touches de réponse prises par une autre appli (ticket 30) -----
+
+#[test]
+fn hors_test_une_touche_prise_ne_fait_rien_dire() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.signaler_touches_mortes(vec!["F8".to_string()]);
+    assert!(c.prendre_annonce().is_none());
+    assert_eq!(c.vue_duels(T0).touches_mortes, "");
+}
+
+#[test]
+fn une_touche_de_reponse_prise_est_annoncee_au_demarrage_du_test() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    // L'autotest l'avait déjà vue avant le test : le test qui commence le redit quand même.
+    c.signaler_touches_mortes(vec!["F8".to_string()]);
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    c.prendre_annonce();
+    c.signaler_touches_mortes(vec!["F8".to_string()]);
+
+    let annonce = c.prendre_annonce().expect("le conflit est annoncé");
+    assert!(annonce.erreur);
+    assert!(annonce.texte.contains("F8"), "{}", annonce.texte);
+    assert_eq!(c.vue_duels(T0 + 1_000).touches_mortes, "F8");
+
+    // Une seule fois par test : le pont le redit à chaque image.
+    c.signaler_touches_mortes(vec!["F8".to_string()]);
+    assert!(c.prendre_annonce().is_none());
+    // Une touche de plus : on le redit.
+    c.signaler_touches_mortes(vec!["F8".to_string(), "F10".to_string()]);
+    assert!(c.prendre_annonce().unwrap().texte.contains("F10"));
+    assert_eq!(c.vue_duels(T0 + 1_000).touches_mortes, "F8, F10");
+    // Les touches libérées, l'alerte disparaît.
+    c.signaler_touches_mortes(Vec::new());
+    assert!(c.prendre_annonce().is_none());
+    assert_eq!(c.vue_duels(T0 + 1_000).touches_mortes, "");
+}
+
+#[test]
+fn chaque_nouveau_test_redit_le_conflit() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    c.signaler_touches_mortes(vec!["F6".to_string()]);
+    assert!(c.prendre_annonce().is_some());
+    c.arreter_test(T0 + 1_000);
+    c.prendre_annonce();
+    assert_eq!(c.vue_duels(T0 + 1_000).touches_mortes, "");
+
+    c.demarrer_test(T0 + 2_000);
+    c.prendre_annonce();
+    c.signaler_touches_mortes(vec!["F6".to_string()]);
+    assert!(c.prendre_annonce().unwrap().texte.contains("F6"));
+}

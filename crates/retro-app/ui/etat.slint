@@ -69,6 +69,7 @@ export global Test {
     callback choisir-reduction-bruit(bool);
     in property <bool> pause-conseillee: false;
     in property <bool> pause-sans-reponse: false; // la pause vient d'un délai de réponse dépassé
+    in property <string> touches-mortes: "";     // touches de réponse prises par une autre appli pendant ce test, « F8, F10 » (ticket 30)
     callback demarrer();
     callback pause();
     callback reprendre();

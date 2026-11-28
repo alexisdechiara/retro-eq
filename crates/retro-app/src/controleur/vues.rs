@@ -110,6 +110,9 @@ pub struct VueDuels {
     pub pause_conseillee: bool,
     /// La pause vient d'un délai de réponse dépassé (ADR-0012).
     pub pause_sans_reponse: bool,
+    /// Les touches de réponse prises par une autre appli pendant ce test (« F8, F10 ») :
+    /// elles ne répondront pas. Vide s'il n'y en a pas (ticket 30).
+    pub touches_mortes: String,
 }
 
 impl Default for VueDuels {
@@ -128,6 +131,7 @@ impl Default for VueDuels {
             journal: Vec::new(),
             pause_conseillee: false,
             pause_sans_reponse: false,
+            touches_mortes: String::new(),
         }
     }
 }

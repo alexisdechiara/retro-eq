@@ -370,6 +370,12 @@ msgstr "Undo"
 msgid "Maintiens F6 ou F8 pour réécouter A ou B avant de voter."
 msgstr "Hold F6 or F8 to listen to A or B again before voting."
 
+msgid "Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre."
+msgstr "Shortcuts with no effect during this test: {}. Another app is holding them: close it, or answer from this window."
+
+msgid "Sans effet : {} (une autre appli les garde)"
+msgstr "No effect: {} (another app is holding them)"
+
 msgid "Mettre en pause"
 msgstr "Pause"
 

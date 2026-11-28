@@ -148,6 +148,7 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
         ligne_journal(1, Reponse::A, l),
     ]));
     test.set_modes(modeles_de_modes(l));
+    remplir_alertes_test(&test);
 
     let resultat = fenetre.global::<Resultat>();
     resultat.set_disponible(true);
@@ -401,6 +402,31 @@ fn remplir_autoeq(fenetre: &FenetrePrincipale, l: Langue) {
         ]
     };
     autoeq.set_resultats(modele(resultats));
+}
+
+/// Les alertes de l'écran Duels et de la mini-fenêtre, choisies avec la variable
+/// `RETRO_EQ_DEMO_TEST` : `touches-mortes` (F8 prise par une autre appli, ticket 30),
+/// `pause` (40 minutes d'écoute, ticket 29), ou rien (par défaut, comme la maquette).
+fn remplir_alertes_test(test: &Test) {
+    match std::env::var("RETRO_EQ_DEMO_TEST")
+        .unwrap_or_default()
+        .as_str()
+    {
+        "touches-mortes" => test.set_touches_mortes("F8".into()),
+        "pause" => test.set_pause_conseillee(true),
+        _ => {}
+    }
+}
+
+/// La mini-fenêtre, pour la capturer (`--ecran mini`) : le même duel que l'écran Duels.
+pub fn remplir_mini(mini: &MiniFenetre) {
+    let test = mini.global::<Test>();
+    test.set_etat(EtatTest::Ecoute);
+    test.set_duel(7);
+    test.set_total(12);
+    test.set_cote_actif(1);
+    test.set_compte_a_rebours("0:12".into());
+    remplir_alertes_test(&test);
 }
 
 /// La section « Mises à jour » de l'écran À propos. Le scénario se choisit avec la variable
