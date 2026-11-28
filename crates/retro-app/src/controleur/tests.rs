@@ -1301,6 +1301,54 @@ fn une_panne_du_moteur_pendant_un_test_met_en_pause_sur_la_reference() {
 }
 
 #[test]
+fn une_reference_refusee_est_retentee_a_chaque_tic_jusqu_a_ce_qu_elle_passe() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    let variante = banc.derniere_courbe();
+    // La pause et le secours échouent, puis la première nouvelle tentative aussi.
+    banc.moteur
+        .echouer_aux_prochains_appels(3, "fichier verrouillé");
+    c.mettre_en_pause(t + 100);
+    assert_eq!(c.vue_duels(t + 100).etat, EtatTestVue::Pause);
+    assert!(c.reference_a_remettre());
+    assert_eq!(banc.derniere_courbe(), variante);
+
+    c.tic(t + 1_200);
+    assert!(c.reference_a_remettre());
+    c.tic(t + 2_400);
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference))
+    );
+    assert!(!c.reference_a_remettre());
+    // Une fois remise, plus rien n'est écrit.
+    let avant = banc.moteur.appels().len();
+    c.tic(t + 3_600);
+    assert_eq!(banc.moteur.appels().len(), avant);
+}
+
+#[test]
+fn une_reference_refusee_est_retentee_meme_test_arrete_et_en_quittant() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+    banc.moteur
+        .echouer_aux_prochains_appels(2, "fichier verrouillé");
+    c.arreter_test(t + 100);
+    assert!(!c.test_en_cours());
+    assert!(c.reference_a_remettre());
+
+    // Tout de suite en quittant, sans attendre le délai entre deux tentatives.
+    c.avant_de_quitter(t + 150);
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference))
+    );
+    assert!(!c.reference_a_remettre());
+}
+
+#[test]
 fn un_journal_impossible_a_ouvrir_empeche_le_test_et_le_dit() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();

@@ -46,6 +46,8 @@ const GAIN_MAX_DB: f64 = 12.0;
 const PREAMPLI_MIN_DB: f64 = -24.0;
 /// Nombre de points du spectre par défaut (bruit rose).
 const POINTS_SPECTRE: usize = 96;
+/// Délai entre deux tentatives de remettre une référence que le moteur a refusée, en ms.
+const DELAI_NOUVELLE_TENTATIVE_MS: u64 = 1_000;
 
 /// Ce qui peut empêcher une action. Le texte (`Display`) est en français et sert aux
 /// journaux et aux tests ; ce que l'utilisateur lit vient de `textes::erreur`, dans sa langue.
@@ -232,6 +234,10 @@ pub struct Controleur {
     generation_moteur: u64,
     /// `generation_moteur` au moment du dernier spectre reçu.
     generation_spectre: u64,
+    /// La référence que le moteur a refusée pendant un secours, et l'heure de la prochaine
+    /// tentative. Retentée à chaque `tic` jusqu'à ce qu'elle passe : une variante ne doit
+    /// pas rester active parce que le fichier d'Equalizer APO était verrouillé un instant.
+    reference_a_remettre: Option<(Courbe, u64)>,
     choix: ChoixTest,
     plein_ecran: bool,
     annonce: Option<Annonce>,
@@ -322,6 +328,7 @@ impl Controleur {
             courbe_moteur: remise.clone().unwrap_or_default(),
             generation_moteur: u64::from(remise.is_some()),
             generation_spectre: 0,
+            reference_a_remettre: None,
             choix,
             plein_ecran: false,
             annonce,
@@ -681,6 +688,28 @@ impl Controleur {
     fn noter_courbe_moteur(&mut self, courbe: Courbe) {
         self.courbe_moteur = courbe;
         self.generation_moteur += 1;
+        // Le moteur vient d'accepter ce que le contrôleur voulait : plus rien à retenter.
+        self.reference_a_remettre = None;
+    }
+
+    /// Une référence refusée attend-elle encore d'être remise ?
+    pub fn reference_a_remettre(&self) -> bool {
+        self.reference_a_remettre.is_some()
+    }
+
+    /// Retente de remettre la référence refusée, si son heure est venue (ou tout de suite
+    /// si `forcer`). En cas de nouvel échec, la tentative suivante est repoussée.
+    fn retenter_reference(&mut self, t: u64, forcer: bool) {
+        let Some((courbe, prochaine)) = self.reference_a_remettre.clone() else {
+            return;
+        };
+        if !forcer && t < prochaine {
+            return;
+        }
+        // Une réussite vide `reference_a_remettre` (voir `noter_courbe_moteur`).
+        if self.appliquer_au_moteur(&courbe).is_err() {
+            self.reference_a_remettre = Some((courbe, t + DELAI_NOUVELLE_TENTATIVE_MS));
+        }
     }
 
     /// La courbe de tous les jours : le brouillon de l'égaliseur s'il y en a un, sinon la
@@ -1476,8 +1505,10 @@ impl Controleur {
                 }
             }
         }
-        if !reference_remise {
-            let _ = self.appliquer_au_moteur(&reference);
+        if !reference_remise && self.appliquer_au_moteur(&reference).is_err() {
+            // Le test est en pause et plus rien ne réécrirait le moteur : on retentera à
+            // chaque `tic`, et en quittant.
+            self.reference_a_remettre = Some((reference, t + DELAI_NOUVELLE_TENTATIVE_MS));
         }
         // On garde le message précis du moteur s'il y en a un, complété par ce qu'on a fait.
         let cause = self.annonce.take().map(|a| a.texte).unwrap_or_default();
@@ -1543,7 +1574,9 @@ impl Controleur {
     }
 
     /// Le temps passe : à appeler plusieurs fois par seconde pendant un test.
+    /// Retente aussi de remettre une référence refusée, test en cours ou non.
     pub fn tic(&mut self, t: u64) {
+        self.retenter_reference(t, false);
         if !self.test_en_cours() {
             return;
         }
@@ -1606,12 +1639,14 @@ impl Controleur {
     /// L'appli va se fermer (« Quitter », ✕ sans icône pour revenir, fin de la boucle
     /// d'événements). Un test en plein duel est mis en pause, ce qui remet la référence
     /// (ADR-0012) : une variante ne reste jamais active une fois l'appli fermée. Le test
-    /// sera proposé en pause au prochain lancement. Sans effet hors duel, et sans risque
-    /// si on l'appelle deux fois.
+    /// sera proposé en pause au prochain lancement. Une référence refusée plus tôt est
+    /// retentée. Sans effet sinon, et sans risque si on l'appelle deux fois.
     pub fn avant_de_quitter(&mut self, t: u64) {
         if self.test_en_cours() {
             self.envoyer(Evenement::Pause, t);
         }
+        // Une dernière chance pour une référence que le moteur avait refusée.
+        self.retenter_reference(t, true);
     }
 
     /// Un appel vocal commence ou se termine. Sans effet si le réglage est coupé.

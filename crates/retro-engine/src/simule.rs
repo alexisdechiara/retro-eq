@@ -17,7 +17,8 @@ pub enum Appel {
 #[derive(Debug)]
 struct Journal {
     appels: Vec<Appel>,
-    echec: Option<String>,
+    /// Le message d'échec et le nombre d'appels qui doivent encore échouer.
+    echec: Option<(String, u32)>,
     etat: EtatMoteur,
     sorties: Vec<SortieAudio>,
 }
@@ -79,7 +80,13 @@ impl MoteurSimule {
     /// Le prochain appel (et seulement lui) échouera avec ce message ; il
     /// n'est pas enregistré.
     pub fn echouer_au_prochain_appel(&self, message: &str) {
-        self.journal().echec = Some(message.to_string());
+        self.echouer_aux_prochains_appels(1, message);
+    }
+
+    /// Les `nombre` prochains appels échoueront avec ce message, sans être enregistrés ;
+    /// les suivants réussiront.
+    pub fn echouer_aux_prochains_appels(&self, nombre: u32, message: &str) {
+        self.journal().echec = (nombre > 0).then(|| (message.to_string(), nombre));
     }
 
     /// Force l'état renvoyé par `etat()` (ex. `Absent`).
@@ -94,7 +101,10 @@ impl MoteurSimule {
 
     fn enregistrer(&self, appel: Appel, nouvel_etat: EtatMoteur) -> Result<(), ErreurMoteur> {
         let mut j = self.journal();
-        if let Some(message) = j.echec.take() {
+        if let Some((message, restants)) = j.echec.take() {
+            if restants > 1 {
+                j.echec = Some((message.clone(), restants - 1));
+            }
             return Err(ErreurMoteur::Simule(message));
         }
         j.appels.push(appel);
@@ -168,6 +178,21 @@ mod tests {
         assert!(m.appels().is_empty());
         assert!(m.couper().is_ok());
         assert_eq!(m.appels(), vec![Appel::Couper]);
+    }
+
+    #[test]
+    fn echec_demande_pour_plusieurs_appels_touche_exactement_ceux_la() {
+        let mut m = MoteurSimule::nouveau();
+        m.echouer_aux_prochains_appels(3, "verrouillé");
+        for _ in 0..3 {
+            assert!(matches!(
+                m.appliquer(&courbe(-1.0)),
+                Err(ErreurMoteur::Simule(_))
+            ));
+        }
+        assert!(m.appels().is_empty());
+        assert!(m.appliquer(&courbe(-1.0)).is_ok());
+        assert_eq!(m.appels(), vec![Appel::Appliquer(courbe(-1.0))]);
     }
 
     #[test]

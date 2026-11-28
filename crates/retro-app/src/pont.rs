@@ -707,6 +707,9 @@ impl Pont {
             } else {
                 self.synchroniser_test(fenetre, t);
             }
+        } else if self.controleur.reference_a_remettre() {
+            // Le test est arrêté mais le moteur a refusé la référence : on retente.
+            self.controleur.tic(t);
         }
         self.relever_annonce(fenetre);
     }
