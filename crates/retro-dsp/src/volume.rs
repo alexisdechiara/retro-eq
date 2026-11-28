@@ -211,11 +211,11 @@ mod tests {
         let mut v = VolumeIntegre::default();
         v.ajouter(-20.0);
         v.ajouter(-20.0);
-        assert!((v.moyenne_db().unwrap() + 20.0).abs() < 1e-9);
+        assert!((v.moyenne_db().unwrap_or(f64::NAN) + 20.0).abs() < 1e-9);
         v.ajouter(-30.0);
         // (0,01 + 0,01 + 0,001) / 3 en puissance : la mesure forte pèse plus qu'en dB.
         let attendu = 10.0 * (0.021f64 / 3.0).log10();
-        assert!((v.moyenne_db().unwrap() - attendu).abs() < 1e-9);
+        assert!((v.moyenne_db().unwrap_or(f64::NAN) - attendu).abs() < 1e-9);
         assert_eq!(v.mesures(), 3);
     }
 
