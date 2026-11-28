@@ -33,7 +33,8 @@
 //! sur la forme exacte du plateau, signalée au rapport par
 //! [`RaisonIgnoree::Approximation`]). Les autres types vont au rapport d'ignorés
 //! sous la forme `Peace <code>`. Les bandes éteintes ou sans gain y vont aussi, comme
-//! celles à 22 050 Hz ou plus ([`RaisonIgnoree::FrequenceTropHaute`]).
+//! celles à 22 050 Hz ou plus ([`RaisonIgnoree::FrequenceTropHaute`]) et les préamplis,
+//! gains ou Q hors des limites de [`super`] ([`RaisonIgnoree::HorsLimites`]).
 //!
 //! Les sections propres à un haut-parleur (`[Gains1]`…`[Gains8]`, et leurs
 //! équivalents `[Frequencies1]`…) ne sont lues que pour être comparées au réglage
@@ -52,7 +53,8 @@
 //! haut-parleur (`[Frequencies1]`…) que Peace ajoute lui-même.
 
 use super::{
-    ecrire_nombre, lire_nombre, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree, FREQUENCE_MAX_HZ,
+    ecrire_nombre, gain_dans_les_limites, lire_nombre, preampli_dans_les_limites,
+    q_dans_les_limites, ErreurFormat, Import, LigneIgnoree, RaisonIgnoree, FREQUENCE_MAX_HZ,
 };
 use retro_dsp::{Courbe, Filtre, TypeFiltre};
 
@@ -136,10 +138,11 @@ pub fn lire(texte: &str) -> Result<Import, ErreurFormat> {
 
     if let Some(entree) = chercher(&sections, "general", "preamp") {
         match lire_nombre(&entree.valeur) {
-            Some(db) => {
+            Some(db) if preampli_dans_les_limites(db) => {
                 courbe.preampli_db = db;
                 preampli_vu = true;
             }
+            Some(_) => ignores.push(ignoree(entree, RaisonIgnoree::HorsLimites)),
             None => ignores.push(ignoree(entree, RaisonIgnoree::Illisible)),
         }
     }
@@ -276,6 +279,9 @@ fn lire_bande(
             .ok_or(RaisonIgnoree::Illisible)?,
         None => Q_PAR_DEFAUT,
     };
+    if !gain_dans_les_limites(gain_db) || !q_dans_les_limites(q) {
+        return Err(RaisonIgnoree::HorsLimites);
+    }
     Ok((
         Filtre {
             type_filtre,
@@ -509,6 +515,31 @@ mod tests {
         assert_eq!(i.ignores.len(), 1);
         assert_eq!(i.ignores[0].raison, RaisonIgnoree::HautParleurParticulier);
         assert_eq!(i.ignores[0].numero, 6);
+        assert!(i.partiel);
+    }
+
+    #[test]
+    fn un_preampli_un_gain_ou_un_q_hors_limites_est_signale() {
+        let texte = "[Frequencies]\nFrequency1=1000\nFrequency2=2000\nFrequency3=3000\n\
+                     Frequency4=4000\n[Gains]\nGain1=1\nGain2=1e300\nGain3=2\nGain4=3\n\
+                     [Qualities]\nQuality3=1000\n[General]\nPreAmp=1e308\n";
+        let i = lire(texte).expect("lecture");
+        let freqs: Vec<_> = i.courbe.filtres.iter().map(|f| f.frequence_hz).collect();
+        assert_eq!(freqs, [1000.0, 4000.0]);
+        assert_eq!(i.courbe.preampli_db, 0.0);
+        let signales: Vec<_> = i
+            .ignores
+            .iter()
+            .map(|l| (l.texte.as_str(), l.raison.clone()))
+            .collect();
+        assert_eq!(
+            signales,
+            [
+                ("Frequency2=2000", RaisonIgnoree::HorsLimites),
+                ("Frequency3=3000", RaisonIgnoree::HorsLimites),
+                ("PreAmp=1e308", RaisonIgnoree::HorsLimites),
+            ]
+        );
         assert!(i.partiel);
     }
 

@@ -182,6 +182,8 @@ impl Journal {
             chemin: self.chemin.clone(),
             source,
         })?;
+        // Une ligne illisible bloquerait la reprise du test : on ne l'écrit pas.
+        crate::depot::verifier_relisible::<Entree>(&self.chemin, &ligne)?;
         ligne.push(b'\n');
         // Un seul `write_all` : la ligne et son retour à la ligne partent ensemble.
         self.fichier

@@ -939,6 +939,7 @@ pub fn raison_ignoree(raison: &RaisonIgnoree, l: Langue) -> &'static str {
             "fréquence trop haute pour une sortie audio",
             "frequency too high for an audio output",
         ),
+        RaisonIgnoree::HorsLimites => choisir(l, "valeur hors limites", "value out of range"),
         _ => choisir(l, "ligne illisible", "unreadable line"),
     }
 }
@@ -1337,6 +1338,14 @@ fn erreur_depot(e: &ErreurDepot, l: Langue) -> String {
         (ErreurDepot::Json { chemin, source }, Langue::En) => {
             format!("Invalid JSON in {}: {source}", chemin.display())
         }
+        (ErreurDepot::NonRelisible { chemin, .. }, Langue::Fr) => format!(
+            "Rien n’est écrit dans {} : une valeur n’est pas un nombre utilisable (infini ou indéfini), le fichier ne pourrait plus être relu.",
+            chemin.display()
+        ),
+        (ErreurDepot::NonRelisible { chemin, .. }, Langue::En) => format!(
+            "Nothing was written to {}: a value isn’t a usable number (infinite or undefined), so the file could no longer be read.",
+            chemin.display()
+        ),
         (ErreurDepot::IdentifiantInvalide(id), Langue::Fr) => {
             format!("Identifiant invalide : {id:?}")
         }

@@ -68,11 +68,45 @@ pub enum RaisonIgnoree {
     /// 44,1 kHz) : une sortie audio à cette fréquence d'échantillonnage ne peut pas le jouer,
     /// et le calcul du filtre y serait instable ou en donnerait le reflet. La ligne n'est pas importée.
     FrequenceTropHaute,
+    /// Préampli, gain ou Q en dehors des limites raisonnables ([`PREAMPLI_MAX_DB`],
+    /// [`GAIN_MAX_DB`], [`Q_MIN`] et [`Q_MAX`]), ou qui ne serait plus un nombre fini une fois
+    /// additionné aux précédents. La ligne n'est pas importée : elle rendrait la courbe
+    /// inaudible, instable, ou impossible à enregistrer.
+    HorsLimites,
 }
 
 /// Fréquence (Hz, exclue) au-delà de laquelle un filtre n'est pas importé : Nyquist de
 /// 44,1 kHz, la plus basse des fréquences d'échantillonnage courantes d'une sortie audio.
 pub const FREQUENCE_MAX_HZ: f64 = 22_050.0;
+
+/// Préampli total le plus fort admis à l'import, en valeur absolue (dB). Au-delà de -60 dB on
+/// n'entend plus rien ; aucun fichier réel ne demande +60 dB.
+pub const PREAMPLI_MAX_DB: f64 = 60.0;
+
+/// Gain d'un filtre le plus fort admis à l'import, en valeur absolue (dB). Les curseurs de
+/// Peace s'arrêtent à ±30 dB, et les corrections d'AutoEQ restent bien en deçà.
+pub const GAIN_MAX_DB: f64 = 30.0;
+
+/// Plus petit Q admis à l'import : une cloche de plus de dix octaves de large.
+pub const Q_MIN: f64 = 0.01;
+
+/// Plus grand Q admis à l'import : une cloche d'environ un centième d'octave.
+pub const Q_MAX: f64 = 100.0;
+
+/// Vrai si `q` est dans [`Q_MIN`, `Q_MAX`] (faux pour NaN).
+pub(crate) fn q_dans_les_limites(q: f64) -> bool {
+    (Q_MIN..=Q_MAX).contains(&q)
+}
+
+/// Vrai si `gain_db` est dans [-`GAIN_MAX_DB`, `GAIN_MAX_DB`] (faux pour NaN).
+pub(crate) fn gain_dans_les_limites(gain_db: f64) -> bool {
+    (-GAIN_MAX_DB..=GAIN_MAX_DB).contains(&gain_db)
+}
+
+/// Vrai si `preampli_db` est dans [-`PREAMPLI_MAX_DB`, `PREAMPLI_MAX_DB`] (faux pour NaN).
+pub(crate) fn preampli_dans_les_limites(preampli_db: f64) -> bool {
+    (-PREAMPLI_MAX_DB..=PREAMPLI_MAX_DB).contains(&preampli_db)
+}
 
 impl RaisonIgnoree {
     /// Cette ligne laissée de côté change-t-elle le son par rapport au fichier d'origine ?
@@ -95,7 +129,8 @@ impl RaisonIgnoree {
             | RaisonIgnoree::PenteNonGeree
             | RaisonIgnoree::CanalParticulier
             | RaisonIgnoree::PeripheriqueParticulier
-            | RaisonIgnoree::FrequenceTropHaute => true,
+            | RaisonIgnoree::FrequenceTropHaute
+            | RaisonIgnoree::HorsLimites => true,
         }
     }
 }
