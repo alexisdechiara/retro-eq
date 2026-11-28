@@ -1,8 +1,9 @@
 //! Import et export des réglages d'égaliseur dans les formats que les gens s'échangent.
 //!
-//! Un module par format : [`equalizer_apo`], [`autoeq`], [`peace`] (lecture et
-//! écriture), [`wavelet`] (écriture seulement). Chaque lecture rend un [`Import`] :
-//! la courbe, un nom de profil éventuel et le rapport des lignes ignorées.
+//! Un module par format : [`equalizer_apo`], [`autoeq`], [`peace`] et [`wavelet`] (lecture
+//! et écriture ; la lecture d'une courbe `GraphicEQ:` est une approximation par les 10 bandes).
+//! Chaque lecture rend un [`Import`] : la courbe, un nom de profil éventuel et le rapport des
+//! lignes ignorées.
 //! [`detecter_format`] devine le format d'un fichier.
 
 pub mod autoeq;
@@ -22,7 +23,8 @@ pub enum Format {
     AutoEq,
     /// Préréglage `.peace` de l'interface Peace.
     Peace,
-    /// Ligne `GraphicEQ:` (export pour Wavelet).
+    /// Courbe de points `GraphicEQ:` seulement (export pour Wavelet, ou fichier Equalizer APO
+    /// sans autre réglage). Se lit par approximation : voir [`wavelet::lire`].
     Wavelet,
 }
 
@@ -158,6 +160,10 @@ pub struct Import {
     /// le son n'a pas été prise en compte (par exemple un réglage propre à un canal).
     /// L'interface doit alors prévenir l'utilisateur.
     pub partiel: bool,
+    /// `Some` quand la courbe n'est qu'une approximation du fichier (courbe `GraphicEQ:`
+    /// ramenée aux 10 bandes) : le plus grand écart (dB, positif) entre les points du fichier
+    /// et la courbe importée. L'interface doit le dire. `None` : la courbe est celle du fichier.
+    pub ecart_max_db: Option<f64>,
 }
 
 impl Import {
@@ -169,6 +175,7 @@ impl Import {
             nom: None,
             ignores,
             partiel,
+            ecart_max_db: None,
         }
     }
 }

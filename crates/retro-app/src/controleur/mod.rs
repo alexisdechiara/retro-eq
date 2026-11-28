@@ -79,8 +79,6 @@ pub enum ErreurControleur {
     AutreProfilManquant,
     #[error("Format de fichier non reconnu.")]
     FormatInconnu,
-    #[error("Un fichier Wavelet ne peut pas être importé : c’est un format d’export seulement.")]
-    ImportWavelet,
     #[error("Pas de résultat de test pour l’instant.")]
     AucunResultat,
     #[error("Impossible de reprendre le test interrompu : {0}")]
@@ -1020,15 +1018,19 @@ impl Controleur {
                 Format::EqualizerApo => (formats::equalizer_apo::lire(&texte)?, "equalizer_apo"),
                 Format::AutoEq => (formats::autoeq::lire(&texte, &nom_fichier)?, "autoeq"),
                 Format::Peace => (formats::peace::lire(&texte)?, "peace"),
-                Format::Wavelet => return Err(ErreurControleur::ImportWavelet),
+                Format::Wavelet => (formats::wavelet::lire(&texte)?, "wavelet"),
             };
+            let ecart = import.ecart_max_db;
             let nom = import.nom.clone().unwrap_or_else(|| {
                 chemin
                     .file_stem()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| textes::profil_importe(l).to_string())
             });
-            let (id, annonce) = c.creer_profil_importe(import, nom, nom_format, t)?;
+            let (id, mut annonce) = c.creer_profil_importe(import, nom, nom_format, t)?;
+            if let Some(e) = ecart {
+                annonce = format!("{annonce} {}", textes::annonce_ecart_import(e, l));
+            }
             nouveau = Some(id);
             Ok(Some(annonce))
         });

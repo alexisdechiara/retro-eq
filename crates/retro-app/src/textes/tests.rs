@@ -277,6 +277,38 @@ fn le_preampli_remplace_se_dit_dans_les_deux_langues() {
 }
 
 #[test]
+fn l_ecart_d_un_import_approche_se_dit_dans_les_deux_langues() {
+    let fr = annonce_ecart_import(0.36, FR);
+    assert!(fr.contains("écart maximal 0,4 dB"), "{fr}");
+    let en = annonce_ecart_import(0.36, EN);
+    assert!(
+        en.contains("largest deviation from the file 0.4 dB"),
+        "{en}"
+    );
+    assert!(!en.contains('+') && !fr.contains('+'));
+}
+
+#[test]
+fn les_raisons_nouvelles_d_un_import_ont_leur_texte() {
+    use retro_core::formats::RaisonIgnoree;
+    for (raison, fr, en) in [
+        (
+            RaisonIgnoree::FrequenceTropHaute,
+            "fréquence trop haute pour une sortie audio",
+            "frequency too high for an audio output",
+        ),
+        (
+            RaisonIgnoree::HorsLimites,
+            "valeur hors limites",
+            "value out of range",
+        ),
+    ] {
+        assert_eq!(raison_ignoree(&raison, FR), fr);
+        assert_eq!(raison_ignoree(&raison, EN), en);
+    }
+}
+
+#[test]
 fn les_erreurs_n_affichent_pas_de_francais_en_anglais() {
     let erreurs = [
         ErreurControleur::ProfilInconnu,
@@ -288,7 +320,6 @@ fn les_erreurs_n_affichent_pas_de_francais_en_anglais() {
         ErreurControleur::ModeIndisponible,
         ErreurControleur::AutreProfilManquant,
         ErreurControleur::FormatInconnu,
-        ErreurControleur::ImportWavelet,
         ErreurControleur::AucunResultat,
         ErreurControleur::Format(ErreurFormat::AucuneLigneUtilisable),
         ErreurControleur::Reprise(ErreurReprise::JournalVide),

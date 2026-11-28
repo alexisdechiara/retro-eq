@@ -1009,6 +1009,21 @@ pub fn annonce_import(
     texte
 }
 
+/// Ajouté au compte rendu d'un import approché (courbe `GraphicEQ:` ramenée aux 10 bandes) :
+/// le plus grand écart entre les points du fichier et la courbe importée.
+pub fn annonce_ecart_import(ecart_db: f64, l: Langue) -> String {
+    let ecart = db(ecart_db.abs(), l);
+    let ecart = ecart.trim_start_matches('+');
+    match l {
+        Langue::Fr => format!(
+            "Courbe GraphicEQ ramenée aux 10 bandes de l’égaliseur : écart maximal {ecart} avec le fichier."
+        ),
+        Langue::En => format!(
+            "GraphicEQ curve fitted to the equalizer’s 10 bands: largest deviation from the file {ecart}."
+        ),
+    }
+}
+
 /// Après « Rendre le son d'origine ». `copie` : une ancienne copie de la configuration
 /// restée sur le disque parce qu'elle différait de ce qui a été rendu.
 pub fn annonce_son_origine(copie: Option<&str>, l: Langue) -> String {
@@ -1213,12 +1228,6 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
             l,
             "Format de fichier non reconnu.",
             "File format not recognised.",
-        )
-        .to_string(),
-        ErreurControleur::ImportWavelet => choisir(
-            l,
-            "Un fichier Wavelet ne peut pas être importé : c’est un format d’export seulement.",
-            "A Wavelet file can’t be imported: it’s an export-only format.",
         )
         .to_string(),
         ErreurControleur::AucunResultat => choisir(
