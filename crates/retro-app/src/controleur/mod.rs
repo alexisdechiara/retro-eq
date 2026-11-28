@@ -1050,11 +1050,23 @@ impl Controleur {
 
     // ----- Import et export -----
 
+    /// À demander avant d'ouvrir la boîte de dialogue d'import : pas pendant un test. La
+    /// boîte bloque la boucle d'événements tant qu'elle est ouverte ; en plein duel, plus
+    /// rien ne changerait de passage ni ne mettrait le test en pause, et la variante
+    /// resterait active. Rend faux (et le dit) si l'import doit attendre.
+    pub fn preparer_import(&mut self) -> bool {
+        self.tenter(|c| {
+            c.exiger_pas_de_test()?;
+            Ok(None)
+        })
+    }
+
     /// Importe un fichier Peace, Equalizer APO ou AutoEQ comme nouveau profil (pas activé).
-    /// Rend l'identifiant du profil créé.
+    /// Rend l'identifiant du profil créé. Refusé pendant un test (voir `preparer_import`).
     pub fn importer(&mut self, chemin: &Path, t: u64) -> Option<String> {
         let mut nouveau = None;
         self.tenter(|c| {
+            c.exiger_pas_de_test()?;
             let l = c.reglages.langue;
             let octets = std::fs::read(chemin).map_err(|source| ErreurControleur::Fichier {
                 action: ActionFichier::Lecture,

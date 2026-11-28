@@ -1387,6 +1387,10 @@ fn fermer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
 }
 
 fn importer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
+    // Pas de boîte de dialogue pendant un test : elle bloquerait la boucle d'événements.
+    if !pont.controleur.preparer_import() {
+        return;
+    }
     match choisir_fichier(pont.controleur.langue()) {
         Some(chemin) => {
             let t = pont.maintenant();

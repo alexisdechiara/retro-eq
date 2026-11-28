@@ -954,6 +954,37 @@ fn pendant_un_test_l_egaliseur_et_les_profils_sont_proteges() {
 }
 
 #[test]
+fn pendant_un_test_l_import_est_refuse_avant_meme_d_ouvrir_la_boite_de_dialogue() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let fichier = banc.dossier.path().join("casque.txt");
+    std::fs::write(
+        &fichier,
+        "Preamp: -3 dB\nFilter: ON PK Fc 1000 Hz Gain 2 dB Q 1\n",
+    )
+    .unwrap();
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    c.prendre_annonce();
+
+    // La boîte de dialogue bloquerait tout : le pont demande d'abord.
+    assert!(!c.preparer_import());
+    assert!(c.prendre_annonce().unwrap().erreur);
+    // Et le contrôleur refuse de toute façon.
+    let profils = c.vue_profils().len();
+    assert!(c.importer(&fichier, T0 + 1).is_none());
+    assert!(c.prendre_annonce().unwrap().erreur);
+    assert_eq!(c.vue_profils().len(), profils);
+
+    // Hors test, l'import marche.
+    c.arreter_test(T0 + 2);
+    c.prendre_annonce();
+    assert!(c.preparer_import());
+    assert!(c.prendre_annonce().is_none());
+    assert!(c.importer(&fichier, T0 + 3).is_some());
+}
+
+#[test]
 fn un_test_ne_demarre_pas_sans_accord_ni_avec_un_brouillon() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir(T0);
