@@ -1127,6 +1127,34 @@ fn apres_un_arret_brutal_la_reference_revient_et_le_test_se_reprend() {
 }
 
 #[test]
+fn la_reference_est_remise_avant_ce_qui_peut_empecher_d_ouvrir() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    c.regler_bande(7, -3.0);
+    c.enregistrer_egaliseur(T0 + 1);
+    let reference = c.vue_egaliseur().courbe;
+    let (_, t) = variante_en_train_de_jouer(&mut c, &banc);
+    drop(c);
+    // Le fichier du profil devient un dossier : il ne se lit plus, et le profil à plat
+    // que l'appli voudrait créer à sa place ne peut pas s'écrire. L'ouverture échoue.
+    let profil = banc.dossier.path().join("donnees/profils/mon-profil.json");
+    std::fs::remove_file(&profil).unwrap();
+    std::fs::create_dir(&profil).unwrap();
+
+    let moteur = MoteurSimule::nouveau();
+    let ouverture = Controleur::ouvrir(
+        banc.dossier.path().join("donnees"),
+        Box::new(moteur.clone()),
+        banc.options(),
+        t + 60_000,
+    );
+
+    assert!(ouverture.is_err());
+    // La courbe notée dans etat-moteur.json a été remise avant l'échec.
+    assert_eq!(moteur.appels(), vec![Appel::Appliquer(reference)]);
+}
+
+#[test]
 fn seul_le_test_interrompu_le_plus_recent_est_propose() {
     let banc = Banc::nouveau();
     let mut c = banc.ouvrir_autorise();

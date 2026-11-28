@@ -247,11 +247,13 @@ impl Controleur {
     /// Ouvre le dossier de données et remet l'appli dans l'état où elle doit être.
     ///
     /// C'est ici que se joue « une variante ne reste jamais active » : si l'utilisateur a
-    /// autorisé l'écriture, la courbe de référence est réécrite dans le moteur à chaque
-    /// démarrage (ADR-0007), puis un test interrompu est retrouvé et mis en pause.
+    /// autorisé l'écriture, la courbe notée dans `etat-moteur.json` est réécrite dans le
+    /// moteur à chaque démarrage (ADR-0007), **avant** tout ce qui peut échouer (lecture des
+    /// profils, création du profil à plat...). Puis un test interrompu est retrouvé et mis
+    /// en pause.
     pub fn ouvrir(
         dossier: impl AsRef<Path>,
-        moteur: Box<dyn Moteur>,
+        mut moteur: Box<dyn Moteur>,
         options: Options,
         maintenant_ms: u64,
     ) -> Result<Controleur, ErreurControleur> {
@@ -279,6 +281,15 @@ impl Controleur {
             reglages.langue = langue;
         }
         let langue = reglages.langue;
+        // La référence d'abord, quoi qu'il se soit passé avant, et avant tout `?`.
+        let (remise, echec_remise) =
+            remettre_courbe_sauvee(&depot, &mut *moteur, &options, &reglages);
+        if let Some(e) = echec_remise {
+            annonce = Some(Annonce {
+                texte: textes::erreur(&e, langue),
+                erreur: true,
+            });
+        }
         let liste = depot.lister_profils()?;
         if let Some(ignore) = liste.ignores.first() {
             annonce = Some(Annonce {
@@ -308,8 +319,8 @@ impl Controleur {
             test: None,
             resultat: None,
             spectre: Spectre::rose(POINTS_SPECTRE),
-            courbe_moteur: Courbe::default(),
-            generation_moteur: 0,
+            courbe_moteur: remise.clone().unwrap_or_default(),
+            generation_moteur: u64::from(remise.is_some()),
             generation_spectre: 0,
             choix,
             plein_ecran: false,
@@ -321,9 +332,17 @@ impl Controleur {
         };
         c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
-        // La référence d'abord, quoi qu'il se soit passé avant.
-        if let Err(e) = c.appliquer_courbe_du_jour() {
-            c.signaler(e);
+        // Si `etat-moteur.json` manquait ou ne dit plus la même chose que les profils (fichier
+        // réparé à la main, profil disparu), on remet ce qu'ils disent.
+        let attendue = if c.reglages.egaliseur_coupe {
+            Some(Courbe::default())
+        } else {
+            c.courbe_du_jour()
+        };
+        if remise.is_none() || remise != attendue {
+            if let Err(e) = c.appliquer_courbe_du_jour() {
+                c.signaler(e);
+            }
         }
         c.retrouver_test_interrompu(maintenant_ms);
         c.retrouver_dernier_resultat();
@@ -1948,6 +1967,37 @@ impl Controleur {
             intervalle_s: self.reglages.intervalle_ms / 1000,
             verifier_mises_a_jour: self.reglages.verifier_mises_a_jour,
         }
+    }
+}
+
+/// Au démarrage, avant tout le reste : remet dans le moteur la courbe notée dans
+/// `etat-moteur.json` (ou coupe l'égaliseur si c'est le réglage). Une variante restée active
+/// après un plantage, ou un « Quitter » raté, est ainsi remplacée par la référence même si
+/// la suite de l'ouverture échoue. Rien n'est écrit sans l'accord de l'utilisateur.
+///
+/// Rend la courbe que le moteur fait entendre désormais (à plat s'il est coupé), ou aucune
+/// si rien n'a été écrit, et l'erreur du moteur s'il a refusé.
+fn remettre_courbe_sauvee(
+    depot: &Depot,
+    moteur: &mut dyn Moteur,
+    options: &Options,
+    reglages: &ReglagesAppli,
+) -> (Option<Courbe>, Option<ErreurControleur>) {
+    if options.moteur_absent || !reglages.moteur_autorise {
+        return (None, None);
+    }
+    let ecriture = if reglages.egaliseur_coupe {
+        moteur.couper().map(|_| Courbe::default())
+    } else {
+        match depot.charger_etat_moteur() {
+            Ok(Some(sauve)) => moteur.appliquer(&sauve.courbe).map(|_| sauve.courbe),
+            // Rien de noté, ou fichier illisible : les profils diront quoi remettre.
+            Ok(None) | Err(_) => return (None, None),
+        }
+    };
+    match ecriture {
+        Ok(courbe) => (Some(courbe), None),
+        Err(e) => (None, Some(e.into())),
     }
 }
 

@@ -150,26 +150,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // déjà (voir `instance.rs`).
     let autre_instance = instance::poser();
     let capture = argument(&arguments, "--capture");
-    let fenetre = FenetrePrincipale::new()?;
     let ecran = argument(&arguments, "--ecran").and_then(|nom| ecran_depuis(&nom));
     let langue_imposee =
         argument(&arguments, "--langue").and_then(|code| Langue::depuis_code(&code));
+    let demo = arguments.iter().any(|a| a == "--demo");
 
     // `_vivant` garde le pont et son minuteur en vie jusqu'à la fin de `main`, `_verrou`
     // le verrou d'instance unique.
     let mut _vivant = None;
     let mut _verrou = None;
-    if arguments.iter().any(|a| a == "--demo") {
-        let langue = langue_imposee.unwrap_or(Langue::Fr);
-        // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
-        if let Err(erreur) = slint::select_bundled_translation(match langue {
-            Langue::Fr => "",
-            Langue::En => "en",
-        }) {
-            eprintln!("langue : {erreur}");
-        }
-        demo::remplir(&fenetre, langue);
-    } else {
+    // Le contrôleur s'ouvre avant la fenêtre : c'est lui qui remet la référence dans le
+    // moteur, et rien de ce qui peut échouer ensuite (la fenêtre comprise) ne passe avant.
+    let mut ouvert = None;
+    if !demo {
         let donnees = dossier_donnees();
         // Une seule instance, vérifiée avant de toucher au moteur : une seconde réécrirait
         // la courbe pendant un duel de la première et reprendrait son journal de test.
@@ -200,6 +193,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             langue_imposee,
         };
         let controleur = Controleur::ouvrir(&donnees, moteur, options, maintenant_ms())?;
+        ouvert = Some((controleur, dossier_moteur));
+    }
+    let fenetre = FenetrePrincipale::new()?;
+
+    if let Some((controleur, dossier_moteur)) = ouvert {
         let premier_lancement = !controleur.moteur_autorise();
 
         // Pour une capture d'écran : ni raccourcis globaux ni mini-fenêtre.
@@ -237,6 +235,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         _vivant = Some((pont, minuteur));
+    } else {
+        let langue = langue_imposee.unwrap_or(Langue::Fr);
+        // Sans pont pour le faire, c'est ici qu'on choisit la langue du texte écrit en `.slint`.
+        if let Err(erreur) = slint::select_bundled_translation(match langue {
+            Langue::Fr => "",
+            Langue::En => "en",
+        }) {
+            eprintln!("langue : {erreur}");
+        }
+        demo::remplir(&fenetre, langue);
     }
 
     if let Some(ecran) = ecran {
