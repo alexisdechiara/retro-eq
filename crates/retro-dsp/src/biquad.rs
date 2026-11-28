@@ -4,8 +4,14 @@
 use crate::courbe::{Filtre, TypeFiltre};
 use std::f64::consts::PI;
 
-/// Fréquence d'échantillonnage utilisée pour tous les calculs de courbe.
+/// Fréquence d'échantillonnage de la courbe affichée et des calculs de volume.
 pub const FREQUENCE_ECHANTILLONNAGE: f64 = 48_000.0;
+
+/// Les fréquences d'échantillonnage courantes d'une sortie audio. Equalizer APO calcule ses
+/// filtres à la vraie fréquence de la sortie, que l'appli ne connaît pas : près de Nyquist,
+/// la même courbe monte plus haut à 44,1 kHz qu'à 48 kHz. Le préampli automatique prend la
+/// crête la plus haute de toutes.
+pub const FREQUENCES_ECHANTILLONNAGE_COURANTES: [f64; 3] = [44_100.0, 48_000.0, 96_000.0];
 
 /// Les cinq coefficients d'un biquad, déjà divisés par `a0`.
 ///

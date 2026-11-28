@@ -30,7 +30,9 @@ pub struct Courbe {
     pub filtres: Vec<Filtre>,
 }
 
-use crate::biquad::{Coefficients, FREQUENCE_ECHANTILLONNAGE};
+use crate::biquad::{
+    Coefficients, FREQUENCES_ECHANTILLONNAGE_COURANTES, FREQUENCE_ECHANTILLONNAGE,
+};
 
 /// Plus basse fréquence de la bande audible que l'on regarde.
 pub const FREQUENCE_MIN_HZ: f64 = 20.0;
@@ -74,13 +76,55 @@ impl Courbe {
         self.preampli_db + self.reponse_db(f_hz)
     }
 
-    /// Gain maximum des filtres (dB) entre 20 Hz et 20 kHz, cherché sur une grille dense.
+    /// Gain maximum des filtres (dB) entre 20 Hz et 20 kHz, cherché sur une grille dense, et
+    /// pris sur la plus haute des fréquences d'échantillonnage courantes
+    /// ([`FREQUENCES_ECHANTILLONNAGE_COURANTES`]) : le préampli qui en découle évite la
+    /// saturation quelle que soit celle de la sortie audio. La courbe affichée, elle, reste
+    /// celle de 48 kHz ([`Courbe::reponse_db`]).
     pub fn gain_max_db(&self) -> f64 {
         let octaves = (FREQUENCE_MAX_HZ / FREQUENCE_MIN_HZ).log2();
         let n = (octaves * POINTS_PAR_OCTAVE).ceil() as usize + 1;
-        frequences_log(n)
-            .into_iter()
-            .map(|f| self.reponse_db(f))
+        let grille = frequences_log(n);
+        FREQUENCES_ECHANTILLONNAGE_COURANTES
+            .iter()
+            .map(|&fe| {
+                let coefficients: Vec<Coefficients> = self
+                    .filtres
+                    .iter()
+                    .map(|f| Coefficients::depuis(f, fe))
+                    .collect();
+                let reponse = |hz: f64| -> f64 {
+                    coefficients
+                        .iter()
+                        .map(|c| c.gain_db_a(hz, fe))
+                        .sum::<f64>()
+                };
+                let (rang, max_grille) = grille.iter().map(|&hz| reponse(hz)).enumerate().fold(
+                    (0, f64::NEG_INFINITY),
+                    |m, (i, g)| {
+                        if g > m.1 {
+                            (i, g)
+                        } else {
+                            m
+                        }
+                    },
+                );
+                // Une crête étroite près de Nyquist peut tomber entre deux points de la
+                // grille : on l'affine entre les deux voisins du meilleur point.
+                let (mut bas, mut haut) = (
+                    grille[rang.saturating_sub(1)],
+                    grille[(rang + 1).min(grille.len() - 1)],
+                );
+                for _ in 0..60 {
+                    let (m1, m2) = (bas + (haut - bas) / 3.0, haut - (haut - bas) / 3.0);
+                    if reponse(m1) < reponse(m2) {
+                        bas = m1;
+                    } else {
+                        haut = m2;
+                    }
+                }
+                max_grille.max(reponse((bas + haut) / 2.0))
+            })
             .fold(f64::NEG_INFINITY, f64::max)
     }
 
@@ -191,6 +235,44 @@ mod tests {
         assert!(c.preampli_db < -3.9);
         for hz in frequences_log(500) {
             assert!(c.reponse_totale_db(hz) <= 0.01);
+        }
+    }
+
+    /// Réponse (dB, préampli compris) de la courbe calculée à la fréquence d'échantillonnage `fe`.
+    fn reponse_totale_a(c: &Courbe, f_hz: f64, fe: f64) -> f64 {
+        c.preampli_db
+            + c.filtres
+                .iter()
+                .map(|filtre| Coefficients::depuis(filtre, fe).gain_db_a(f_hz, fe))
+                .sum::<f64>()
+    }
+
+    #[test]
+    fn le_preampli_auto_evite_la_saturation_a_44_1_48_et_96_khz() {
+        // Mesuré : à 48 kHz la crête vaut 11,18 dB, à 44,1 kHz 11,54 dB. Equalizer APO calcule
+        // ses filtres à la vraie fréquence de la sortie audio : le préampli doit couvrir les deux.
+        let c = courbe(vec![
+            f(TypeFiltre::PlateauHaut, 14_000.0, 6.0, 0.5),
+            f(TypeFiltre::Cloche, 19_500.0, 6.0, 2.0),
+        ])
+        .avec_preampli_auto();
+        assert!((c.preampli_db + 11.546).abs() < 0.01, "{}", c.preampli_db);
+        for fe in [44_100.0, 48_000.0, 96_000.0] {
+            for hz in frequences_log(2000) {
+                let r = reponse_totale_a(&c, hz, fe);
+                assert!(r <= 1e-3, "{r} dB à {hz} Hz pour {fe} Hz");
+            }
+        }
+    }
+
+    #[test]
+    fn la_courbe_affichee_reste_celle_de_48_khz() {
+        let c = courbe(vec![
+            f(TypeFiltre::PlateauHaut, 14_000.0, 6.0, 0.5),
+            f(TypeFiltre::Cloche, 19_500.0, 6.0, 2.0),
+        ]);
+        for hz in frequences_log(100) {
+            assert_eq!(c.reponse_db(hz), reponse_totale_a(&c, hz, 48_000.0));
         }
     }
 
