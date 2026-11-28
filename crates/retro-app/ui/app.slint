@@ -6,7 +6,7 @@ import "polices/Anton-Regular.ttf";
 
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour } from "etat.slint";
+import { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour, Essai } from "etat.slint";
 import { Logo, Platine, Touche, Bouton, GenreBouton, Segments, Format, Signe } from "composants.slint";
 import { Demarrage } from "ecrans/demarrage.slint";
 import { Accueil } from "ecrans/accueil.slint";
@@ -20,8 +20,9 @@ import { EcranVisualiseur } from "ecrans/visualiseur.slint";
 import { EcranReglages } from "ecrans/reglages.slint";
 import { EcranDiagnostic } from "ecrans/diagnostic.slint";
 import { APropos } from "ecrans/a_propos.slint";
+import { EcranEssai } from "ecrans/essai.slint";
 
-export { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour }
+export { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour, Essai }
 
 // Un onglet de la barre de titre ou une entrée du rail.
 component Onglet {
@@ -270,6 +271,7 @@ export component FenetrePrincipale inherits Window {
                     if Appli.ecran == Ecran.reglages: EcranReglages { }
                     if Appli.ecran == Ecran.diagnostic: EcranDiagnostic { }
                     if Appli.ecran == Ecran.a-propos: APropos { }
+                    if Appli.ecran == Ecran.essai: EcranEssai { }
                     }
                     Rectangle { width: root.marge-laterale; }
                 }
@@ -307,10 +309,10 @@ export component MiniFenetre inherits Window {
             spacing: 10px;
             HorizontalLayout {
                 spacing: 10px;
-                Text { text: @tr("DUEL {} / {}", Test.duel, Test.total); font-family: Theme.titres; font-weight: 700; font-size: 22px; color: Theme.texte; vertical-alignment: center; }
+                Text { text: Test.essai ? @tr("DUEL D’ESSAI") : @tr("DUEL {} / {}", Test.duel, Test.total); font-family: Theme.titres; font-weight: 700; font-size: 22px; color: Theme.texte; vertical-alignment: center; }
                 Rectangle { }
                 Text {
-                    text: Test.etat == EtatTest.attente-reponse ? @tr("Laquelle préfères-tu ?") : Test.etat == EtatTest.pause-appel ? @tr("En pause pendant l’appel") : Test.etat == EtatTest.pause ? @tr("En pause") : Test.compte-a-rebours;
+                    text: Test.etat == EtatTest.attente-reponse ? (Test.essai ? @tr("Laquelle a plus de graves ?") : @tr("Laquelle préfères-tu ?")) : Test.etat == EtatTest.pause-appel ? @tr("En pause pendant l’appel") : Test.etat == EtatTest.pause ? @tr("En pause") : Test.compte-a-rebours;
                     font-family: Test.etat == EtatTest.ecoute ? Theme.chiffres : Theme.courant;
                     font-weight: 600;
                     font-size: 16px;

@@ -24,7 +24,7 @@ use retro_audio::{
     Bip, Capture, DetecteurAppel, Mesure, PleinEcran, PremierPlan, SortiesAudio, Trame,
 };
 use retro_core::mises_a_jour::ReponseApi;
-use retro_core::{Langue, Reponse};
+use retro_core::{IssueEssai, Langue, Reponse};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -542,6 +542,16 @@ impl Pont {
                 })
                 .collect(),
         );
+        let essai = self.controleur.vue_essai();
+        let global = fenetre.global::<Essai>();
+        global.set_en_cours(essai.en_cours);
+        global.set_issue(match essai.issue {
+            None => 0,
+            Some(IssueEssai::Reconnue) => 1,
+            Some(IssueEssai::Confondue) => 2,
+            Some(IssueEssai::Pareil | IssueEssai::Passe) => 3,
+        });
+        global.set_detail(essai.detail.into());
         if let Some(mini) = &mut self.mini {
             pousser_duels(&mini.fenetre().global::<Test>(), &vue);
             mini.montrer(self.controleur.mini_fenetre_voulue());
@@ -828,11 +838,20 @@ impl Pont {
             Action::DemarrerOuReprendre => {
                 self.relever_choix(fenetre);
                 if self.controleur.demarrer_ou_reprendre(t) {
-                    fenetre.global::<Appli>().set_ecran(Ecran::Duels);
+                    fenetre.global::<Appli>().set_ecran(self.ecran_du_test());
                 }
             }
             Action::ActiverProfil(rang) => c.activer_profil_numero(rang),
             Action::BasculerEgaliseur => c.basculer_egaliseur(),
+        }
+    }
+
+    /// L'écran qui montre le test en cours : celui du duel d'essai, ou l'écran Duels.
+    fn ecran_du_test(&self) -> Ecran {
+        if self.controleur.essai_en_cours() {
+            Ecran::Essai
+        } else {
+            Ecran::Duels
         }
     }
 
@@ -1011,6 +1030,7 @@ fn pousser_duels(test: &Test, vue: &VueDuels) {
     test.set_pause_conseillee(vue.pause_conseillee);
     test.set_pause_sans_reponse(vue.pause_sans_reponse);
     test.set_touches_mortes(vue.touches_mortes.as_str().into());
+    test.set_essai(vue.essai);
 }
 
 /// Ramène la fenêtre principale devant, depuis l'icône de la barre des tâches.
@@ -1241,8 +1261,13 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         p.relever_choix(f);
         let t = p.maintenant();
         if p.controleur.demarrer_test(t) {
-            f.global::<Appli>().set_ecran(Ecran::Duels);
+            f.global::<Appli>().set_ecran(p.ecran_du_test());
         }
+    }));
+    fenetre.global::<Essai>().on_demarrer(agir!(|p, f| {
+        let t = p.maintenant();
+        p.controleur.demarrer_essai(t);
+        f.global::<Appli>().set_ecran(Ecran::Essai);
     }));
     test.on_choisir_reduction_bruit(agir!(|p, f, activee| {
         p.controleur.choisir_reduction_bruit(activee);
@@ -1265,8 +1290,14 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
     }));
     test.on_arreter(agir!(|p, f| {
         let t = p.maintenant();
+        // Un essai arrêté reste sur son écran : on peut le relancer ou le passer.
+        let ecran = if p.controleur.essai_en_cours() {
+            Ecran::Essai
+        } else {
+            Ecran::Tester
+        };
         p.controleur.arreter_test(t);
-        f.global::<Appli>().set_ecran(Ecran::Tester);
+        f.global::<Appli>().set_ecran(ecran);
     }));
     test.on_repondre(agir!(|p, f, choix| {
         let t = p.maintenant();

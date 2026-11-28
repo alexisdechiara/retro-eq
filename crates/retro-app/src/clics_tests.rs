@@ -271,6 +271,42 @@ fn un_clic_sur_la_reduction_de_bruit_la_choisit_au_premier_clic() {
     assert_eq!(*choisis.borrow(), vec![false, true]);
 }
 
+// ---- Le duel d'essai (ticket 25) ----
+
+#[test]
+fn continuer_apres_l_autotest_mene_au_duel_d_essai() {
+    let f = fenetre_principale();
+    f.window().set_size(slint::LogicalSize::new(1280., 2400.));
+    Appli::get(&f).set_ecran(Ecran::Demarrage);
+    clique(&f, "Continuer");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Essai);
+}
+
+#[test]
+fn le_bouton_lancer_le_duel_d_essai_agit_au_premier_clic() {
+    let f = fenetre_principale();
+    let lances = Rc::new(Cell::new(0));
+    let l = lances.clone();
+    crate::Essai::get(&f).on_demarrer(move || l.set(l.get() + 1));
+    Appli::get(&f).set_ecran(Ecran::Essai);
+    clique(&f, "Lancer le duel d’essai");
+    assert_eq!(lances.get(), 1);
+    // « Passer l'essai » mène à l'accueil sans rien lancer.
+    clique(&f, "Passer l’essai");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Accueil);
+    assert_eq!(lances.get(), 1);
+}
+
+#[test]
+fn sans_difference_entendue_l_essai_propose_le_diagnostic() {
+    let f = fenetre_principale();
+    let essai = crate::Essai::get(&f);
+    essai.set_issue(3);
+    Appli::get(&f).set_ecran(Ecran::Essai);
+    clique(&f, "Ouvrir le Diagnostic");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Diagnostic);
+}
+
 // ---- La mini-fenêtre (tickets 29 et 30) ----
 
 fn mini_fenetre() -> crate::MiniFenetre {

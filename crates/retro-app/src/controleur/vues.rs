@@ -113,6 +113,8 @@ pub struct VueDuels {
     /// Les touches de réponse prises par une autre appli pendant ce test (« F8, F10 ») :
     /// elles ne répondront pas. Vide s'il n'y en a pas (ticket 30).
     pub touches_mortes: String,
+    /// Le test en cours est le duel d'essai du premier lancement (ticket 25).
+    pub essai: bool,
 }
 
 impl Default for VueDuels {
@@ -132,8 +134,22 @@ impl Default for VueDuels {
             pause_conseillee: false,
             pause_sans_reponse: false,
             touches_mortes: String::new(),
+            essai: false,
         }
     }
+}
+
+/// L'écran du duel d'essai (ticket 25), en plus de [`VueDuels`] qui le montre en cours.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VueEssai {
+    /// Le duel d'essai est lancé et pas fini.
+    pub en_cours: bool,
+    /// L'issue du dernier essai fini, `None` s'il n'y en a pas (ou s'il a été arrêté).
+    pub issue: Option<retro_core::IssueEssai>,
+    /// « La version aux graves était B ; tu as répondu B. », vide sans issue.
+    pub detail: String,
+    /// Aucune différence entendue : proposer le Diagnostic en premier.
+    pub diagnostic: bool,
 }
 
 /// Le résumé de l'écran « Nouveau test ».

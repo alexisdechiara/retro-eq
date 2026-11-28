@@ -18,6 +18,10 @@ _À éviter_ : comparaison, manche, round, essai
 Un duel dont les deux versions sont identiques, glissé dans un test pour mesurer la part de hasard dans les réponses.
 _À éviter_ : duel témoin, duel piège
 
+**Duel d'essai** :
+Un duel unique joué au premier lancement, référence contre une variante très marquée (6 dB de graves en plus), pour vérifier que le son change vraiment. Il ne crée aucune version et n'entre dans aucun résultat.
+_À éviter_ : duel de test, entraînement
+
 **Réponse** :
 Le choix donné à la fin d'un duel : A, Pareil ou B.
 _À éviter_ : vote, avis, résultat

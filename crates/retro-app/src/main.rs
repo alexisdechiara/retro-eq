@@ -71,6 +71,7 @@ fn ecran_depuis(nom: &str) -> Option<Ecran> {
         "reglages" => Ecran::Reglages,
         "diagnostic" => Ecran::Diagnostic,
         "a-propos" => Ecran::APropos,
+        "essai" => Ecran::Essai,
         _ => return None,
     })
 }
