@@ -239,7 +239,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fenetre.show()?;
     // `run_event_loop_until_quit` et non `run` : la boucle continue quand la fenêtre est
     // cachée dans la barre des tâches. Elle s'arrête sur « Quitter ».
-    slint::run_event_loop_until_quit()?;
+    let fin = slint::run_event_loop_until_quit();
+    // Quelle que soit la façon dont la boucle s'est arrêtée (« Quitter », fermeture de
+    // session, erreur), un test en plein duel est mis en pause sur la référence.
+    if let Some((pont, _)) = &_vivant {
+        if let Ok(mut pont) = pont.try_borrow_mut() {
+            let t = pont.maintenant();
+            pont.controleur.avant_de_quitter(t);
+        }
+    }
+    fin?;
     Ok(())
 }
 

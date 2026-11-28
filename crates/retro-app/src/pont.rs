@@ -257,6 +257,14 @@ impl Pont {
         horloge_systeme() + self.avance_ms
     }
 
+    /// Quitte l'appli : un test en plein duel est d'abord mis en pause sur la référence
+    /// (voir `Controleur::avant_de_quitter`), puis la boucle d'événements s'arrête.
+    pub fn quitter(&mut self) {
+        let t = self.maintenant();
+        self.controleur.avant_de_quitter(t);
+        let _ = slint::quit_event_loop();
+    }
+
     /// Y a-t-il une icône dans la barre des tâches pour retrouver l'appli une fois cachée ?
     fn peut_se_reduire(&self) -> bool {
         self.barre.is_some() && self.controleur.fermer_reduit()
@@ -677,9 +685,7 @@ impl Pont {
                     self.controleur.basculer_egaliseur();
                     self.synchroniser(fenetre);
                 }
-                EvenementBarre::Quitter => {
-                    let _ = slint::quit_event_loop();
-                }
+                EvenementBarre::Quitter => self.quitter(),
             }
         }
 
@@ -1114,12 +1120,14 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
         let pont = pont.clone();
         let faible = fenetre.as_weak();
         fenetre.window().on_close_requested(move || {
-            let reduire = pont
-                .try_borrow()
-                .map(|p| p.peut_se_reduire())
-                .unwrap_or(false);
-            if !reduire {
-                let _ = slint::quit_event_loop();
+            match pont.try_borrow_mut() {
+                Ok(mut p) if !p.peut_se_reduire() => p.quitter(),
+                Ok(_) => {}
+                // Le pont est occupé : on quitte quand même, `main` remet la référence
+                // une fois la boucle arrêtée.
+                Err(_) => {
+                    let _ = slint::quit_event_loop();
+                }
             }
             let _ = faible.upgrade();
             slint::CloseRequestResponse::HideWindow
@@ -1365,13 +1373,13 @@ pub fn brancher(fenetre: &FenetrePrincipale, pont: Pont) -> (Rc<RefCell<Pont>>, 
 }
 
 /// Le bouton ✕ : réduire dans la barre des tâches si c'est le réglage (et qu'une icône
-/// existe pour revenir), sinon quitter. Dans les deux cas l'égaliseur reste comme il est :
-/// le moteur garde la dernière courbe de référence.
+/// existe pour revenir), sinon quitter. Réduite, l'appli continue le test ; en quittant,
+/// un test en plein duel est mis en pause et la référence remise.
 fn fermer(pont: &mut Pont, fenetre: &FenetrePrincipale) {
     if pont.peut_se_reduire() {
         let _ = fenetre.hide();
     } else {
-        let _ = slint::quit_event_loop();
+        pont.quitter();
     }
 }
 

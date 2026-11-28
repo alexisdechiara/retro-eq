@@ -1579,6 +1579,17 @@ impl Controleur {
         self.annoncer(textes::annonce_test_arrete(self.reglages.langue));
     }
 
+    /// L'appli va se fermer (« Quitter », ✕ sans icône pour revenir, fin de la boucle
+    /// d'événements). Un test en plein duel est mis en pause, ce qui remet la référence
+    /// (ADR-0012) : une variante ne reste jamais active une fois l'appli fermée. Le test
+    /// sera proposé en pause au prochain lancement. Sans effet hors duel, et sans risque
+    /// si on l'appelle deux fois.
+    pub fn avant_de_quitter(&mut self, t: u64) {
+        if self.test_en_cours() {
+            self.envoyer(Evenement::Pause, t);
+        }
+    }
+
     /// Un appel vocal commence ou se termine. Sans effet si le réglage est coupé.
     pub fn signaler_appel(&mut self, en_cours: bool, t: u64) {
         if self.reglages.pause_appels || !en_cours {

@@ -1171,6 +1171,54 @@ fn un_journal_inutilisable_n_empeche_pas_de_demarrer() {
     assert!(banc.depot().tests_interrompus().unwrap().is_empty());
 }
 
+// ----- Quitter l'appli -----
+
+/// Démarre un test et avance jusqu'à ce qu'une variante joue. Rend (référence, heure).
+fn variante_en_train_de_jouer(c: &mut Controleur, banc: &Banc) -> (Courbe, u64) {
+    let reference = c.vue_egaliseur().courbe;
+    c.choisir_test(choix("duels-en-jeu"));
+    c.demarrer_test(T0);
+    let mut t = T0;
+    let mut garde = 0;
+    while banc.derniere_courbe() == reference {
+        t += PASSAGE;
+        c.tic(t);
+        garde += 1;
+        assert!(garde < 12, "aucune variante ne joue");
+    }
+    (reference, t)
+}
+
+#[test]
+fn quitter_pendant_un_duel_remet_la_reference_et_met_le_test_en_pause() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let (reference, t) = variante_en_train_de_jouer(&mut c, &banc);
+
+    c.avant_de_quitter(t + 500);
+
+    assert_eq!(
+        banc.moteur.appels().last(),
+        Some(&Appel::Appliquer(reference.clone()))
+    );
+    assert_eq!(c.vue_duels(t + 500).etat, EtatTestVue::Pause);
+    // Au prochain lancement, le test est proposé en pause, sur la référence.
+    drop(c);
+    let c = banc.ouvrir(t + 60_000);
+    assert!(c.test_en_cours());
+    assert_eq!(c.vue_duels(t + 60_000).etat, EtatTestVue::Pause);
+    assert_eq!(banc.derniere_courbe(), reference);
+}
+
+#[test]
+fn quitter_hors_test_ne_change_pas_ce_qu_on_entend() {
+    let banc = Banc::nouveau();
+    let mut c = banc.ouvrir_autorise();
+    let avant = banc.moteur.appels().len();
+    c.avant_de_quitter(T0 + 1);
+    assert_eq!(banc.moteur.appels().len(), avant);
+}
+
 // ----- Pannes du moteur et du disque -----
 
 #[test]
