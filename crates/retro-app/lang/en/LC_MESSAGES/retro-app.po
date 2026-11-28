@@ -1,0 +1,994 @@
+# English translation of the Retro EQ interface (French is the reference language).
+# Update with scripts/traductions.sh, see crates/retro-app/lang/README.md.
+msgid ""
+msgstr ""
+"Project-Id-Version: retro-app 0.1.0\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Accueil"
+msgstr "Home"
+
+msgid "Tester"
+msgstr "Test"
+
+msgid "Mes profils"
+msgstr "My profiles"
+
+msgid "Égaliseur"
+msgstr "Equalizer"
+
+msgid "Visualiseur"
+msgstr "Visualiser"
+
+msgid "Réglages"
+msgstr "Settings"
+
+msgid "Moteur audio absent"
+msgstr "Audio engine missing"
+
+msgid "Égaliseur pas encore activé"
+msgstr "Equalizer not enabled yet"
+
+msgid "Moteur audio inactif"
+msgstr "Audio engine inactive"
+
+msgid "Égaliseur coupé"
+msgstr "Equalizer off"
+
+msgid "{} · {}"
+msgstr "{} · {}"
+
+msgid "Réduire"
+msgstr "Minimise"
+
+msgid "Agrandir"
+msgstr "Maximise"
+
+msgid "Fermer"
+msgstr "Close"
+
+msgid "DUEL {} / {}"
+msgstr "DUEL {} / {}"
+
+msgid "Laquelle préfères-tu ?"
+msgstr "Which do you prefer?"
+
+msgid "En pause pendant l’appel"
+msgstr "Paused during the call"
+
+msgid "En pause"
+msgstr "Paused"
+
+msgid "Pareil"
+msgstr "Same"
+
+msgid "Plus tard"
+msgstr "Later"
+
+msgctxt "séparateur décimal"
+msgid ","
+msgstr "."
+
+msgid "{} dB"
+msgstr "{} dB"
+
+msgid "Sûr"
+msgstr "Sure"
+
+msgid "Probable"
+msgstr "Likely"
+
+msgid "Indice"
+msgstr "Hint"
+
+msgid "VERSION A"
+msgstr "VERSION A"
+
+msgid "VERSION B"
+msgstr "VERSION B"
+
+msgid "LECTURE"
+msgstr "PLAYING"
+
+msgid "PAUSE"
+msgstr "PAUSED"
+
+msgid "Passages"
+msgstr "Passes"
+
+msgid "{}/3 · en cours"
+msgstr "{}/3 · playing"
+
+msgid "{}/3"
+msgstr "{}/3"
+
+msgid "Retro EQ"
+msgstr "Retro EQ"
+
+msgid "Version {} · logiciel libre sous licence GPLv3"
+msgstr "Version {} · free software under the GPLv3 licence"
+
+msgid "Code source sur GitHub"
+msgstr "Source code on GitHub"
+
+msgid "Ta licence, en clair"
+msgstr "Your licence, in plain words"
+
+msgid "Tu peux utiliser Retro EQ pour tout, étudier son code, le modifier et le partager. Si tu partages une version modifiée, elle doit rester libre, sous la même licence, avec son code source."
+msgstr "You can use Retro EQ for anything, study its code, change it and share it. If you share a modified version, it must stay free, under the same licence, with its source code."
+
+msgid "Les mesures sont un point de départ : c’est ton oreille qui décide."
+msgstr "Measurements are a starting point: your ear decides."
+
+msgid "Composants libres utilisés"
+msgstr "Free components used"
+
+msgid "Interface de l’appli"
+msgstr "App interface"
+
+msgid "Moteur audio, installé à côté de Retro EQ et non inclus dans le code de l’appli"
+msgstr "Audio engine, installed alongside Retro EQ and not included in the app’s code"
+
+msgid "Polices de l’interface (SIL Open Font License)"
+msgstr "Interface fonts (SIL Open Font License)"
+
+msgid "Bibliothèques Rust"
+msgstr "Rust libraries"
+
+msgid "Son, calculs, fichiers : la liste complète est dans le code source"
+msgstr "Audio, maths, files: the full list is in the source code"
+
+msgid "Site de Slint"
+msgstr "Slint website"
+
+msgid "Site d’Equalizer APO"
+msgstr "Equalizer APO website"
+
+msgid "Vue d’ensemble"
+msgstr "Overview"
+
+msgid "Le moteur audio est introuvable : rien n’est égalisé pour l’instant."
+msgstr "The audio engine can’t be found: nothing is being equalised for now."
+
+msgid "Égaliseur pas encore activé : rien n’est écrit dans ta configuration audio tant que tu n’as pas terminé le premier lancement."
+msgstr "Equalizer not enabled yet: nothing is written to your audio configuration until you finish the first launch."
+
+msgid "Ton égaliseur est actif. Envie de l’affiner encore ?"
+msgstr "Your equalizer is on. Want to refine it further?"
+
+msgid "Ton égaliseur est coupé : le son passe sans correction."
+msgstr "Your equalizer is off: the sound passes through uncorrected."
+
+msgid "Retro EQ n’a pas trouvé le moteur qui applique l’égaliseur au son. Le diagnostic dit ce qui manque et comment le réparer."
+msgstr "Retro EQ couldn’t find the engine that applies the equalizer to the sound. The diagnostic tells you what’s missing and how to fix it."
+
+msgid "Ouvrir le diagnostic"
+msgstr "Open the diagnostic"
+
+msgid "Un test t’attend"
+msgstr "A test is waiting for you"
+
+msgid "Prêt pour un test ?"
+msgstr "Ready for a test?"
+
+msgid "Reprendre le test"
+msgstr "Resume the test"
+
+msgid "Trouve ta courbe"
+msgstr "Find your curve"
+
+msgid "Duel {} sur {}. Ta référence est gardée : tu reprends là où tu t’es arrêté."
+msgstr "Duel {} of {}. Your reference is kept: you pick up where you left off."
+
+msgid "Des duels A contre B pendant que tu joues ou écoutes : le son bascule tout seul, tu réponds, et Retro EQ garde ce que tes oreilles préfèrent."
+msgstr "A-versus-B duels while you play or listen: the sound switches by itself, you answer, and Retro EQ keeps what your ears prefer."
+
+msgid "Lancer un test"
+msgstr "Start a test"
+
+msgid "Profil actif"
+msgstr "Active profile"
+
+msgid "✓ Actif"
+msgstr "✓ Active"
+
+msgid "Coupé"
+msgstr "Off"
+
+msgid "Aucun profil actif pour l’instant. Fais un test ou choisis un profil."
+msgstr "No active profile yet. Take a test or pick a profile."
+
+msgid "Égaliseur actif"
+msgstr "Equalizer on"
+
+msgid "Coupe-le pour réentendre ton son d’origine."
+msgstr "Turn it off to hear your original sound again."
+
+msgid "Changer de profil"
+msgstr "Switch profile"
+
+msgid "Niveau en direct"
+msgstr "Live level"
+
+msgid "Sortie audio"
+msgstr "Audio output"
+
+msgid "Aucune sortie détectée"
+msgstr "No output detected"
+
+msgid "✓ Moteur actif"
+msgstr "✓ Engine active"
+
+msgid "Moteur inactif"
+msgstr "Engine inactive"
+
+msgid "! Moteur absent"
+msgstr "! Engine missing"
+
+msgid "Diagnostic"
+msgstr "Diagnostic"
+
+msgid "Premier lancement"
+msgstr "First launch"
+
+msgid "Bienvenue dans Retro EQ"
+msgstr "Welcome to Retro EQ"
+
+msgid "Retro EQ cherche le son qui te plaît en te faisant comparer deux réglages d’égaliseur, A et B, pendant que tu joues ou écoutes. À la fin, ta réponse devient un profil que tu peux garder."
+msgstr "Retro EQ looks for the sound you like by having you compare two equalizer settings, A and B, while you play or listen. At the end, your answers become a profile you can keep."
+
+msgid "Autotest"
+msgstr "Self-test"
+
+msgid "Vérification en cours…"
+msgstr "Checking…"
+
+msgid "Aucun contrôle pour l’instant. Lance l’autotest pour vérifier que tout est branché."
+msgstr "No checks yet. Run the self-test to make sure everything is connected."
+
+msgid "À régler d’abord : {}. Tu peux quand même continuer, mais les tests risquent d’être faussés."
+msgstr "Fix this first: {}. You can still continue, but the tests may be skewed."
+
+msgid "En continuant, tu autorises Retro EQ à écrire sa courbe dans la configuration d’Equalizer APO. Rien n’y est écrit avant. Tes propres lignes y sont mises en commentaire, pas effacées : « Rendre le son d’origine », dans les Réglages, retire ce que Retro EQ a écrit et les réactive."
+msgstr "By continuing, you allow Retro EQ to write its curve into Equalizer APO’s configuration. Nothing is written there before that. Your own lines are commented out there, not erased: “Restore the original sound”, in Settings, removes what Retro EQ wrote and turns them back on."
+
+msgid "Continuer"
+msgstr "Continue"
+
+msgid "Relancer l’autotest"
+msgstr "Run the self-test again"
+
+msgid "Tu pourras relancer l’autotest depuis les Réglages."
+msgstr "You can run the self-test again from Settings."
+
+msgid "Introuvable pour l’instant"
+msgstr "Not found yet"
+
+msgid "Ouvrir"
+msgstr "Open"
+
+msgid "L’autotest vérifie ce que Retro EQ peut lire sur ton PC. Certains réglages, comme ceux d’un logiciel de casque, ne sont pas lisibles par l’appli : à toi de les vérifier."
+msgstr "The self-test checks what Retro EQ can read on your PC. Some settings, such as those of headset software, can’t be read by the app: it’s up to you to check them."
+
+msgid "Maintenant"
+msgstr "Now"
+
+msgid "Aucun contrôle pour l’instant. Lance l’autotest pour vérifier ton installation."
+msgstr "No checks yet. Run the self-test to check your setup."
+
+msgid "Un point d’interrogation veut dire que l’appli ne peut pas trancher seule : vérifie le point indiqué toi-même."
+msgstr "A question mark means the app can’t decide on its own: check the point indicated yourself."
+
+msgid "Dossiers"
+msgstr "Folders"
+
+msgid "Moteur audio (Equalizer APO)"
+msgstr "Audio engine (Equalizer APO)"
+
+msgid "Données de Retro EQ"
+msgstr "Retro EQ data"
+
+msgid "Duel {}"
+msgstr "Duel {}"
+
+msgid "/ {}"
+msgstr "/ {}"
+
+msgid "Source : {}"
+msgstr "Source: {}"
+
+msgid "Appli détectée : {}"
+msgstr "App detected: {}"
+
+msgid "Une petite pause ?"
+msgstr "A little break?"
+
+msgid "Tu écoutes depuis plus de 40 minutes. Quelques minutes de silence reposent les oreilles et rendent les réponses plus fiables."
+msgstr "You’ve been listening for over 40 minutes. A few minutes of silence rest your ears and make your answers more reliable."
+
+msgid "Prochaine bascule dans"
+msgstr "Next switch in"
+
+msgid "Version A"
+msgstr "Version A"
+
+msgid "Version B"
+msgstr "Version B"
+
+msgid "En pause · appel Discord"
+msgstr "Paused · Discord call"
+
+msgid "Ta référence est remise pendant l’appel. Le test reprend tout seul à la fin de l’appel ; le duel en cours est alors rejoué depuis son premier passage."
+msgstr "Your reference is restored during the call. The test resumes on its own when the call ends; the current duel is then replayed from its first pass."
+
+msgid "En pause : pas de réponse"
+msgstr "Paused: no answer"
+
+msgid "Test en pause"
+msgstr "Test paused"
+
+msgid "Ta référence est remise et rien ne bascule tant que tu ne reprends pas. À la reprise, ce duel est rejoué depuis son premier passage, avec un nouveau tirage de A et B."
+msgstr "Your reference is restored and nothing switches until you resume. On resuming, this duel is replayed from its first pass, with a new draw of A and B."
+
+msgid "Reprendre"
+msgstr "Resume"
+
+msgid "Prêt pour ce duel"
+msgstr "Ready for this duel"
+
+msgid "Lance l’écoute quand tu es prêt : A et B alternent, tu réponds à la fin."
+msgstr "Start listening when you’re ready: A and B alternate, and you answer at the end."
+
+msgid "Commencer"
+msgstr "Start"
+
+msgid "Test terminé"
+msgstr "Test finished"
+
+msgid "Tous les duels sont jugés. Ton résultat est prêt."
+msgstr "All duels are judged. Your result is ready."
+
+msgid "Voir le résultat"
+msgstr "See the result"
+
+msgid "Répondre de n’importe où"
+msgstr "Answer from anywhere"
+
+msgid "A"
+msgstr "A"
+
+msgid "B"
+msgstr "B"
+
+msgid "Annuler"
+msgstr "Undo"
+
+msgid "Maintiens F6 ou F8 pour réécouter A ou B avant de voter."
+msgstr "Hold F6 or F8 to listen to A or B again before voting."
+
+msgid "Mettre en pause"
+msgstr "Pause"
+
+msgid "Passer ce duel"
+msgstr "Skip this duel"
+
+msgid "Recommencer ce duel"
+msgstr "Restart this duel"
+
+msgid "Arrêter le test…"
+msgstr "Stop the test…"
+
+msgid "La question arrivera dans la mini-fenêtre, même par-dessus un jeu."
+msgstr "The question will appear in the mini window, even over a game."
+
+msgid "Journal"
+msgstr "Log"
+
+msgid "Pendant le test, chaque duel jugé n’affiche que ta réponse. La zone testée, les duels de contrôle et qui jouait la référence ne sont révélés qu’une fois le test terminé."
+msgstr "During the test, each judged duel only shows your answer. The zone tested, the control duels and who played the reference are only revealed once the test is finished."
+
+msgid "Aucun duel jugé pour l’instant. Les réponses apparaîtront ici, une par une."
+msgstr "No duel judged yet. Answers will appear here, one by one."
+
+msgid "Ta courbe, bande par bande. Chaque changement s’entend tout de suite ; les duels restent le meilleur moyen de savoir si tu préfères."
+msgstr "Your curve, band by band. Every change is heard straight away; duels remain the best way to find out what you prefer."
+
+msgid "Profil"
+msgstr "Profile"
+
+msgid "Aucun profil"
+msgstr "No profile"
+
+msgid "graphique · 10 bandes"
+msgstr "graphic · 10 bands"
+
+msgid "Préampli"
+msgstr "Preamp"
+
+msgid "automatique"
+msgstr "automatic"
+
+msgid "manuel"
+msgstr "manual"
+
+msgid "Courbe de réponse de l’égaliseur"
+msgstr "Equalizer response curve"
+
+msgid "Glisse un fader, ou choisis-le au clavier : flèches haut et bas pour un demi-dB, 0 ou Début pour le remettre à zéro. Double-clic : remet la bande à 0."
+msgstr "Drag a fader, or pick it with the keyboard: up and down arrows for half a dB, 0 or Home to reset it to zero. Double-click: resets the band to 0."
+
+msgid "Ce profil contient {} filtres en plus des 10 bandes : ils sont conservés."
+msgstr "This profile contains {} filters on top of the 10 bands: they are kept."
+
+msgid "Préampli automatique"
+msgstr "Automatic preamp"
+
+msgid "Le préampli est réglé au plus petit niveau qui évite la saturation avec ta courbe."
+msgstr "The preamp is set to the lowest level that avoids clipping with your curve."
+
+msgid "Préampli (automatique)"
+msgstr "Preamp (automatic)"
+
+msgid "Préampli (manuel)"
+msgstr "Preamp (manual)"
+
+msgid "Baisser le préampli d’un demi-dB"
+msgstr "Lower the preamp by half a dB"
+
+msgid "Monter le préampli d’un demi-dB"
+msgstr "Raise the preamp by half a dB"
+
+msgid "Le réglage manuel est désactivé : en mode automatique, le préampli est le plus petit qui évite la saturation."
+msgstr "Manual adjustment is disabled: in automatic mode, the preamp is the lowest one that avoids clipping."
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "Remettre à plat"
+msgstr "Reset to flat"
+
+msgid "Enregistrer une nouvelle version"
+msgstr "Save a new version"
+
+msgid "Tu as modifié la courbe. Enregistrer crée une nouvelle version du profil : rien n’est écrasé, tu peux toujours revenir à la précédente."
+msgstr "You’ve changed the curve. Saving creates a new version of the profile: nothing is overwritten, you can always go back to the previous one."
+
+msgid "Aucune modification en cours. Quand tu changes un fader, tu peux enregistrer une nouvelle version ; rien n’est écrasé."
+msgstr "No changes in progress. When you move a fader, you can save a new version; nothing is overwritten."
+
+msgid "Nouveau test"
+msgstr "New test"
+
+msgid "Référence"
+msgstr "Reference"
+
+msgid "Ce que tu écoutes"
+msgstr "What you listen to"
+
+msgid "Variante"
+msgstr "Variant"
+
+msgid "Durée"
+msgstr "Duration"
+
+msgid "Démarrer le test"
+msgstr "Start the test"
+
+msgid "Entrée"
+msgstr "Enter"
+
+msgid "{} branché"
+msgstr "{} connected"
+
+msgid "Aucune sortie audio détectée"
+msgstr "No audio output detected"
+
+msgid "Moteur audio détecté"
+msgstr "Audio engine detected"
+
+msgid "Moteur audio introuvable"
+msgstr "Audio engine not found"
+
+msgid "Moteur audio actif"
+msgstr "Audio engine active"
+
+msgid "Réglages du test"
+msgstr "Test settings"
+
+msgid "Bascule toutes les"
+msgstr "Switch every"
+
+msgid "Un intervalle plus long laisse plus de temps pour comparer, mais allonge le test."
+msgstr "A longer interval leaves more time to compare, but makes the test longer."
+
+msgid "10 s"
+msgstr "10 s"
+
+msgid "20 s"
+msgstr "20 s"
+
+msgid "45 s"
+msgstr "45 s"
+
+msgid "2 min"
+msgstr "2 min"
+
+msgid "Durée du test"
+msgstr "Test length"
+
+msgid "Plus de duels, une courbe plus fiable."
+msgstr "More duels, a more reliable curve."
+
+msgid "Un premier résultat en une vingtaine de minutes."
+msgstr "A first result in about twenty minutes."
+
+msgid "Rapide · 12 duels"
+msgstr "Quick · 12 duels"
+
+msgid "Précis · 30 duels"
+msgstr "Thorough · 30 duels"
+
+msgid "Zone à tester"
+msgstr "Zone to test"
+
+msgid "Les duels ne testeront que cette zone."
+msgstr "The duels will only test this zone."
+
+msgid "Aucune zone à proposer pour le moment."
+msgstr "No zone to offer right now."
+
+msgid "Autre profil"
+msgstr "Other profile"
+
+msgid "Ce profil sera comparé à ta référence."
+msgstr "This profile will be compared with your reference."
+
+msgid "Aucun autre profil à comparer pour le moment."
+msgstr "No other profile to compare right now."
+
+msgid "{} (étape en cours)"
+msgstr "{} (current step)"
+
+msgid "1 · Point de départ"
+msgstr "1 · Starting point"
+
+msgid "2 · Écoute"
+msgstr "2 · Listening"
+
+msgid "3 · Duels"
+msgstr "3 · Duels"
+
+msgid "4 · Résultat"
+msgstr "4 · Result"
+
+msgid "{}, profil actif"
+msgstr "{}, active profile"
+
+msgid "{n} version"
+msgid_plural "{n} versions"
+msgstr[0] "{n} version"
+msgstr[1] "{n} versions"
+
+msgid "Ouvert"
+msgstr "Open"
+
+msgid "Versions de « {} »"
+msgstr "Versions of “{}”"
+
+msgid "Rien n’est jamais supprimé : chaque test ajoute une version, et tu peux revenir à n’importe laquelle."
+msgstr "Nothing is ever deleted: every test adds a version, and you can go back to any of them."
+
+msgid "Ce profil n’a pas encore de version."
+msgstr "This profile doesn’t have a version yet."
+
+msgid "Version {} · {}"
+msgstr "Version {} · {}"
+
+msgid "✓ Actuelle"
+msgstr "✓ Current"
+
+msgid "Activer cette version"
+msgstr "Activate this version"
+
+msgid "Activer"
+msgstr "Activate"
+
+msgid "Tester ce profil"
+msgstr "Test this profile"
+
+msgid "Dupliquer"
+msgstr "Duplicate"
+
+msgid "Exporter"
+msgstr "Export"
+
+msgid "Tes réglages rangés comme des cassettes. Choisis-en une pour voir ses versions ; rien n’est jamais supprimé."
+msgstr "Your settings stored like cassettes. Pick one to see its versions; nothing is ever deleted."
+
+msgid "Importer un fichier…"
+msgstr "Import a file…"
+
+msgid "Aucun profil pour l’instant"
+msgstr "No profile yet"
+
+msgid "Fais un test pour créer ton premier profil, importe un fichier, ou pars d’un preset ci-dessous."
+msgstr "Take a test to create your first profile, import a file, or start from a preset below."
+
+msgid "Choisis une cassette pour voir ses versions et ses actions."
+msgstr "Pick a cassette to see its versions and actions."
+
+msgid "Nouveau profil depuis un preset"
+msgstr "New profile from a preset"
+
+msgid "Un preset est un point de départ : il crée un profil à toi, que tu peux ensuite tester."
+msgstr "A preset is a starting point: it creates a profile of your own, which you can then test."
+
+msgid "Aucun preset disponible."
+msgstr "No preset available."
+
+msgid "Tout ce qui ne change pas d’un test à l’autre. Les changements sont enregistrés tout de suite."
+msgstr "Everything that stays the same from one test to the next. Changes are saved straight away."
+
+msgid "Général"
+msgstr "General"
+
+msgid "Réduire dans la barre des tâches en fermant la fenêtre"
+msgstr "Minimise to the taskbar when closing the window"
+
+msgid "Fermer la fenêtre ne coupe jamais l’égaliseur : le son reste égalisé tant que Retro EQ tourne en arrière-plan."
+msgstr "Closing the window never turns the equalizer off: the sound stays equalised as long as Retro EQ runs in the background."
+
+msgid "Le son est égalisé sur cette sortie."
+msgstr "The sound is equalised on this output."
+
+msgid "Aucune sortie audio détectée pour l’instant. Branche ton casque ou tes enceintes."
+msgstr "No audio output detected yet. Plug in your headset or speakers."
+
+msgid "{} sorties audio sont connues de Retro EQ."
+msgstr "Retro EQ knows {} audio outputs."
+
+msgid "Tests"
+msgstr "Tests"
+
+msgid "Bascule entre A et B"
+msgstr "Switching between A and B"
+
+msgid "Intervalle par défaut entre deux passages. Tu peux le changer pour chaque test."
+msgstr "Default interval between two passes. You can change it for each test."
+
+msgid "Mini-fenêtre par-dessus les jeux"
+msgstr "Mini window over games"
+
+msgid "Une petite fenêtre te demande ta réponse sans quitter ton jeu."
+msgstr "A small window asks for your answer without leaving your game."
+
+msgid "Bip de confirmation"
+msgstr "Confirmation beep"
+
+msgid "En plein écran exclusif, aucune fenêtre ne peut s’afficher par-dessus le jeu : un bip court confirme que ta réponse est bien prise."
+msgstr "In exclusive fullscreen, no window can appear over the game: a short beep confirms that your answer has been registered."
+
+msgid "Pause pendant les appels Discord"
+msgstr "Pause during Discord calls"
+
+msgid "Le test se met en pause pendant un appel et reprend ensuite."
+msgstr "The test pauses during a call and resumes afterwards."
+
+msgid "Raccourcis"
+msgstr "Shortcuts"
+
+msgid "Aucun raccourci n’est défini pour l’instant."
+msgstr "No shortcut is set yet."
+
+msgid "! Conflit : cette touche est déjà utilisée par une autre appli. Choisis-en une autre."
+msgstr "! Conflict: another app already uses this key. Pick a different one."
+
+msgid "Apparence"
+msgstr "Appearance"
+
+msgid "Langue"
+msgstr "Language"
+
+msgid "Le français est la langue de référence."
+msgstr "French is the reference language."
+
+msgid "Navigation"
+msgstr "Navigation"
+
+msgid "Onglets dans la barre de titre, ou colonne d’icônes à gauche."
+msgstr "Tabs in the title bar, or a column of icons on the left."
+
+msgid "Barre du haut"
+msgstr "Top bar"
+
+msgid "Rail latéral"
+msgstr "Side rail"
+
+msgid "Importer et exporter"
+msgstr "Import and export"
+
+msgid "Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt) et AutoEQ (ParametricEQ.txt). Les fichiers importés deviennent des profils."
+msgstr "Retro EQ reads Peace (.peace), Equalizer APO (.txt) and AutoEQ (ParametricEQ.txt) files. Imported files become profiles."
+
+msgid "Exporter le profil actif"
+msgstr "Export the active profile"
+
+msgid "Aide"
+msgstr "Help"
+
+msgid "Si le son te semble bizarre, l’autotest vérifie le moteur, les améliorations audio de Windows et les raccourcis."
+msgstr "If the sound seems odd, the self-test checks the engine, Windows audio enhancements and shortcuts."
+
+msgid "À propos"
+msgstr "About"
+
+msgid "Rendre le son d’origine"
+msgstr "Restore the original sound"
+
+msgid "Retire Retro EQ du moteur audio et restaure la configuration d’origine de ton PC. Tes profils restent gardés. Retro EQ ne fera plus rien au son tant que tu ne le réactives pas."
+msgstr "Removes Retro EQ from the audio engine and restores your PC’s original configuration. Your profiles are kept. Retro EQ will do nothing to the sound until you turn it back on."
+
+msgid "inchangé"
+msgstr "unchanged"
+
+msgid "Ton résultat"
+msgstr "Your result"
+
+msgid "Résultat"
+msgstr "Result"
+
+msgid "Pas encore de résultat"
+msgstr "No result yet"
+
+msgid "Le résultat apparaît à la fin d’un test : la courbe avant et après, ce que tes oreilles ont choisi, zone par zone, et le degré de confiance."
+msgstr "The result appears at the end of a test: the curve before and after, what your ears chose, zone by zone, and the confidence level."
+
+msgid "Nouvelle version"
+msgstr "New version"
+
+msgid "Préampli automatique : {}"
+msgstr "Automatic preamp: {}"
+
+msgid "Ce que tes oreilles ont choisi"
+msgstr "What your ears chose"
+
+msgid "Chaque niveau décrit une comparaison prise seule. Indice : elle peut être due au hasard. Probable : elle avait au plus 1 chance sur 4 de tomber ainsi par hasard. Sûr : moins de 6 %. Un test fait plusieurs comparaisons : ces niveaux ne garantissent pas qu’un changement est réel."
+msgstr "Each level describes one comparison taken on its own. Hint: it may be down to chance. Likely: it had at most a 1 in 4 chance of coming out this way by luck. Sure: under 6%. A test makes several comparisons: these levels don’t guarantee that a change is real."
+
+msgid "Aucune zone n’a encore été testée."
+msgstr "No zone has been tested yet."
+
+msgid "Selon l’appli"
+msgstr "By app"
+
+msgid "{n} duel · {}"
+msgid_plural "{n} duels · {}"
+msgstr[0] "{n} duel · {}"
+msgstr[1] "{n} duels · {}"
+
+msgid "Garder ce profil"
+msgstr "Keep this profile"
+
+msgid "Ce test ne donne pas de raison d’activer cette version : ta référence reste en place."
+msgstr "This test gives no reason to activate this version: your reference stays in place."
+
+msgid "Activer ce profil"
+msgstr "Activate profile"
+
+msgid "Activer quand même"
+msgstr "Activate anyway"
+
+msgid "✓ Profil activé"
+msgstr "✓ Profile activated"
+
+msgid "Revenir à la référence"
+msgstr "Back to the reference"
+
+msgid "Exporter pour un autre logiciel"
+msgstr "Export for other software"
+
+msgid "{} (bientôt disponible)"
+msgstr "{} (coming soon)"
+
+msgid "FACE A"
+msgstr "SIDE A"
+
+msgid "Dans le lecteur"
+msgstr "In the player"
+
+msgid "Bientôt"
+msgstr "Soon"
+
+msgid "Choisis une cassette, glisse-la dans le lecteur. Chaque test cherche ta courbe d’une façon différente."
+msgstr "Pick a cassette and slide it into the player. Each test looks for your curve in a different way."
+
+msgid "{} duels · {}"
+msgstr "{} duels · {}"
+
+msgid "Aucun test n’est disponible pour le moment."
+msgstr "No test is available right now."
+
+msgid "Face A et B tirées au hasard"
+msgstr "Sides A and B drawn at random"
+
+msgid "Duels"
+msgstr "Duels"
+
+msgid "Son"
+msgstr "Sound"
+
+msgid "Lancer"
+msgstr "Start"
+
+msgid "Ou lance-le de n’importe où :"
+msgstr "Or start it from anywhere:"
+
+msgid "Ce qui sort de ton casque en ce moment : le niveau du signal et le spectre du son, avec ta courbe d’égaliseur par-dessus."
+msgstr "What comes out of your headset right now: the signal level and the sound spectrum, with your equalizer curve on top."
+
+msgid "Niveau du signal"
+msgstr "Signal level"
+
+
+
+msgid "Crête"
+msgstr "Peak"
+
+
+msgid "À tes oreilles"
+msgstr "At your ears"
+
+msgid "Estimé"
+msgstr "Estimated"
+
+msgid "Volume perçu"
+msgstr "Perceived loudness"
+
+msgid "C’est une estimation : l’appli ne peut pas connaître le niveau réel de son à ton oreille, qui dépend du volume de ton casque et de sa sensibilité."
+msgstr "This is an estimate: the app can’t know the actual sound level at your ear, which depends on your headset’s volume and sensitivity."
+
+msgid "Ce que tu entends"
+msgstr "What you hear"
+
+msgid "Spectre du son qui part vers le casque, des graves aux aigus. La ligne claire est ta courbe d’égaliseur."
+msgstr "Spectrum of the sound going to the headset, from bass to treble. The light line is your equalizer curve."
+
+msgid "Rien n’est capté pour l’instant"
+msgstr "Nothing is being captured yet"
+
+msgid "Aucun son ne passe par Retro EQ. Lance de la musique ou un jeu sur la sortie audio choisie, et vérifie que l’égaliseur est actif : le spectre s’affichera tout seul."
+msgstr "No sound is passing through Retro EQ. Play some music or a game on the chosen audio output, and check that the equalizer is on: the spectrum will show up by itself."
+
+msgid "Hz"
+msgstr "Hz"
+
+msgid "Le son en ce moment, par fréquence"
+msgstr "The sound right now, by frequency"
+
+msgid "Ta courbe d’égaliseur (0 dB au milieu)"
+msgstr "Your equalizer curve (0 dB in the middle)"
+
+msgid "Moyenne · 30 dernières secondes"
+msgstr "Average · last 30 seconds"
+
+msgid "Saturation"
+msgstr "Clipping"
+
+msgid "Proche de la saturation"
+msgstr "Close to clipping"
+
+msgid "Loin de la saturation"
+msgstr "Well below clipping"
+
+msgid "En direct"
+msgstr "Live"
+
+msgid "Crête la plus haute"
+msgstr "Highest peak"
+
+msgid "Les mesures apparaissent dès qu’un son passe."
+msgstr "Readings appear as soon as sound plays."
+
+msgid "Le signal a saturé : baisse le préampli dans l’égaliseur."
+msgstr "The signal clipped: lower the preamp in the equaliser."
+
+msgid "Il reste {} dB avant la saturation (0 dB). Trait clair : la moyenne. Trait ambre : la crête la plus haute."
+msgstr "{} dB of headroom left before clipping (0 dB). Light mark: the average. Amber mark: the highest peak."
+
+msgid "Remettre à zéro"
+msgstr "Reset"
+
+msgid "Chercher mon casque (AutoEQ)"
+msgstr "Find my headphones (AutoEQ)"
+
+msgid "AutoEQ propose un réglage pour de nombreux casques, calculé à partir de mesures faites par d’autres personnes, sur des bancs différents. C’est un point de départ à juger à l’oreille, pas une vérité : au-delà d’environ 8 kHz, une mesure est peu fiable."
+msgstr "AutoEQ offers a setting for many headphones, calculated from measurements made by other people, on different rigs. It is a starting point to judge by ear, not the truth: above about 8 kHz, a measurement is unreliable."
+
+msgid "La base des casques n’est pas encore sur ce PC. Elle se télécharge une seule fois, depuis le dépôt public d’AutoEQ (environ 0,9 Mo), puis elle est gardée ici : la recherche marche ensuite sans connexion."
+msgstr "The headphone database isn’t on this PC yet. It is downloaded once, from AutoEQ’s public repository (about 0.9 MB), then kept here: searching then works without a connection."
+
+msgid "Télécharger la base"
+msgstr "Download the database"
+
+msgid "Téléchargement de la base en cours…"
+msgstr "Downloading the database…"
+
+msgid "Nom de ton casque, par exemple INZONE H9"
+msgstr "Your headphones’ name, for example INZONE H9"
+
+msgid "Mettre à jour la base"
+msgstr "Update the database"
+
+msgid "Téléchargement des réglages de ce casque…"
+msgstr "Downloading this headphone’s settings…"
+
+msgid "Tape le nom de ton casque. Si plusieurs sources l’ont mesuré, elles apparaissent toutes : à toi de choisir."
+msgstr "Type your headphones’ name. If several sources measured them, they all appear: you choose."
+
+msgid "Aucun casque ne correspond. Essaie moins de mots ou une autre orthographe ; ton casque n’est peut-être pas dans AutoEQ."
+msgstr "No headphones match. Try fewer words or another spelling; yours may not be in AutoEQ."
+
+msgid "Mesuré par {}"
+msgstr "Measured by {}"
+
+msgid "✓ Déjà sur ce PC"
+msgstr "✓ Already on this PC"
+
+msgid "Créer un profil"
+msgstr "Create a profile"
+
+# Mises à jour
+msgid "Mises à jour"
+msgstr "Updates"
+
+msgid "Vérifier maintenant"
+msgstr "Check now"
+
+msgid "Voir la version sur GitHub"
+msgstr "View the release on GitHub"
+
+msgid "Signaler un problème"
+msgstr "Report a problem"
+
+msgid "Nouveautés de la {}"
+msgstr "What’s new in {}"
+
+msgid "Publiée le {}"
+msgstr "Released on {}"
+
+msgid "Installateur : {}"
+msgstr "Installer: {}"
+
+msgid "{} · disponible"
+msgstr "{} · available"
+
+msgid "{} · à jour"
+msgstr "{} · up to date"
+
+msgid "{} · aucune version publiée"
+msgstr "{} · no release published"
+
+msgid "{} · pas encore vérifié"
+msgstr "{} · not checked yet"
+
+msgid "{} (mise à jour disponible)"
+msgstr "{} (update available)"
+
+msgid "Le projet n’a encore publié aucune version sur GitHub : il n’y a rien à télécharger pour l’instant."
+msgstr "The project hasn’t published any release on GitHub yet: there is nothing to download for now."
+
+msgid "Retro EQ ne télécharge ni n’installe rien tout seul : la page de la version s’ouvre dans ton navigateur, c’est toi qui décides."
+msgstr "Retro EQ never downloads or installs anything by itself: the release page opens in your browser, and you decide."
+
+msgid "Ce qui est envoyé : une seule requête à GitHub, sans compte ni donnée personnelle, avec seulement le nom et la version de l’appli. GitHub voit ton adresse IP, comme n’importe quel site. Le réglage « Vérifier les mises à jour au démarrage » (Réglages) coupe les vérifications automatiques."
+msgstr "What is sent: a single request to GitHub, with no account and no personal data, only the app’s name and version. GitHub sees your IP address, like any website. The “Check for updates at startup” setting (Settings) turns off automatic checks."
+
+msgid "Vérifier les mises à jour au démarrage"
+msgstr "Check for updates at startup"
+
+msgid "Au plus une fois par jour, Retro EQ demande à GitHub si une version plus récente existe. Désactivé, il ne se connecte jamais à Internet de lui-même."
+msgstr "At most once a day, Retro EQ asks GitHub whether a newer version exists. When turned off, it never connects to the Internet on its own."

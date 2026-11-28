@@ -1,0 +1,167 @@
+import { Theme } from "../theme.slint";
+import { Test, Appli } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Bouton, GenreBouton, Carte, Touche, Interrupteur, Platine, Separateur, Choix } from "../composants.slint";
+import { EtapesTest } from "nouveau_test_parts.slint";
+
+// Une ligne du résumé : intitulé en petites capitales, valeur en gras.
+component LigneResume inherits VerticalLayout {
+    in property <string> intitule;
+    in property <string> valeur;
+    spacing: 4px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    Etiquette { contenu: intitule; }
+    Text { text: valeur; font-family: Theme.courant; font-weight: 700; font-size: 20px; color: Theme.texte; wrap: word-wrap; }
+}
+
+// Un contrôle préalable : un signe et un mot accompagnent toujours la couleur.
+component Controle inherits HorizontalLayout {
+    in property <bool> ok;
+    in property <string> texte;
+    spacing: 10px;
+    alignment: start;
+    horizontal-stretch: 0;
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        Rectangle {
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: ok ? Theme.fond-ok : Theme.fond-erreur;
+            border-width: 1.5px;
+            border-color: ok ? Theme.ok : Theme.erreur;
+            Text { text: ok ? "✓" : "!"; font-family: Theme.chiffres; font-weight: 700; font-size: 13px; color: ok ? Theme.ok : Theme.erreur; horizontal-alignment: center; vertical-alignment: center; }
+        }
+    }
+    Text { text: texte; font-family: Theme.courant; font-size: 16px; color: Theme.texte; wrap: word-wrap; vertical-alignment: center; }
+}
+
+component Reglage inherits VerticalLayout {
+    in property <string> intitule;
+    in property <string> aide: "";
+    spacing: 8px;
+    Etiquette { contenu: intitule; }
+    @children
+    if aide != "": Text { text: aide; font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+}
+
+export component NouveauTest inherits VerticalLayout {
+    alignment: start;
+    spacing: 0px;
+
+    property <int> position-intervalle: Test.intervalle-s == 10 ? 0 : Test.intervalle-s == 20 ? 1 : Test.intervalle-s == 45 ? 2 : Test.intervalle-s == 120 ? 3 : -1;
+
+    EtapesTest { courante: 1; padding-bottom: 20px; }
+    Titre { contenu: @tr("Nouveau test"); }
+
+    HorizontalLayout {
+        padding-top: 24px;
+        padding-bottom: 36px;
+        spacing: 32px;
+        // Colonne de gauche : le résumé et le bouton de départ.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 28px;
+            alignment: start;
+            Carte {
+                remplissage: 28px;
+                VerticalLayout {
+                    spacing: 0px;
+                    LigneResume { intitule: @tr("Référence"); valeur: Test.reference; }
+                    Separateur { }
+                    LigneResume { intitule: @tr("Ce que tu écoutes"); valeur: Test.source; }
+                    Separateur { }
+                    LigneResume { intitule: @tr("Variante"); valeur: Test.mode; }
+                    Separateur { }
+                    LigneResume { intitule: @tr("Durée"); valeur: Test.duree; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 18px;
+                alignment: start;
+                Bouton {
+                    texte: @tr("Démarrer le test");
+                    prefixe: "▶";
+                    genre: GenreBouton.principal;
+                    hauteur: 62px;
+                    active => { Test.demarrer(); }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Touche { texte: "Ctrl"; }
+                        Touche { texte: "Alt"; }
+                        Touche { texte: @tr("Entrée"); }
+                    }
+                }
+            }
+        }
+        // Colonne de droite : les deux platines au repos et les contrôles.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 22px;
+            alignment: start;
+            HorizontalLayout {
+                spacing: 20px;
+                Platine { est-a: true; lecture: false; passages: 0; }
+                Platine { est-a: false; lecture: false; passages: 0; }
+            }
+            VerticalLayout {
+                spacing: 12px;
+                Controle { ok: Appli.sortie-audio != ""; texte: Appli.sortie-audio != "" ? @tr("{} branché", Appli.sortie-audio) : @tr("Aucune sortie audio détectée"); }
+                Controle { ok: Appli.etat-moteur != 0; texte: Appli.etat-moteur != 0 ? @tr("Moteur audio détecté") : @tr("Moteur audio introuvable"); }
+                Controle { ok: Appli.etat-moteur == 2; texte: Appli.etat-moteur == 2 ? @tr("Moteur audio actif") : @tr("Moteur audio inactif"); }
+            }
+        }
+    }
+
+    // Les réglages du test.
+    Carte {
+        remplissage: 28px;
+        TitreSection { contenu: @tr("Réglages du test"); }
+        HorizontalLayout {
+            spacing: 48px;
+            Reglage {
+                intitule: @tr("Bascule toutes les");
+                aide: @tr("Un intervalle plus long laisse plus de temps pour comparer, mais allonge le test.");
+                Choix {
+                    options: [@tr("10 s"), @tr("20 s"), @tr("45 s"), @tr("2 min")];
+                    choisi: root.position-intervalle;
+                    choisit(i) => { Test.intervalle-s = [10, 20, 45, 120][i]; }
+                }
+            }
+            Reglage {
+                intitule: @tr("Durée du test");
+                aide: Test.precis ? @tr("Plus de duels, une courbe plus fiable.") : @tr("Un premier résultat en une vingtaine de minutes.");
+                Choix {
+                    options: [@tr("Rapide · 12 duels"), @tr("Précis · 30 duels")];
+                    choisi: Test.precis ? 1 : 0;
+                    choisit(i) => { Test.precis = i == 1; }
+                }
+            }
+        }
+        if Test.mode-choisi == "une-zone": Reglage {
+            intitule: @tr("Zone à tester");
+            aide: @tr("Les duels ne testeront que cette zone.");
+            if Test.zones.length == 0: Paragraphe { text: @tr("Aucune zone à proposer pour le moment."); }
+            Choix {
+                options: Test.zones;
+                choisi: Test.zone-choisie;
+                choisit(i) => { Test.zone-choisie = i; }
+            }
+        }
+        if Test.mode-choisi == "profil-contre-profil": Reglage {
+            intitule: @tr("Autre profil");
+            aide: @tr("Ce profil sera comparé à ta référence.");
+            if Test.profils.length == 0: Paragraphe { text: @tr("Aucun autre profil à comparer pour le moment."); }
+            Choix {
+                options: Test.profils;
+                choisi-nom: Test.autre-profil;
+                choisit(i) => { Test.autre-profil = Test.profils[i]; }
+            }
+        }
+    }
+}

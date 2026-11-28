@@ -1,15 +1,13 @@
-# Triage Labels
+# Étiquettes de tri
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+Les skills parlent de cinq rôles de tri. Dans ce dépôt, chaque rôle s'écrit tel quel dans la ligne `Status:` d'un ticket.
 
-| Label in mattpocock/skills | Label in our tracker | Meaning                                  |
-| -------------------------- | -------------------- | ---------------------------------------- |
-| `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
-| `needs-info`               | `needs-info`         | Waiting on reporter for more information |
-| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent  |
-| `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
-| `wontfix`                  | `wontfix`            | Will not be actioned                     |
+| Rôle | Valeur de `Status:` | Sens |
+| --- | --- | --- |
+| `needs-triage` | `needs-triage` | À évaluer |
+| `needs-info` | `needs-info` | En attente d'une précision d'Alexis |
+| `ready-for-agent` | `ready-for-agent` | Entièrement spécifié, faisable par un agent seul |
+| `ready-for-human` | `ready-for-human` | Demande une action d'Alexis (son PC, son casque, son oreille) |
+| `wontfix` | `wontfix` | Ne sera pas fait |
 
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
-
-Edit the "Label in our tracker" column to match whatever vocabulary you actually use.
+`ready-for-human` sert en particulier à tout ce qui exige le PC Windows et le casque : prototypes audio, écoute, raccourcis en jeu.

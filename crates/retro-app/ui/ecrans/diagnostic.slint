@@ -1,0 +1,95 @@
+import { Theme } from "../theme.slint";
+import { Titre, TitreSection, Paragraphe, Carte, Bouton, LigneEtat, Separateur } from "../composants.slint";
+import { Diagnostic, EtatControle } from "../etat.slint";
+
+component LigneDossier inherits HorizontalLayout {
+    in property <string> titre;
+    in property <string> chemin;
+    spacing: 20px;
+    min-height: 56px;
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        spacing: 3px;
+        Text { text: titre; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+        Text {
+            text: chemin != "" ? chemin : @tr("Introuvable pour l’instant");
+            font-family: Theme.chiffres;
+            font-size: 14px;
+            color: Theme.discret;
+            wrap: word-wrap;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        Bouton { texte: @tr("Ouvrir"); actif: chemin != ""; active => { Diagnostic.ouvrir-dossier(chemin); } }
+    }
+}
+
+export component EcranDiagnostic inherits VerticalLayout {
+    alignment: start;
+    spacing: 24px;
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 8px;
+            Titre { contenu: @tr("Diagnostic"); }
+            Paragraphe { text: @tr("L’autotest vérifie ce que Retro EQ peut lire sur ton PC. Certains réglages, comme ceux d’un logiciel de casque, ne sont pas lisibles par l’appli : à toi de les vérifier."); }
+        }
+        VerticalLayout {
+            alignment: start;
+            horizontal-stretch: 0;
+            Bouton {
+                texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
+                prefixe: Diagnostic.en-cours ? "" : "⟳";
+                actif: !Diagnostic.en-cours;
+                active => { Diagnostic.relancer(); }
+            }
+        }
+    }
+
+    Carte {
+        HorizontalLayout {
+            spacing: 16px;
+            TitreSection { contenu: @tr("Maintenant"); vertical-alignment: center; }
+            Text {
+                text: Diagnostic.bilan;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                font-family: Theme.chiffres;
+                font-size: 16px;
+                color: Theme.texte;
+                wrap: word-wrap;
+            }
+        }
+        Separateur { }
+        if Diagnostic.controles.length == 0: Paragraphe {
+            text: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Aucun contrôle pour l’instant. Lance l’autotest pour vérifier ton installation.");
+        }
+        for ligne[i] in Diagnostic.controles: VerticalLayout {
+            if i > 0: Separateur { }
+            LigneEtat {
+                titre: ligne.titre;
+                detail: ligne.detail;
+                etat: ligne.etat == EtatControle.ok ? 0 : ligne.etat == EtatControle.attention ? 1 : ligne.etat == EtatControle.erreur ? 2 : 3;
+                action: ligne.action;
+                agit => { Diagnostic.agir(i); }
+            }
+        }
+        Separateur { }
+        Paragraphe {
+            text: @tr("Un point d’interrogation veut dire que l’appli ne peut pas trancher seule : vérifie le point indiqué toi-même.");
+            font-size: 14px;
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Dossiers"); }
+        Separateur { }
+        LigneDossier { titre: @tr("Moteur audio (Equalizer APO)"); chemin: Diagnostic.dossier-moteur; }
+        Separateur { }
+        LigneDossier { titre: @tr("Données de Retro EQ"); chemin: Diagnostic.dossier-donnees; }
+    }
+}

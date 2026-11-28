@@ -1,0 +1,200 @@
+import { Theme } from "../theme.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Bouton, Choix, GenreBouton, Touche, Interrupteur, Separateur } from "../composants.slint";
+import { Appli, Ecran, Reglages } from "../etat.slint";
+
+// Une ligne de réglage : titre et aide à gauche, le contrôle à droite.
+component Rangee inherits HorizontalLayout {
+    in property <string> titre;
+    in property <string> aide: "";
+    spacing: 24px;
+    min-height: Theme.cible;
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        spacing: 2px;
+        Text { text: titre; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+        if aide != "": Text { text: aide; font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        @children
+    }
+}
+
+export component EcranReglages inherits VerticalLayout {
+    alignment: start;
+    spacing: 24px;
+    property <int> idx-intervalle: Reglages.intervalle-s == 10 ? 0 : Reglages.intervalle-s == 20 ? 1 : Reglages.intervalle-s == 45 ? 2 : Reglages.intervalle-s == 120 ? 3 : -1;
+
+    VerticalLayout {
+        spacing: 8px;
+        Titre { contenu: @tr("Réglages"); }
+        Paragraphe { text: @tr("Tout ce qui ne change pas d’un test à l’autre. Les changements sont enregistrés tout de suite."); }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Général"); }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Réduire dans la barre des tâches en fermant la fenêtre");
+            aide: @tr("Fermer la fenêtre ne coupe jamais l’égaliseur : le son reste égalisé tant que Retro EQ tourne en arrière-plan.");
+            coche: Reglages.fermer-reduit;
+            bascule(v) => { Reglages.regler-fermer-reduit(v); }
+        }
+        Separateur { }
+        Rangee {
+            titre: @tr("Sortie audio");
+            aide: Reglages.sortie != "" ? @tr("Le son est égalisé sur cette sortie.") : @tr("Aucune sortie audio détectée pour l’instant. Branche ton casque ou tes enceintes.");
+            Chiffres { text: Reglages.sortie; font-size: 15px; horizontal-alignment: right; }
+        }
+        if Reglages.sorties.length > 1: Paragraphe {
+            text: @tr("{} sorties audio sont connues de Retro EQ.", Reglages.sorties.length);
+            font-size: 14px;
+        }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Vérifier les mises à jour au démarrage");
+            aide: @tr("Au plus une fois par jour, Retro EQ demande à GitHub si une version plus récente existe. Désactivé, il ne se connecte jamais à Internet de lui-même.");
+            coche: Reglages.verifier-mises-a-jour;
+            bascule(v) => { Reglages.regler-verifier-mises-a-jour(v); }
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Tests"); }
+        Separateur { }
+        VerticalLayout {
+            spacing: 10px;
+            Text { text: @tr("Bascule entre A et B"); font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; }
+            Text { text: @tr("Intervalle par défaut entre deux passages. Tu peux le changer pour chaque test."); font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+            Choix {
+                options: [@tr("10 s"), @tr("20 s"), @tr("45 s"), @tr("2 min")];
+                choisi: idx-intervalle;
+                choisit(i) => { Reglages.regler-intervalle([10, 20, 45, 120][i]); }
+            }
+        }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Mini-fenêtre par-dessus les jeux");
+            aide: @tr("Une petite fenêtre te demande ta réponse sans quitter ton jeu.");
+            coche: Reglages.mini-fenetre;
+            bascule(v) => { Reglages.regler-mini-fenetre(v); }
+        }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Bip de confirmation");
+            aide: @tr("En plein écran exclusif, aucune fenêtre ne peut s’afficher par-dessus le jeu : un bip court confirme que ta réponse est bien prise.");
+            coche: Reglages.bip;
+            bascule(v) => { Reglages.regler-bip(v); }
+        }
+        Separateur { }
+        Interrupteur {
+            texte: @tr("Pause pendant les appels Discord");
+            aide: @tr("Le test se met en pause pendant un appel et reprend ensuite.");
+            coche: Reglages.pause-appels;
+            bascule(v) => { Reglages.regler-pause-appels(v); }
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Raccourcis"); }
+        Separateur { }
+        if Reglages.raccourcis.length == 0: Paragraphe { text: @tr("Aucun raccourci n’est défini pour l’instant."); }
+        for ligne[i] in Reglages.raccourcis: VerticalLayout {
+            spacing: 0px;
+            if i > 0: Separateur { }
+            HorizontalLayout {
+                min-height: 56px;
+                spacing: 24px;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 3px;
+                    Text { text: ligne.action; font-family: Theme.courant; font-weight: 600; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+                    if ligne.conflit: Text {
+                        text: @tr("! Conflit : cette touche est déjà utilisée par une autre appli. Choisis-en une autre.");
+                        font-family: Theme.courant;
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: Theme.erreur;
+                        wrap: word-wrap;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    HorizontalLayout { alignment: end; Touche { texte: ligne.touches; } }
+                }
+            }
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Apparence"); }
+        Separateur { }
+        Rangee {
+            titre: @tr("Langue");
+            aide: @tr("Le français est la langue de référence.");
+            Choix {
+                options: ["Français", "English"];
+                choisi: Reglages.langue == "en" ? 1 : 0;
+                choisit(i) => { Reglages.choisir-langue(i == 1 ? "en" : "fr"); }
+            }
+        }
+        Separateur { }
+        Rangee {
+            titre: @tr("Navigation");
+            aide: @tr("Onglets dans la barre de titre, ou colonne d’icônes à gauche.");
+            Choix {
+                options: [@tr("Barre du haut"), @tr("Rail latéral")];
+                choisi: Reglages.rail ? 1 : 0;
+                choisit(i) => { Reglages.regler-rail(i == 1); }
+            }
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Importer et exporter"); }
+        Separateur { }
+        Paragraphe { text: @tr("Retro EQ lit les fichiers Peace (.peace), Equalizer APO (.txt) et AutoEQ (ParametricEQ.txt). Les fichiers importés deviennent des profils."); }
+        HorizontalLayout {
+            alignment: start;
+            Bouton { texte: @tr("Importer un fichier…"); prefixe: "↧"; active => { Reglages.importer(); } }
+        }
+        Separateur { }
+        Etiquette { contenu: @tr("Exporter le profil actif"); }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Bouton { texte: "Peace"; active => { Reglages.exporter("peace"); } }
+            Bouton { texte: "Equalizer APO"; active => { Reglages.exporter("apo"); } }
+            Bouton { texte: "AutoEQ"; active => { Reglages.exporter("autoeq"); } }
+            Bouton { texte: "Wavelet"; active => { Reglages.exporter("wavelet"); } }
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Aide"); }
+        Paragraphe { text: @tr("Si le son te semble bizarre, l’autotest vérifie le moteur, les améliorations audio de Windows et les raccourcis."); }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Bouton { texte: @tr("Diagnostic"); active => { Appli.aller(Ecran.diagnostic); } }
+            Bouton { texte: @tr("À propos"); active => { Appli.aller(Ecran.a-propos); } }
+        }
+    }
+
+    // Section prudente, séparée du reste.
+    Carte {
+        alerte: true;
+        TitreSection { contenu: @tr("Rendre le son d’origine"); }
+        Paragraphe {
+            text: @tr("Retire Retro EQ du moteur audio et restaure la configuration d’origine de ton PC. Tes profils restent gardés. Retro EQ ne fera plus rien au son tant que tu ne le réactives pas.");
+            color: Theme.texte;
+        }
+        HorizontalLayout {
+            alignment: start;
+            Bouton { texte: @tr("Rendre le son d’origine"); active => { Reglages.rendre-son-origine(); } }
+        }
+    }
+}

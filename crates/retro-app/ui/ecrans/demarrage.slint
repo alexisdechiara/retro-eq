@@ -1,0 +1,96 @@
+import { Theme } from "../theme.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Carte, Bouton, Choix, GenreBouton, LigneEtat, Separateur, Logo } from "../composants.slint";
+import { Appli, Ecran, Reglages, Diagnostic, EtatControle } from "../etat.slint";
+
+export component Demarrage inherits VerticalLayout {
+    alignment: start;
+    spacing: 24px;
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            spacing: 12px;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 14px;
+                alignment: start;
+                Logo { taille: 48px; }
+                VerticalLayout {
+                    alignment: center;
+                    Etiquette { contenu: @tr("Premier lancement"); }
+                }
+            }
+            Titre { contenu: @tr("Bienvenue dans Retro EQ"); }
+        }
+        VerticalLayout {
+            alignment: start;
+            horizontal-stretch: 0;
+            Choix {
+                options: ["Français", "English"];
+                choisi: Reglages.langue == "en" ? 1 : 0;
+                choisit(i) => { Reglages.choisir-langue(i == 1 ? "en" : "fr"); }
+            }
+        }
+    }
+    Paragraphe {
+        text: @tr("Retro EQ cherche le son qui te plaît en te faisant comparer deux réglages d’égaliseur, A et B, pendant que tu joues ou écoutes. À la fin, ta réponse devient un profil que tu peux garder.");
+        font-size: 18px;
+    }
+
+    Carte {
+        HorizontalLayout {
+            spacing: 16px;
+            TitreSection { contenu: @tr("Autotest"); vertical-alignment: center; }
+            Text {
+                text: Diagnostic.bilan;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                font-family: Theme.chiffres;
+                font-size: 16px;
+                color: Theme.texte;
+                wrap: word-wrap;
+            }
+        }
+        Separateur { }
+        if Diagnostic.controles.length == 0: Paragraphe {
+            text: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Aucun contrôle pour l’instant. Lance l’autotest pour vérifier que tout est branché.");
+        }
+        for ligne[i] in Diagnostic.controles: VerticalLayout {
+            if i > 0: Separateur { }
+            LigneEtat {
+                titre: ligne.titre;
+                detail: ligne.detail;
+                etat: ligne.etat == EtatControle.ok ? 0 : ligne.etat == EtatControle.attention ? 1 : ligne.etat == EtatControle.erreur ? 2 : 3;
+                action: ligne.action;
+                agit => { Diagnostic.agir(i); }
+            }
+        }
+        // Un contrôle en erreur : on dit quoi régler d’abord, sans bloquer la suite.
+        VerticalLayout {
+            spacing: 0px;
+            for ligne in Diagnostic.controles: VerticalLayout {
+            if ligne.etat == EtatControle.erreur: Paragraphe {
+                text: @tr("À régler d’abord : {}. Tu peux quand même continuer, mais les tests risquent d’être faussés.", ligne.titre);
+                color: Theme.erreur;
+            }
+        }
+        }
+        Separateur { }
+        // « Continuer » vaut accord : on le dit avant, et on dit que c'est réversible.
+        if !Appli.moteur-autorise && Appli.etat-moteur != 0: Paragraphe {
+            text: @tr("En continuant, tu autorises Retro EQ à écrire sa courbe dans la configuration d’Equalizer APO. Rien n’y est écrit avant. Tes propres lignes y sont mises en commentaire, pas effacées : « Rendre le son d’origine », dans les Réglages, retire ce que Retro EQ a écrit et les réactive.");
+            color: Theme.texte;
+        }
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.autoriser-moteur(); Appli.aller(Ecran.accueil); } }
+            Bouton {
+                texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
+                actif: !Diagnostic.en-cours;
+                active => { Diagnostic.relancer(); }
+            }
+        }
+        Paragraphe { text: @tr("Tu pourras relancer l’autotest depuis les Réglages."); font-size: 14px; }
+    }
+}

@@ -1,0 +1,26 @@
+[package]
+name = "retro-audio"
+description = "Capture audio et observation du système pour Retro EQ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+retro-dsp.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[target."cfg(windows)".dependencies]
+wasapi = "0.27"
+# Seulement les morceaux de l'API Windows réellement utilisés.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

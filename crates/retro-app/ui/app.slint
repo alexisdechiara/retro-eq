@@ -1,0 +1,339 @@
+import "polices/Antonio.ttf";
+import "polices/LibreFranklin.ttf";
+import "polices/DMMono-Regular.ttf";
+import "polices/DMMono-Medium.ttf";
+import "polices/Anton-Regular.ttf";
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour } from "etat.slint";
+import { Logo, Platine, Touche, Bouton, GenreBouton, Segments, Format, Signe } from "composants.slint";
+import { Demarrage } from "ecrans/demarrage.slint";
+import { Accueil } from "ecrans/accueil.slint";
+import { Tester } from "ecrans/tester.slint";
+import { NouveauTest } from "ecrans/nouveau_test.slint";
+import { Duels } from "ecrans/duels.slint";
+import { EcranResultat } from "ecrans/resultat.slint";
+import { EcranProfils } from "ecrans/profils.slint";
+import { EcranEgaliseur } from "ecrans/egaliseur.slint";
+import { EcranVisualiseur } from "ecrans/visualiseur.slint";
+import { EcranReglages } from "ecrans/reglages.slint";
+import { EcranDiagnostic } from "ecrans/diagnostic.slint";
+import { APropos } from "ecrans/a_propos.slint";
+
+export { Appli, Ecran, Test, Resultat, Profils, Egaliseur, Visualiseur, Diagnostic, Reglages, EtatTest, AutoEq, MiseAJour }
+
+// Un onglet de la barre de titre ou une entrée du rail.
+component Onglet {
+    in property <string> texte;
+    in property <bool> courant;
+    in property <bool> vertical: false;
+    in property <bool> pastille: false;          // une petite pastille ambre : il y a du nouveau derrière cet onglet
+    callback active();
+    min-width: libelle.preferred-width + 28px;
+    min-height: vertical ? 46px : 52px;
+    horizontal-stretch: 0;
+    accessible-role: tab;
+    accessible-label: pastille ? @tr("{} (mise à jour disponible)", texte) : texte;
+    accessible-action-default => { root.active(); }
+    Rectangle {
+        background: zone.has-hover && !courant ? Theme.doux.with-alpha(0.5) : transparent;
+        border-radius: vertical ? 10px : 0px;
+    }
+    libelle := Text {
+        x: 14px;
+        text: texte;
+        font-family: Theme.courant;
+        font-weight: 600;
+        font-size: 14px;
+        color: courant ? Theme.texte : Theme.discret;
+        vertical-alignment: center;
+    }
+    if pastille: Rectangle {
+        x: 14px + libelle.preferred-width + 3px;
+        y: parent.height / 2 - 14px;
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: Theme.ambre;
+    }
+    if courant && !vertical: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
+    if courant && vertical: Rectangle { x: 0px; width: 3px; height: 24px; border-radius: 1.5px; background: Theme.ambre; }
+    if (portee.has-focus && portee.au-clavier): Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 6px; }
+    zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
+    // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
+    portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
+            return reject;
+        }
+    }
+}
+
+// L'onglet Accueil de la barre de titre : une petite maison, dans une zone ronde de 40 px.
+component OngletAccueil {
+    in property <bool> courant;
+    callback active();
+    min-width: 64px;
+    min-height: 52px;
+    horizontal-stretch: 0;
+    accessible-role: tab;
+    accessible-label: @tr("Accueil");
+    accessible-action-default => { root.active(); }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: zone.has-hover && !courant ? Theme.doux.with-alpha(0.5) : transparent;
+        Path {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 22px;
+            height: 22px;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            commands: "M3 11 L12 3 L21 11 M5.5 9.5 V20 H10 V14 H14 V20 H18.5 V9.5";
+            stroke: courant ? Theme.texte : Theme.discret;
+            stroke-width: 2px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+        }
+        if (portee.has-focus && portee.au-clavier): Rectangle { border-width: 3px; border-color: Theme.ambre; border-radius: 20px; }
+    }
+    if courant: Rectangle { y: parent.height - 3px; height: 3px; background: Theme.ambre; }
+    zone := TouchArea { mouse-cursor: pointer; clicked => { portee.focus(); root.active(); } }
+    portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) { root.active(); return accept; }
+            return reject;
+        }
+    }
+}
+
+// Un des trois boutons de la fenêtre : réduire, agrandir, fermer.
+component BoutonFenetre {
+    in property <string> signe;
+    in property <string> nom;
+    in property <bool> danger: false;
+    callback active();
+    width: 46px;
+    accessible-role: button;
+    accessible-label: nom;
+    accessible-action-default => { root.active(); }
+    Rectangle { background: danger ? (zone.has-hover ? Theme.fermer.brighter(0.2) : Theme.fermer) : zone.has-hover ? Theme.doux : transparent; }
+    Signe {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        code: signe;
+        taille: 12px;
+        couleur: danger ? white : Theme.discret;
+    }
+    zone := TouchArea { clicked => { root.active(); } }
+}
+
+component Navigation {
+    in property <bool> vertical;
+    property <[{ecran: Ecran, nom: string}]> entrees: [
+        { ecran: Ecran.tester, nom: @tr("Tester") },
+        { ecran: Ecran.profils, nom: @tr("Mes profils") },
+        { ecran: Ecran.egaliseur, nom: @tr("Égaliseur") },
+        { ecran: Ecran.visualiseur, nom: @tr("Visualiseur") },
+        { ecran: Ecran.reglages, nom: @tr("Réglages") },
+    ];
+    function courant(e: Ecran) -> bool {
+        return Appli.ecran == e
+            || (e == Ecran.tester && (Appli.ecran == Ecran.nouveau-test || Appli.ecran == Ecran.duels || Appli.ecran == Ecran.resultat))
+            || (e == Ecran.reglages && (Appli.ecran == Ecran.diagnostic || Appli.ecran == Ecran.a-propos));
+    }
+    if !vertical: HorizontalLayout {
+        OngletAccueil { courant: Appli.ecran == Ecran.accueil; active => { Appli.aller(Ecran.accueil); } }
+        for entree in entrees: Onglet { texte: entree.nom; pastille: entree.ecran == Ecran.reglages && MiseAJour.disponible; courant: root.courant(entree.ecran); active => { Appli.aller(entree.ecran); } }
+    }
+    if vertical: VerticalLayout {
+        alignment: start;
+        spacing: 4px;
+        Onglet { vertical: true; texte: @tr("Accueil"); courant: Appli.ecran == Ecran.accueil; active => { Appli.aller(Ecran.accueil); } }
+        for entree in entrees: Onglet { vertical: true; texte: entree.nom; pastille: entree.ecran == Ecran.reglages && MiseAJour.disponible; courant: root.courant(entree.ecran); active => { Appli.aller(entree.ecran); } }
+    }
+}
+
+export component FenetrePrincipale inherits Window {
+    title: "Retro EQ";
+    no-frame: true;
+    // Deux tailles seulement : 1280 × 800, ou agrandie. Pas de redimensionnement libre.
+    // Taille mini = taille maxi : Slint rend alors la fenêtre non redimensionnable (plus de
+    // bords étirables ni d'ancrage Snap). Sans cela, ses contraintes suivaient le contenu et
+    // Slint la rendait redimensionnable à chaque changement (constaté sur le PC, 25/11/2026).
+    // Pour agrandir, `fenetre.rs` lève la limite (`agrandie`) juste avant d'agrandir.
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: Appli.taille-libre ? 0px : 1280px;
+    min-height: Appli.taille-libre ? 0px : 800px;
+    max-width: Appli.agrandie || Appli.taille-libre ? 100000px : 1280px;
+    max-height: Appli.agrandie || Appli.taille-libre ? 100000px : 800px;
+    background: Theme.fond;
+    default-font-family: Theme.courant;
+    default-font-size: 16px;
+    // Agrandie, la fenêtre dépasse la largeur utile : on garde 1344 px de contenu, centrés.
+    property <length> marge-laterale: max(0px, (root.width - (Appli.rail ? 200px : 0px) - 1344px) / 2);
+
+    VerticalLayout {
+        // Le liseré aux cinq couleurs, signature de la Station Pilleur.
+        HorizontalLayout {
+            height: 3px;
+            for couleur in [Theme.rouille, Theme.ambre, Theme.jaune, Theme.a, Theme.bleu]: Rectangle { background: couleur; }
+        }
+        // La barre de titre : logo, onglets, état, boutons de fenêtre.
+        Rectangle {
+            height: 52px;
+            background: Theme.creux;
+            TouchArea {
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) { Appli.deplacer-fenetre(); }
+                }
+                double-clicked => { Appli.agrandir(); }
+            }
+            HorizontalLayout {
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 10px;
+                    horizontal-stretch: 0;
+                    VerticalLayout { alignment: center; Logo { taille: 24px; } }
+                    Text { text: "RETRO"; font-family: Theme.titres; font-weight: 700; font-size: 16px; letter-spacing: 2px; color: Theme.texte; vertical-alignment: center; }
+                    Text { text: "EQ"; font-family: Theme.logo; font-size: 16px; letter-spacing: 2px; color: Theme.ambre; vertical-alignment: center; }
+                }
+                if !Appli.rail: Navigation { vertical: false; horizontal-stretch: 0; }
+                Rectangle { horizontal-stretch: 1; }
+                HorizontalLayout {
+                    padding-right: 14px;
+                    spacing: 8px;
+                    horizontal-stretch: 0;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Appli.egaliseur-actif && Appli.etat-moteur == 2 ? Theme.ok : Theme.discret; }
+                    }
+                    Text {
+                        text: Appli.etat-moteur == 0 ? @tr("Moteur audio absent") : !Appli.moteur-autorise ? @tr("Égaliseur pas encore activé") : Appli.etat-moteur != 2 ? @tr("Moteur audio inactif") : !Appli.egaliseur-actif ? @tr("Égaliseur coupé") : @tr("{} · {}", Appli.profil-actif, Format.db(round(Appli.niveau-db)));
+                        font-size: 13px;
+                        color: Theme.discret;
+                        vertical-alignment: center;
+                    }
+                }
+                BoutonFenetre { signe: "—"; nom: @tr("Réduire"); active => { Appli.reduire(); } }
+                BoutonFenetre { signe: Appli.agrandie ? "❐" : "▢"; nom: @tr("Agrandir"); active => { Appli.agrandir(); } }
+                BoutonFenetre { signe: "✕"; nom: @tr("Fermer"); danger: true; active => { Appli.fermer(); } }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; background: Theme.trait; }
+        }
+        HorizontalLayout {
+            if Appli.rail: Rectangle {
+                width: 200px;
+                background: Theme.creux;
+                Navigation { vertical: true; x: 10px; y: 16px; width: parent.width - 20px; }
+                Rectangle { x: parent.width - 1px; width: 1px; background: Theme.trait; }
+            }
+            ScrollView {
+                // Fenêtre agrandie : le contenu garde au plus 1344 px de large et reste centré.
+                HorizontalLayout {
+                    Rectangle { width: root.marge-laterale; }
+                    VerticalLayout {
+                    horizontal-stretch: 1;
+                    max-width: 1344px;
+                    padding-top: 40px;
+                    padding-bottom: 72px;
+                    padding-left: Theme.marge;
+                    padding-right: Theme.marge;
+                    alignment: start;
+                    if Appli.ecran == Ecran.demarrage: Demarrage { }
+                    if Appli.ecran == Ecran.accueil: Accueil { }
+                    if Appli.ecran == Ecran.tester: Tester { }
+                    if Appli.ecran == Ecran.nouveau-test: NouveauTest { }
+                    if Appli.ecran == Ecran.duels: Duels { }
+                    if Appli.ecran == Ecran.resultat: EcranResultat { }
+                    if Appli.ecran == Ecran.profils: EcranProfils { }
+                    if Appli.ecran == Ecran.egaliseur: EcranEgaliseur { }
+                    if Appli.ecran == Ecran.visualiseur: EcranVisualiseur { }
+                    if Appli.ecran == Ecran.reglages: EcranReglages { }
+                    if Appli.ecran == Ecran.diagnostic: EcranDiagnostic { }
+                    if Appli.ecran == Ecran.a-propos: APropos { }
+                    }
+                    Rectangle { width: root.marge-laterale; }
+                }
+            }
+        }
+    }
+    // Annonce courte en bas de la fenêtre : confirmation ou erreur.
+    if Appli.annonce != "": Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 24px;
+        width: min(parent.width - 48px, message.preferred-width + 48px);
+        height: 48px;
+        border-radius: 24px;
+        background: Appli.annonce-erreur ? Theme.fond-erreur : Theme.selection;
+        border-width: 1.5px;
+        border-color: Appli.annonce-erreur ? Theme.erreur : Theme.trait;
+        message := Text { text: Appli.annonce; font-weight: 600; font-size: 15px; color: Theme.texte; horizontal-alignment: center; vertical-alignment: center; }
+    }
+}
+
+// La mini-fenêtre posée au-dessus du jeu pendant un test.
+export component MiniFenetre inherits Window {
+    title: "Retro EQ";
+    no-frame: true;
+    always-on-top: true;
+    width: 420px;
+    height: 150px;
+    background: Theme.fond;
+    default-font-family: Theme.courant;
+    Rectangle {
+        border-width: 1.5px;
+        border-color: Test.etat == EtatTest.attente-reponse ? Theme.ambre : Theme.trait;
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+            HorizontalLayout {
+                spacing: 10px;
+                Text { text: @tr("DUEL {} / {}", Test.duel, Test.total); font-family: Theme.titres; font-weight: 700; font-size: 22px; color: Theme.texte; vertical-alignment: center; }
+                Rectangle { }
+                Text {
+                    text: Test.etat == EtatTest.attente-reponse ? @tr("Laquelle préfères-tu ?") : Test.etat == EtatTest.pause-appel ? @tr("En pause pendant l’appel") : Test.etat == EtatTest.pause ? @tr("En pause") : Test.compte-a-rebours;
+                    font-family: Test.etat == EtatTest.ecoute ? Theme.chiffres : Theme.courant;
+                    font-weight: 600;
+                    font-size: 16px;
+                    color: Test.etat == EtatTest.attente-reponse ? Theme.ambre : Theme.discret;
+                    vertical-alignment: center;
+                }
+            }
+            Segments { total: Test.total; faits: Test.duel - 1; en-cours: Test.etat != EtatTest.termine; avancement: 1; }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Touche { texte: "F6"; }
+                Text { text: "A"; font-weight: 700; font-size: 15px; color: Test.cote-actif == 1 ? Theme.a : Theme.texte; vertical-alignment: center; }
+                Rectangle { width: 6px; }
+                Touche { texte: "F7"; }
+                Text { text: @tr("Pareil"); font-weight: 600; font-size: 15px; color: Theme.texte; vertical-alignment: center; }
+                Rectangle { width: 6px; }
+                Touche { texte: "F8"; }
+                Text { text: "B"; font-weight: 700; font-size: 15px; color: Test.cote-actif == 2 ? Theme.b : Theme.texte; vertical-alignment: center; }
+                Rectangle { width: 6px; }
+                Touche { texte: "F9"; }
+                Text { text: @tr("Plus tard"); font-size: 15px; color: Theme.discret; vertical-alignment: center; }
+            }
+        }
+    }
+}

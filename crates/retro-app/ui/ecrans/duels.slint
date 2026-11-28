@@ -1,0 +1,300 @@
+import { Theme } from "../theme.slint";
+import { Test, Appli, Ecran, EtatTest } from "../etat.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBouton, Carte, Pastille, Touche, Segments, Platine, Separateur, Signe } from "../composants.slint";
+import { EtapesTest } from "nouveau_test_parts.slint";
+
+// Un grand bouton de réponse : A, Pareil, B. Utilisable à la souris comme au clavier.
+component Reponse inherits Rectangle {
+    in property <string> lettre;
+    in property <string> mot;
+    in property <string> raccourci;
+    in property <color> couleur;
+    in property <color> encre;
+    callback choisit();
+    min-height: 84px;
+    preferred-width: 100px;
+    horizontal-stretch: 1;
+    border-radius: 20px;
+    background: touche.has-hover ? couleur.brighter(0.15) : couleur;
+    border-width: 1.5px;
+    border-color: white;
+    drop-shadow-offset-y: touche.pressed ? 1px : 5px;
+    drop-shadow-color: Theme.ombre-bouton;
+    accessible-role: button;
+    accessible-label: mot;
+    accessible-action-default => { root.choisit(); }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 14px;
+        padding: 12px;
+        Text { text: lettre; font-family: Theme.titres; font-weight: 700; font-size: 44px; color: encre; vertical-alignment: center; }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Text { text: mot; font-family: Theme.courant; font-weight: 700; font-size: 18px; color: encre; }
+            Text { text: raccourci; font-family: Theme.chiffres; font-size: 13px; color: encre; }
+        }
+    }
+    touche := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { portee.focus(); root.choisit(); }
+    }
+    // `focus-on-click: false` : voir le commentaire de `Bouton` (composants.slint).
+    portee := FocusScope {
+        // L'anneau de focus ne s'affiche qu'en navigation au clavier (Tab), pas après un clic
+        // (sinon il recouvrait la barre ambre de l'onglet actif : constaté sur le PC, 25/11/2026).
+        property <bool> au-clavier;
+        focus-gained(raison) => { self.au-clavier = raison == FocusReason.tab-navigation; }
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) { root.choisit(); return accept; }
+            return reject;
+        }
+    }
+    if (portee.has-focus && portee.au-clavier): Rectangle {
+        x: -5px;
+        y: -5px;
+        width: parent.width + 10px;
+        height: parent.height + 10px;
+        border-radius: 24px;
+        border-width: 3px;
+        border-color: Theme.ambre;
+    }
+}
+
+// Un raccourci : la touche et ce qu'elle fait.
+component Raccourci inherits HorizontalLayout {
+    in property <string> touche;
+    in property <string> action;
+    spacing: 8px;
+    horizontal-stretch: 0;
+    VerticalLayout { alignment: center; horizontal-stretch: 0; Touche { texte: touche; } }
+    Text { text: action; font-family: Theme.courant; font-size: 16px; color: Theme.texte; vertical-alignment: center; }
+}
+
+// Un bandeau d'information (pause, fin, conseil).
+component Bandeau inherits Rectangle {
+    in property <string> titre;
+    in property <string> texte;
+    in property <string> signe: "";
+    in property <bool> fort: true;
+    background: Theme.surface;
+    border-radius: 20px;
+    border-width: fort ? 1.5px : 1px;
+    border-color: fort ? Theme.ambre : Theme.trait;
+    HorizontalLayout {
+        padding: 18px;
+        spacing: 18px;
+        if signe != "": VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 26px;
+                background: Theme.doux;
+                Signe { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; code: signe; taille: 22px; couleur: Theme.texte; }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            Text { text: titre.to-uppercase(); font-family: Theme.titres; font-weight: 700; font-size: 28px; letter-spacing: 1px; color: Theme.texte; wrap: word-wrap; }
+            Paragraphe { text: texte; }
+        }
+        @children
+    }
+}
+
+export component Duels inherits VerticalLayout {
+    alignment: start;
+    spacing: 0px;
+
+    property <bool> en-pause: Test.etat == EtatTest.pause || Test.etat == EtatTest.pause-appel;
+    property <bool> en-cours: Test.etat == EtatTest.ecoute || Test.etat == EtatTest.attente-reponse;
+    property <bool> actif: Test.etat != EtatTest.termine && Test.etat != EtatTest.pret;
+
+    EtapesTest { courante: Test.etat == EtatTest.termine ? 4 : 3; padding-bottom: 16px; }
+
+    // Titre, source et appli.
+    HorizontalLayout {
+        spacing: 24px;
+        padding-bottom: 14px;
+        HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            horizontal-stretch: 0;
+            Text { text: @tr("Duel {}", Test.duel).to-uppercase(); font-family: Theme.titres; font-weight: 700; font-size: 60px; letter-spacing: 1px; color: Theme.texte; vertical-alignment: center; }
+            Text { text: @tr("/ {}", Test.total); font-family: Theme.titres; font-weight: 700; font-size: 60px; color: Theme.discret; vertical-alignment: center; }
+        }
+        Rectangle { }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: end;
+            horizontal-stretch: 0;
+            VerticalLayout {
+                alignment: end;
+                padding-bottom: 12px;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    spacing: 10px;
+                    if Test.source != "": Pastille { texte: @tr("Source : {}", Test.source); taille: 14px; }
+                    if Test.appli != "": Pastille { texte: @tr("Appli détectée : {}", Test.appli); taille: 14px; }
+                }
+            }
+        }
+    }
+    Segments {
+        total: Test.total;
+        faits: Test.etat == EtatTest.termine ? Test.total : max(0, Test.duel - 1);
+        en-cours: Test.etat != EtatTest.termine;
+        avancement: 1;
+        epaisseur: 12px;
+    }
+
+    // Le centre : compte à rebours, question, pause ou fin selon l'état.
+    VerticalLayout {
+        padding-top: 26px;
+        padding-bottom: 26px;
+        spacing: 16px;
+        if Test.pause-conseillee: Bandeau {
+            fort: false;
+            signe: "☕";
+            titre: @tr("Une petite pause ?");
+            texte: @tr("Tu écoutes depuis plus de 40 minutes. Quelques minutes de silence reposent les oreilles et rendent les réponses plus fiables.");
+        }
+        if Test.etat == EtatTest.ecoute: HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            Text { text: @tr("Prochaine bascule dans"); font-family: Theme.courant; font-size: 20px; color: Theme.discret; vertical-alignment: center; horizontal-stretch: 0; }
+            Text { text: Test.compte-a-rebours; font-family: Theme.chiffres; font-weight: 500; font-size: 56px; color: Theme.texte; vertical-alignment: center; horizontal-stretch: 0; }
+            Text { text: Test.suite != "" ? "· " + Test.suite : ""; font-family: Theme.courant; font-size: 18px; color: Theme.discret; vertical-alignment: center; wrap: word-wrap; }
+        }
+        if Test.etat == EtatTest.attente-reponse: VerticalLayout {
+            spacing: 14px;
+            Text { text: @tr("Laquelle préfères-tu ?"); font-family: Theme.titres; font-weight: 700; font-size: 40px; letter-spacing: 1px; color: Theme.texte; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 20px;
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "A"; mot: @tr("Version A"); raccourci: "F6"; couleur: Theme.a; encre: Theme.sur-a; choisit => { Test.repondre(1); } } }
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "="; mot: @tr("Pareil"); raccourci: "F7"; couleur: Theme.texte; encre: Theme.fond; choisit => { Test.repondre(0); } } }
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "B"; mot: @tr("Version B"); raccourci: "F8"; couleur: Theme.b; encre: Theme.sur-b; choisit => { Test.repondre(2); } } }
+            }
+        }
+        if Test.etat == EtatTest.pause-appel: Bandeau {
+            signe: "II";
+            titre: @tr("En pause · appel Discord");
+            texte: @tr("Ta référence est remise pendant l’appel. Le test reprend tout seul à la fin de l’appel ; le duel en cours est alors rejoué depuis son premier passage.");
+        }
+        if Test.etat == EtatTest.pause: Bandeau {
+            signe: "II";
+            titre: Test.pause-sans-reponse ? @tr("En pause : pas de réponse") : @tr("Test en pause");
+            texte: @tr("Ta référence est remise et rien ne bascule tant que tu ne reprends pas. À la reprise, ce duel est rejoué depuis son premier passage, avec un nouveau tirage de A et B.");
+            Bouton { texte: @tr("Reprendre"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.reprendre(); } }
+        }
+        if Test.etat == EtatTest.pret: Bandeau {
+            signe: "▶";
+            titre: @tr("Prêt pour ce duel");
+            texte: @tr("Lance l’écoute quand tu es prêt : A et B alternent, tu réponds à la fin.");
+            Bouton { texte: @tr("Commencer"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.demarrer(); } }
+        }
+        if Test.etat == EtatTest.termine: Bandeau {
+            signe: "✓";
+            titre: @tr("Test terminé");
+            texte: @tr("Tous les duels sont jugés. Ton résultat est prêt.");
+            Bouton { texte: @tr("Voir le résultat"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.resultat); } }
+        }
+    }
+
+    // Les deux platines.
+    HorizontalLayout {
+        spacing: 22px;
+        opacity: en-pause ? 0.4 : 1;
+        Platine {
+            est-a: true;
+            lecture: Test.etat == EtatTest.ecoute && Test.cote-actif == 1;
+            passages: Test.passages-a;
+            avancement: Test.avancement;
+        }
+        Platine {
+            est-a: false;
+            lecture: Test.etat == EtatTest.ecoute && Test.cote-actif == 2;
+            passages: Test.passages-b;
+            avancement: Test.avancement;
+        }
+    }
+
+    // Les raccourcis et les actions, tant que le test n'est ni prêt ni terminé.
+    if actif: VerticalLayout {
+        padding-top: 26px;
+        spacing: 14px;
+        HorizontalLayout {
+            spacing: 22px;
+            alignment: start;
+            Etiquette { contenu: @tr("Répondre de n’importe où"); vertical-alignment: center; horizontal-stretch: 0; }
+            Raccourci { touche: "F6"; action: @tr("A"); }
+            Raccourci { touche: "F7"; action: @tr("Pareil"); }
+            Raccourci { touche: "F8"; action: @tr("B"); }
+            Raccourci { touche: "F9"; action: @tr("Plus tard"); }
+            Raccourci { touche: "F10"; action: @tr("Annuler"); }
+        }
+        Paragraphe { text: @tr("Maintiens F6 ou F8 pour réécouter A ou B avant de voter."); }
+        HorizontalLayout {
+            padding-top: 10px;
+            spacing: 14px;
+            alignment: start;
+            if !en-pause: Bouton { texte: @tr("Mettre en pause"); prefixe: "⏸"; active => { Test.pause(); } }
+            if en-pause: Bouton { texte: @tr("Reprendre"); prefixe: "▶"; active => { Test.reprendre(); } }
+            Bouton { texte: @tr("Passer ce duel"); active => { Test.passer(); } }
+            Bouton { texte: @tr("Recommencer ce duel"); active => { Test.recommencer(); } }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Arrêter le test…"); genre: GenreBouton.lien; active => { Test.arreter(); } }
+            }
+        }
+        Paragraphe { text: @tr("La question arrivera dans la mini-fenêtre, même par-dessus un jeu."); }
+    }
+
+    // Le journal des duels déjà jugés.
+    VerticalLayout {
+        padding-top: 34px;
+        spacing: 8px;
+        TitreSection { contenu: @tr("Journal"); }
+        Paragraphe { text: @tr("Pendant le test, chaque duel jugé n’affiche que ta réponse. La zone testée, les duels de contrôle et qui jouait la référence ne sont révélés qu’une fois le test terminé."); }
+        Carte {
+            remplissage: 16px;
+            if Test.journal.length == 0: Paragraphe { text: @tr("Aucun duel jugé pour l’instant. Les réponses apparaîtront ici, une par une."); }
+            for ligne[i] in Test.journal: VerticalLayout {
+                spacing: 0px;
+                if i > 0: Separateur { }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 12px;
+                    padding-bottom: 12px;
+                    spacing: 16px;
+                    Text { text: ligne.titre; font-family: Theme.courant; font-size: 17px; color: Theme.texte; vertical-alignment: center; wrap: word-wrap; }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        horizontal-stretch: 0;
+                        alignment: end;
+                        if ligne.cote != 0: VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            Rectangle {
+                                width: 30px;
+                                height: 30px;
+                                border-radius: 15px;
+                                background: ligne.cote == 1 ? Theme.a : Theme.b;
+                                Text { text: ligne.cote == 1 ? "A" : "B"; font-family: Theme.courant; font-weight: 800; font-size: 15px; color: ligne.cote == 1 ? Theme.sur-a : Theme.sur-b; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                        }
+                        Text { text: ligne.detail; font-family: Theme.courant; font-size: 17px; color: Theme.texte; vertical-alignment: center; horizontal-alignment: right; wrap: word-wrap; }
+                    }
+                }
+            }
+        }
+    }
+}

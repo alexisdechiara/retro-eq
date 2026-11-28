@@ -1,0 +1,28 @@
+// Banc d'essai des tests de clics (jamais compilé dans l'appli) : chaque composant cliquable,
+// avec un compteur de ce qu'il a déclenché.
+import { Bouton, GenreBouton, Interrupteur, Fader } from "../composants.slint";
+
+export component BancClics inherits Window {
+    width: 600px;
+    height: 700px;
+    in-out property <int> n-principal;
+    in-out property <int> n-secondaire;
+    in-out property <int> n-choisi;
+    in-out property <int> n-lien;
+    in-out property <int> n-inactif;
+    in-out property <bool> coche;
+    in-out property <int> n-bascule;
+    in-out property <float> gain;
+    in-out property <int> n-regle;
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        Bouton { texte: "Principal"; genre: GenreBouton.principal; active => { root.n-principal += 1; } }
+        Bouton { texte: "Secondaire"; active => { root.n-secondaire += 1; } }
+        Bouton { texte: "Choisi"; genre: GenreBouton.choisi; active => { root.n-choisi += 1; } }
+        Bouton { texte: "Lien"; genre: GenreBouton.lien; active => { root.n-lien += 1; } }
+        Bouton { texte: "Inactif"; actif: false; active => { root.n-inactif += 1; } }
+        Interrupteur { texte: "Interrupteur"; coche: root.coche; bascule(v) => { root.coche = v; root.n-bascule += 1; } }
+        Fader { etiquette: "Fader"; valeur: root.gain; height: 260px; width: 60px; regle(v) => { root.gain = v; root.n-regle += 1; } }
+    }
+}

@@ -1,0 +1,172 @@
+import { Theme } from "../theme.slint";
+import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Carte, Bouton, GenreBouton, Separateur, Logo } from "../composants.slint";
+import { Appli, MiseAJour } from "../etat.slint";
+
+component LigneLicence inherits HorizontalLayout {
+    in property <string> nom;
+    in property <string> licence;
+    in property <string> role;
+    spacing: 20px;
+    min-height: 56px;
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        min-width: 300px;
+        max-width: 300px;
+        Text { text: nom; font-family: Theme.courant; font-weight: 700; font-size: 16px; color: Theme.texte; wrap: word-wrap; }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 0;
+        min-width: 170px;
+        max-width: 170px;
+        Chiffres { text: licence; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+    }
+    VerticalLayout {
+        alignment: center;
+        Text { text: role; font-family: Theme.courant; font-size: 14px; color: Theme.discret; wrap: word-wrap; }
+    }
+}
+
+export component APropos inherits VerticalLayout {
+    alignment: start;
+    spacing: 24px;
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Logo { taille: 96px; }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 4px;
+            Titre { contenu: @tr("Retro EQ"); }
+            Paragraphe { text: @tr("Version {} · logiciel libre sous licence GPLv3", Appli.version); font-size: 18px; }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            HorizontalLayout {
+                spacing: 10px;
+                Bouton { texte: @tr("Code source sur GitHub"); active => { Appli.ouvrir-lien("https://github.com/alexisdechiara/retro-eq"); } }
+                Bouton { texte: @tr("Signaler un problème"); genre: GenreBouton.lien; active => { Appli.ouvrir-lien("https://github.com/alexisdechiara/retro-eq/issues/new"); } }
+            }
+        }
+    }
+
+    Carte {
+        HorizontalLayout {
+            spacing: 16px;
+            TitreSection { contenu: @tr("Mises à jour"); vertical-alignment: center; horizontal-stretch: 1; }
+            // L'afficheur : la version en cours et l'état de la dernière vérification.
+            Rectangle {
+                horizontal-stretch: 0;
+                min-width: max(afficheur-haut.preferred-width, afficheur-bas.preferred-width) + 32px;
+                min-height: 64px;
+                border-radius: 10px;
+                background: Theme.ecran;
+                border-width: 1.5px;
+                border-color: MiseAJour.etat == 2 && !MiseAJour.en-cours ? Theme.ambre : Theme.trait;
+                VerticalLayout {
+                    alignment: center;
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 4px;
+                    afficheur-haut := Text {
+                        text: (MiseAJour.en-cours ? @tr("Vérification en cours…")
+                            : MiseAJour.etat == 2 ? @tr("{} · disponible", MiseAJour.version)
+                            : MiseAJour.etat == 1 ? @tr("{} · à jour", Appli.version)
+                            : MiseAJour.etat == 3 ? @tr("{} · aucune version publiée", Appli.version)
+                            : @tr("{} · pas encore vérifié", Appli.version)).to-uppercase();
+                        font-family: Theme.chiffres;
+                        font-size: 18px;
+                        letter-spacing: 1px;
+                        color: MiseAJour.etat == 2 && !MiseAJour.en-cours ? Theme.ambre : Theme.a;
+                    }
+                    afficheur-bas := Text {
+                        text: MiseAJour.verification;
+                        font-family: Theme.chiffres;
+                        font-size: 12px;
+                        color: Theme.discret;
+                    }
+                }
+            }
+        }
+        if MiseAJour.probleme != "": Text {
+            text: MiseAJour.probleme;
+            font-family: Theme.courant;
+            font-size: 15px;
+            color: Theme.jaune;
+            wrap: word-wrap;
+        }
+        if MiseAJour.etat == 3 && !MiseAJour.en-cours: Paragraphe {
+            text: @tr("Le projet n’a encore publié aucune version sur GitHub : il n’y a rien à télécharger pour l’instant.");
+            font-size: 15px;
+        }
+        if MiseAJour.etat == 2: VerticalLayout {
+            spacing: 10px;
+            Etiquette { contenu: @tr("Nouveautés de la {}", MiseAJour.version); }
+            if MiseAJour.date != "": Text {
+                text: @tr("Publiée le {}", MiseAJour.date);
+                font-family: Theme.courant;
+                font-size: 14px;
+                color: Theme.discret;
+            }
+            if MiseAJour.notes != "": Text {
+                text: MiseAJour.notes;
+                font-family: Theme.courant;
+                font-size: 14px;
+                color: Theme.discret;
+                wrap: word-wrap;
+            }
+            if MiseAJour.installateur != "": Text {
+                text: @tr("Installateur : {}", MiseAJour.installateur);
+                font-family: Theme.chiffres;
+                font-size: 13px;
+                color: Theme.discret;
+                wrap: word-wrap;
+            }
+            Paragraphe {
+                text: @tr("Retro EQ ne télécharge ni n’installe rien tout seul : la page de la version s’ouvre dans ton navigateur, c’est toi qui décides.");
+                font-size: 14px;
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 10px;
+            if MiseAJour.etat == 2: Bouton { texte: @tr("Voir la version sur GitHub"); genre: GenreBouton.principal; active => { Appli.ouvrir-lien(MiseAJour.page); } }
+            Bouton { texte: @tr("Vérifier maintenant"); prefixe: "↻"; actif: !MiseAJour.en-cours; active => { MiseAJour.verifier(); } }
+        }
+        Paragraphe {
+            text: @tr("Ce qui est envoyé : une seule requête à GitHub, sans compte ni donnée personnelle, avec seulement le nom et la version de l’appli. GitHub voit ton adresse IP, comme n’importe quel site. Le réglage « Vérifier les mises à jour au démarrage » (Réglages) coupe les vérifications automatiques.");
+            font-size: 13px;
+        }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Ta licence, en clair"); }
+        Paragraphe { text: @tr("Tu peux utiliser Retro EQ pour tout, étudier son code, le modifier et le partager. Si tu partages une version modifiée, elle doit rester libre, sous la même licence, avec son code source."); }
+        Paragraphe { text: @tr("Les mesures sont un point de départ : c’est ton oreille qui décide."); color: Theme.texte; }
+    }
+
+    Carte {
+        TitreSection { contenu: @tr("Composants libres utilisés"); }
+        Separateur { }
+        LigneLicence { nom: "Slint"; licence: "GPLv3"; role: @tr("Interface de l’appli"); }
+        Separateur { }
+        LigneLicence { nom: "Equalizer APO"; licence: "GPLv2"; role: @tr("Moteur audio, installé à côté de Retro EQ et non inclus dans le code de l’appli"); }
+        Separateur { }
+        LigneLicence { nom: "Antonio, Libre Franklin, DM Mono, Anton"; licence: "SIL OFL"; role: @tr("Polices de l’interface (SIL Open Font License)"); }
+        Separateur { }
+        LigneLicence { nom: @tr("Bibliothèques Rust"); licence: "MIT / Apache-2.0"; role: @tr("Son, calculs, fichiers : la liste complète est dans le code source"); }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Bouton { texte: @tr("Site de Slint"); active => { Appli.ouvrir-lien("https://slint.dev"); } }
+            Bouton { texte: @tr("Site d’Equalizer APO"); active => { Appli.ouvrir-lien("https://sourceforge.net/projects/equalizerapo/"); } }
+        }
+    }
+}

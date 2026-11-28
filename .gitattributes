@@ -1,0 +1,6 @@
+# Fins de ligne Unix partout, y compris sous Windows : les fichiers de traduction
+# et les fichiers Slint sont lus tels quels par la compilation et par les tests.
+* text=auto eol=lf
+*.png binary
+*.ttf binary
+*.zip binary
