@@ -1,0 +1,172 @@
+// Le duel d'essai du premier lancement (ticket 25) : un seul duel, une différence exprès
+// énorme (6 dB de graves en plus), pour vérifier que le son change vraiment sur le casque.
+// Il se joue avec la même machine à états que les vrais duels : on lit donc l'état dans
+// `Test`, et le bilan de la fin dans `Essai`.
+import { Theme } from "../theme.slint";
+import { Test, Appli, Ecran, EtatTest, Essai } from "../etat.slint";
+import { Titre, Etiquette, Paragraphe, Bouton, GenreBouton, Pastille, Platine } from "../composants.slint";
+import { Reponse, Raccourci, Bandeau } from "duels.slint";
+
+export component EcranEssai inherits VerticalLayout {
+    alignment: start;
+    spacing: 0px;
+
+    property <bool> en-cours: Essai.en-cours;
+    property <bool> en-pause: en-cours && (Test.etat == EtatTest.pause || Test.etat == EtatTest.pause-appel);
+
+    // En-tête : premier lancement, et la promesse que l'essai ne compte pas.
+    HorizontalLayout {
+        spacing: 14px;
+        alignment: start;
+        padding-bottom: 10px;
+        VerticalLayout { alignment: center; Etiquette { contenu: @tr("Premier lancement"); } }
+        Pastille { texte: @tr("Ne compte pas dans tes résultats"); taille: 14px; }
+    }
+    Titre { contenu: @tr("Un duel pour t’entraîner"); }
+    VerticalLayout {
+        padding-top: 8px;
+        Paragraphe {
+            text: @tr("Ici, la différence est exprès énorme : une des deux versions a 6 dB de graves en plus. Lance un son sur ton PC (musique, vidéo, jeu), écoute A puis B, et dis laquelle a plus de graves, avec les mêmes touches que les vrais duels.");
+            font-size: 18px;
+        }
+    }
+
+    // Le centre : départ, compte à rebours, question, pause ou bilan.
+    VerticalLayout {
+        padding-top: 26px;
+        padding-bottom: 26px;
+        spacing: 16px;
+        if !en-cours && Essai.issue == 0: Bandeau {
+            signe: "▶";
+            titre: @tr("Prêt pour le duel d’essai");
+            texte: @tr("Six passages de 10 secondes, puis la question : environ une minute. Ta référence revient dès la réponse.");
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Lancer le duel d’essai"); prefixe: "▶"; genre: GenreBouton.principal; active => { Essai.demarrer(); } }
+                HorizontalLayout {
+                    alignment: center;
+                    Bouton { texte: @tr("Passer l’essai"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.accueil); } }
+                }
+            }
+        }
+        if en-cours && Test.etat == EtatTest.ecoute: HorizontalLayout {
+            spacing: 14px;
+            alignment: start;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            Text { text: @tr("Prochaine bascule dans"); font-family: Theme.courant; font-size: 20px; color: Theme.discret; vertical-alignment: center; horizontal-stretch: 0; }
+            Text { text: Test.compte-a-rebours; font-family: Theme.chiffres; font-weight: 500; font-size: 56px; color: Theme.texte; vertical-alignment: center; horizontal-stretch: 0; }
+            Text { text: Test.suite != "" ? "· " + Test.suite : ""; font-family: Theme.courant; font-size: 18px; color: Theme.discret; vertical-alignment: center; wrap: word-wrap; }
+        }
+        if en-cours && Test.etat == EtatTest.attente-reponse: VerticalLayout {
+            spacing: 14px;
+            Text { text: @tr("Laquelle a plus de graves ?"); font-family: Theme.titres; font-weight: 700; font-size: 40px; letter-spacing: 1px; color: Theme.texte; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 20px;
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "A"; mot: @tr("Version A"); raccourci: "F6"; couleur: Theme.a; encre: Theme.sur-a; choisit => { Test.repondre(1); } } }
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "="; mot: @tr("Pareil"); raccourci: "F7"; couleur: Theme.texte; encre: Theme.fond; choisit => { Test.repondre(0); } } }
+                Rectangle { horizontal-stretch: 1; preferred-width: 0px; min-width: 0px; min-height: 90px; Reponse { lettre: "B"; mot: @tr("Version B"); raccourci: "F8"; couleur: Theme.b; encre: Theme.sur-b; choisit => { Test.repondre(2); } } }
+            }
+        }
+        if en-pause: Bandeau {
+            signe: "II";
+            titre: Test.etat == EtatTest.pause-appel ? @tr("En pause · appel Discord") : @tr("Essai en pause");
+            texte: @tr("Ta référence est remise. À la reprise, le duel repart de son premier passage, avec un nouveau tirage de A et B.");
+            Bouton { texte: @tr("Reprendre"); prefixe: "▶"; genre: GenreBouton.principal; active => { Test.reprendre(); } }
+        }
+        // Le bilan : le son change (reconnu ou non), ou aucune différence entendue.
+        if !en-cours && Essai.issue == 1: Bandeau {
+            signe: "✓";
+            titre: @tr("Le son change bien");
+            texte: @tr("{} Le moteur agit bien sur ton casque : les vrais duels seront beaucoup plus subtils.", Essai.detail);
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Continuer"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
+                Bouton { texte: @tr("Refaire l’essai"); active => { Essai.demarrer(); } }
+            }
+        }
+        if !en-cours && Essai.issue == 2: Bandeau {
+            signe: "✓";
+            titre: @tr("Le son change");
+            texte: @tr("{} Tu as entendu une différence sans reconnaître les graves : le moteur agit bien. Refais l’essai sur un son riche en graves (musique, film) pour en être sûr.", Essai.detail);
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Continuer"); prefixe: "▶"; genre: GenreBouton.principal; active => { Appli.aller(Ecran.accueil); } }
+                Bouton { texte: @tr("Refaire l’essai"); active => { Essai.demarrer(); } }
+            }
+        }
+        if !en-cours && Essai.issue == 3: Bandeau {
+            signe: "!";
+            titre: @tr("Aucune différence entendue");
+            texte: @tr("{} Six décibels de graves devraient s’entendre facilement : le son ne change peut-être pas sur ton casque. Le Diagnostic dit quoi vérifier.", Essai.detail);
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Ouvrir le Diagnostic"); genre: GenreBouton.principal; active => { Appli.aller(Ecran.diagnostic); } }
+                Bouton { texte: @tr("Refaire l’essai"); active => { Essai.demarrer(); } }
+                HorizontalLayout {
+                    alignment: center;
+                    Bouton { texte: @tr("Continuer quand même"); genre: GenreBouton.lien; active => { Appli.aller(Ecran.accueil); } }
+                }
+            }
+        }
+    }
+
+    // Les deux platines, comme pendant un vrai duel.
+    HorizontalLayout {
+        spacing: 22px;
+        opacity: en-pause || !en-cours ? 0.4 : 1;
+        Platine {
+            est-a: true;
+            lecture: en-cours && Test.etat == EtatTest.ecoute && Test.cote-actif == 1;
+            passages: en-cours ? Test.passages-a : 0;
+            avancement: Test.avancement;
+        }
+        Platine {
+            est-a: false;
+            lecture: en-cours && Test.etat == EtatTest.ecoute && Test.cote-actif == 2;
+            passages: en-cours ? Test.passages-b : 0;
+            avancement: Test.avancement;
+        }
+    }
+
+    // Les touches et les actions, pendant l'essai.
+    if en-cours: VerticalLayout {
+        padding-top: 26px;
+        spacing: 14px;
+        HorizontalLayout {
+            spacing: 22px;
+            alignment: start;
+            Etiquette { contenu: @tr("Répondre de n’importe où"); vertical-alignment: center; horizontal-stretch: 0; }
+            Raccourci { touche: "F6"; action: @tr("A"); }
+            Raccourci { touche: "F7"; action: @tr("Pareil"); }
+            Raccourci { touche: "F8"; action: @tr("B"); }
+            Raccourci { touche: "F9"; action: @tr("Plus tard"); }
+        }
+        if Test.touches-mortes != "": Paragraphe {
+            text: @tr("Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre.", Test.touches-mortes);
+            color: Theme.erreur;
+        }
+        Paragraphe { text: @tr("Maintiens F6 ou F8 pour réécouter A ou B avant de voter."); }
+        HorizontalLayout {
+            padding-top: 10px;
+            spacing: 14px;
+            alignment: start;
+            if !en-pause: Bouton { texte: @tr("Mettre en pause"); prefixe: "⏸"; active => { Test.pause(); } }
+            if en-pause: Bouton { texte: @tr("Reprendre"); prefixe: "▶"; active => { Test.reprendre(); } }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                Bouton { texte: @tr("Arrêter l’essai"); genre: GenreBouton.lien; active => { Test.arreter(); } }
+            }
+        }
+        Paragraphe { text: @tr("La question arrivera dans la mini-fenêtre, même par-dessus un jeu."); }
+    }
+}

@@ -143,6 +143,18 @@ export component NouveauTest inherits VerticalLayout {
                 }
             }
         }
+        // La réduction de bruit change le son du casque et l'appli ne peut pas la lire : on la
+        // demande, préremplie avec ce que le profil a retenu (ticket 24).
+        Reglage {
+            padding-top: 10px;
+            intitule: @tr("Réduction de bruit du casque");
+            aide: @tr("Retro EQ ne peut pas la lire. Garde-la ainsi pendant tout le test : ton profil retiendra ce choix.");
+            Choix {
+                options: [@tr("Activée"), @tr("Coupée")];
+                choisi: Test.reduction-bruit == 1 ? 0 : Test.reduction-bruit == 0 ? 1 : -1;
+                choisit(i) => { Test.choisir-reduction-bruit(i == 0); }
+            }
+        }
         if Test.mode-choisi == "une-zone": Reglage {
             intitule: @tr("Zone à tester");
             aide: @tr("Les duels ne testeront que cette zone.");

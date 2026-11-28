@@ -9,6 +9,11 @@ use retro_dsp::TypeFiltre;
 use retro_engine::{Appel, MoteurSimule};
 use tempfile::TempDir;
 
+// Le début d'un test (réduction de bruit, duel d'essai, conseil de pause, touches mortes :
+// tickets 24, 25, 29 et 30) est testé à part, dans `tests/debut.rs`. C'est un module enfant :
+// il se sert du banc d'essai et des outils définis ici.
+mod debut;
+
 // Les tests des tickets 26 à 28, dans leur propre fichier (`tests/mesures_versions_empreinte.rs`) :
 // un sous-module voit les outils privés de celui-ci (`Banc`, `jouer`…).
 mod mesures_versions_empreinte;

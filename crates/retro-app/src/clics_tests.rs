@@ -259,6 +259,95 @@ fn un_clic_sur_une_cassette_du_tester_la_choisit() {
 }
 
 #[test]
+fn un_clic_sur_la_reduction_de_bruit_la_choisit_au_premier_clic() {
+    let f = fenetre_principale();
+    // Fenêtre haute : la carte « Réglages du test » est sous le pli.
+    f.window().set_size(slint::LogicalSize::new(1280., 2400.));
+    let choisis = Rc::new(std::cell::RefCell::new(Vec::<bool>::new()));
+    let c = choisis.clone();
+    Test::get(&f).on_choisir_reduction_bruit(move |v| c.borrow_mut().push(v));
+    Appli::get(&f).set_ecran(Ecran::NouveauTest);
+    clique(&f, "Coupée");
+    clique(&f, "Activée");
+    assert_eq!(*choisis.borrow(), vec![false, true]);
+}
+
+// ---- Le duel d'essai (ticket 25) ----
+
+#[test]
+fn continuer_apres_l_autotest_mene_au_duel_d_essai() {
+    let f = fenetre_principale();
+    f.window().set_size(slint::LogicalSize::new(1280., 2400.));
+    Appli::get(&f).set_ecran(Ecran::Demarrage);
+    clique(&f, "Continuer");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Essai);
+}
+
+#[test]
+fn le_bouton_lancer_le_duel_d_essai_agit_au_premier_clic() {
+    let f = fenetre_principale();
+    let lances = Rc::new(Cell::new(0));
+    let l = lances.clone();
+    crate::Essai::get(&f).on_demarrer(move || l.set(l.get() + 1));
+    Appli::get(&f).set_ecran(Ecran::Essai);
+    clique(&f, "Lancer le duel d’essai");
+    assert_eq!(lances.get(), 1);
+    // « Passer l'essai » mène à l'accueil sans rien lancer.
+    clique(&f, "Passer l’essai");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Accueil);
+    assert_eq!(lances.get(), 1);
+}
+
+#[test]
+fn sans_difference_entendue_l_essai_propose_le_diagnostic() {
+    let f = fenetre_principale();
+    let essai = crate::Essai::get(&f);
+    essai.set_issue(3);
+    Appli::get(&f).set_ecran(Ecran::Essai);
+    clique(&f, "Ouvrir le Diagnostic");
+    assert_eq!(Appli::get(&f).get_ecran(), Ecran::Diagnostic);
+}
+
+// ---- La mini-fenêtre (tickets 29 et 30) ----
+
+fn mini_fenetre() -> crate::MiniFenetre {
+    i_slint_backend_testing::init_no_event_loop();
+    let m = crate::MiniFenetre::new().expect("la mini-fenêtre se crée");
+    slint::select_bundled_translation("").expect("le français (langue source) se sélectionne");
+    m.show().expect("la mini-fenêtre s'affiche");
+    m
+}
+
+fn montre(fenetre: &impl ComponentHandle, texte: &str) -> bool {
+    ElementHandle::find_by_accessible_label(fenetre, texte)
+        .next()
+        .is_some()
+}
+
+const CONSEIL_PAUSE: &str = "Plus de 40 min d’écoute : F9 pour faire une pause";
+const TOUCHE_MORTE: &str = "Sans effet : F8 (une autre appli les garde)";
+
+#[test]
+fn la_mini_fenetre_conseille_la_pause_apres_40_minutes() {
+    let m = mini_fenetre();
+    let test = Test::get(&m);
+    test.set_etat(crate::EtatTest::Ecoute);
+    assert!(!montre(&m, CONSEIL_PAUSE));
+    test.set_pause_conseillee(true);
+    assert!(montre(&m, CONSEIL_PAUSE));
+}
+
+#[test]
+fn dans_la_mini_fenetre_une_touche_morte_passe_avant_le_conseil_de_pause() {
+    let m = mini_fenetre();
+    let test = Test::get(&m);
+    test.set_pause_conseillee(true);
+    test.set_touches_mortes("F8".into());
+    assert!(montre(&m, TOUCHE_MORTE));
+    assert!(!montre(&m, CONSEIL_PAUSE));
+}
+
+#[test]
 fn un_clic_sur_une_cassette_de_profil_la_choisit() {
     let f = fenetre_principale();
     let profil = |id: &str, nom: &str| LigneProfil {

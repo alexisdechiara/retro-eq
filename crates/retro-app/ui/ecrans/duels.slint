@@ -4,7 +4,8 @@ import { Titre, TitreSection, Etiquette, Paragraphe, Chiffres, Bouton, GenreBout
 import { EtapesTest } from "nouveau_test_parts.slint";
 
 // Un grand bouton de réponse : A, Pareil, B. Utilisable à la souris comme au clavier.
-component Reponse inherits Rectangle {
+// Exporté : l'écran du duel d'essai (essai.slint) s'en sert aussi.
+export component Reponse inherits Rectangle {
     in property <string> lettre;
     in property <string> mot;
     in property <string> raccourci;
@@ -63,7 +64,7 @@ component Reponse inherits Rectangle {
 }
 
 // Un raccourci : la touche et ce qu'elle fait.
-component Raccourci inherits HorizontalLayout {
+export component Raccourci inherits HorizontalLayout {
     in property <string> touche;
     in property <string> action;
     spacing: 8px;
@@ -73,7 +74,7 @@ component Raccourci inherits HorizontalLayout {
 }
 
 // Un bandeau d'information (pause, fin, conseil).
-component Bandeau inherits Rectangle {
+export component Bandeau inherits Rectangle {
     in property <string> titre;
     in property <string> texte;
     in property <string> signe: "";
@@ -238,6 +239,11 @@ export component Duels inherits VerticalLayout {
             Raccourci { touche: "F8"; action: @tr("B"); }
             Raccourci { touche: "F9"; action: @tr("Plus tard"); }
             Raccourci { touche: "F10"; action: @tr("Annuler"); }
+        }
+        // Une touche refusée par le système ne répondra pas : on le dit là où on lit les touches.
+        if Test.touches-mortes != "": Paragraphe {
+            text: @tr("Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre.", Test.touches-mortes);
+            color: Theme.erreur;
         }
         Paragraphe { text: @tr("Maintiens F6 ou F8 pour réécouter A ou B avant de voter."); }
         HorizontalLayout {

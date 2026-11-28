@@ -11,6 +11,8 @@
 
 mod autoeq;
 mod dates;
+mod debut;
+mod essai;
 mod mises_a_jour;
 #[cfg(test)]
 mod tests;
@@ -193,7 +195,12 @@ impl Brouillon {
 /// Un test commencé : sa machine à états, son journal ouvert, et ce qu'il faut pour le conclure.
 struct TestEnCours {
     deroulement: Deroulement,
-    journal: Journal,
+    /// Le journal sur le disque. `None` pour le duel d'essai (voir `essai.rs`) : il ne doit
+    /// être ni repris après un arrêt brutal, ni lu par le plan des vrais tests.
+    journal: Option<Journal>,
+    /// Vrai pour le duel d'essai du premier lancement : même machine à états, mais ni
+    /// version, ni résultat, ni journal.
+    essai: bool,
     test_id: String,
     profil_id: String,
     reference: Version,
@@ -263,6 +270,15 @@ pub struct Controleur {
     autoeq: autoeq::Etat,
     /// La vérification des mises à jour (voir `mises_a_jour.rs`).
     maj: mises_a_jour::EtatVerification,
+    /// La réduction de bruit choisie sur l'écran « Nouveau test » (identifiant du profil,
+    /// activée), pas encore écrite dans le profil (voir `debut.rs`).
+    reduction_bruit_choisie: Option<(String, bool)>,
+    /// Les touches de réponse qu'une autre appli garde pour elle (« F8 »), signalées par le
+    /// pont, et le test pour lequel on l'a déjà dit (voir `debut.rs`).
+    touches_mortes: Vec<String>,
+    touches_mortes_annoncees: Option<String>,
+    /// Le bilan du dernier duel d'essai, gardé le temps de la session (voir `essai.rs`).
+    bilan_essai: Option<retro_core::BilanEssai>,
 }
 
 impl Controleur {
@@ -354,6 +370,10 @@ impl Controleur {
             tirages: 0,
             autoeq: autoeq::Etat::default(),
             maj: mises_a_jour::EtatVerification::default(),
+            reduction_bruit_choisie: None,
+            touches_mortes: Vec::new(),
+            touches_mortes_annoncees: None,
+            bilan_essai: None,
         };
         c.charger_mises_a_jour();
         c.retrouver_profil_actif(maintenant_ms)?;
@@ -474,7 +494,8 @@ impl Controleur {
         };
         self.test = Some(TestEnCours {
             deroulement,
-            journal: self.depot.ouvrir_journal(test_id)?,
+            journal: Some(self.depot.ouvrir_journal(test_id)?),
+            essai: false,
             test_id: test_id.to_string(),
             profil_id: profil_id.clone(),
             reference,
@@ -1476,6 +1497,7 @@ impl Controleur {
             };
             let profil = c.profil_actif()?;
             let (profil_id, reference) = (profil.id().to_string(), profil.version_active().clone());
+            c.retenir_reduction_bruit(&profil_id)?;
             let historique = c.historique_plan(&profil_id);
             let mut hasard = c.hasard();
             let duels = plan_avec_historique(&mode, &reference, &historique, &mut hasard);
@@ -1504,7 +1526,8 @@ impl Controleur {
             c.resultat = None;
             c.test = Some(TestEnCours {
                 deroulement,
-                journal,
+                journal: Some(journal),
+                essai: false,
                 test_id,
                 profil_id,
                 reference,
@@ -1580,8 +1603,8 @@ impl Controleur {
     fn executer_un(&mut self, effet: Effet, t: u64) -> bool {
         match effet {
             Effet::Journaliser(entree) => {
-                let ecriture = match self.test.as_mut() {
-                    Some(test) => test.journal.ajouter(&entree),
+                let ecriture = match self.test.as_mut().and_then(|t| t.journal.as_mut()) {
+                    Some(journal) => journal.ajouter(&entree),
                     None => Ok(()),
                 };
                 if let Err(e) = ecriture {
@@ -1652,6 +1675,9 @@ impl Controleur {
         let Some(test) = self.test.as_ref() else {
             return;
         };
+        if test.essai {
+            return self.conclure_essai();
+        }
         let (profil_id, test_id) = (test.profil_id.clone(), test.test_id.clone());
         let reference = test.reference.clone();
         let autre = test.autre.clone();
@@ -1757,9 +1783,14 @@ impl Controleur {
         if !self.test_en_cours() {
             return;
         }
+        let essai = self.essai_en_cours();
         self.envoyer(Evenement::Abandonner, t);
         self.test = None;
-        self.annoncer(textes::annonce_test_arrete(self.reglages.langue));
+        self.annoncer(if essai {
+            textes::annonce_essai_arrete(self.reglages.langue)
+        } else {
+            textes::annonce_test_arrete(self.reglages.langue)
+        });
     }
 
     /// L'appli va se fermer (« Quitter », ✕ sans icône pour revenir, fin de la boucle
@@ -1985,6 +2016,7 @@ impl Controleur {
                 .filter(|p| Some(p.id()) != self.actif.as_deref())
                 .map(|p| p.nom().to_string())
                 .collect(),
+            reduction_bruit: self.reduction_bruit_affichee(),
         }
     }
 
@@ -2052,6 +2084,8 @@ impl Controleur {
                 == EtatTest::EnPause {
                     raison: RaisonPause::SansReponse,
                 },
+            touches_mortes: self.touches_mortes_affichees(),
+            essai: test.essai,
         }
     }
 

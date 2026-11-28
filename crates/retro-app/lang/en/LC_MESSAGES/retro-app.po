@@ -370,6 +370,78 @@ msgstr "Undo"
 msgid "Maintiens F6 ou F8 pour réécouter A ou B avant de voter."
 msgstr "Hold F6 or F8 to listen to A or B again before voting."
 
+msgid "Raccourcis sans effet pendant ce test : {}. Une autre appli les garde : ferme-la, ou réponds depuis cette fenêtre."
+msgstr "Shortcuts with no effect during this test: {}. Another app is holding them: close it, or answer from this window."
+
+msgid "Sans effet : {} (une autre appli les garde)"
+msgstr "No effect: {} (another app is holding them)"
+
+msgid "Plus de 40 min d’écoute : F9 pour faire une pause"
+msgstr "Over 40 min of listening: F9 to take a break"
+
+msgid "DUEL D’ESSAI"
+msgstr "TRIAL DUEL"
+
+msgid "Laquelle a plus de graves ?"
+msgstr "Which one has more bass?"
+
+msgid "Ne compte pas dans tes résultats"
+msgstr "Doesn’t count in your results"
+
+msgid "Un duel pour t’entraîner"
+msgstr "A duel to practise"
+
+msgid "Ici, la différence est exprès énorme : une des deux versions a 6 dB de graves en plus. Lance un son sur ton PC (musique, vidéo, jeu), écoute A puis B, et dis laquelle a plus de graves, avec les mêmes touches que les vrais duels."
+msgstr "Here the difference is huge on purpose: one of the two versions has 6 dB more bass. Play something on your PC (music, video, game), listen to A then B, and say which one has more bass, with the same keys as the real duels."
+
+msgid "Prêt pour le duel d’essai"
+msgstr "Ready for the trial duel"
+
+msgid "Six passages de 10 secondes, puis la question : environ une minute. Ta référence revient dès la réponse."
+msgstr "Six 10-second turns, then the question: about a minute. Your reference comes back as soon as you answer."
+
+msgid "Lancer le duel d’essai"
+msgstr "Start the trial duel"
+
+msgid "Passer l’essai"
+msgstr "Skip the trial"
+
+msgid "Essai en pause"
+msgstr "Trial paused"
+
+msgid "Ta référence est remise. À la reprise, le duel repart de son premier passage, avec un nouveau tirage de A et B."
+msgstr "Your reference is back. When you resume, the duel starts again from its first turn, with A and B drawn again."
+
+msgid "Le son change bien"
+msgstr "The sound really changes"
+
+msgid "{} Le moteur agit bien sur ton casque : les vrais duels seront beaucoup plus subtils."
+msgstr "{} The engine works on your headset: the real duels will be much more subtle."
+
+msgid "Refaire l’essai"
+msgstr "Try again"
+
+msgid "Le son change"
+msgstr "The sound changes"
+
+msgid "{} Tu as entendu une différence sans reconnaître les graves : le moteur agit bien. Refais l’essai sur un son riche en graves (musique, film) pour en être sûr."
+msgstr "{} You heard a difference without spotting the bass: the engine works. Try again with something rich in bass (music, film) to be sure."
+
+msgid "Aucune différence entendue"
+msgstr "No difference heard"
+
+msgid "{} Six décibels de graves devraient s’entendre facilement : le son ne change peut-être pas sur ton casque. Le Diagnostic dit quoi vérifier."
+msgstr "{} Six decibels of bass should be easy to hear: the sound may not be changing on your headset. The Diagnostic page tells you what to check."
+
+msgid "Ouvrir le Diagnostic"
+msgstr "Open Diagnostic"
+
+msgid "Continuer quand même"
+msgstr "Continue anyway"
+
+msgid "Arrêter l’essai"
+msgstr "Stop the trial"
+
 msgid "Mettre en pause"
 msgstr "Pause"
 
@@ -525,6 +597,18 @@ msgstr "More duels, a more reliable curve."
 
 msgid "Un premier résultat en une vingtaine de minutes."
 msgstr "A first result in about twenty minutes."
+
+msgid "Réduction de bruit du casque"
+msgstr "Headset noise cancelling"
+
+msgid "Retro EQ ne peut pas la lire. Garde-la ainsi pendant tout le test : ton profil retiendra ce choix."
+msgstr "Retro EQ can’t read it. Keep it this way for the whole test: your profile will remember this choice."
+
+msgid "Activée"
+msgstr "On"
+
+msgid "Coupée"
+msgstr "Off"
 
 msgid "Rapide · 12 duels"
 msgstr "Quick · 12 duels"

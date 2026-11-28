@@ -4,7 +4,8 @@
 //! interface. Les options servent aux captures d'écran et aux essais :
 //!
 //! - `--demo` : données d'exemple de la maquette, sans moteur ni dossier ;
-//! - `--ecran <nom>` : ouvre directement cet écran ;
+//! - `--ecran <nom>` : ouvre directement cet écran (`mini` : la mini-fenêtre, pour une
+//!   capture avec `--demo`) ;
 //! - `--capture <fichier.png>` (avec `--hauteur <px>`) : enregistre l'écran et quitte ;
 //! - `--rail` : navigation dans le rail latéral ;
 //! - `--rendre-son-origine` : sans fenêtre, retire le moteur des sorties audio, écrit une ligne
@@ -13,8 +14,9 @@
 //!   aux réglages enregistrés). Sans elle, `--demo` est en français et l'appli suit ses
 //!   réglages, ou la langue du système au tout premier lancement.
 //!
-//! Variables d'environnement : `RETRO_EQ_DEMO_MAJ` (avec `--demo` : l'état des mises à jour
-//! montré, voir `demo.rs`), `RETRO_EQ_DONNEES` (dossier de données),
+//! Variables d'environnement : `RETRO_EQ_DEMO_MAJ` et `RETRO_EQ_DEMO_TEST` (avec `--demo` :
+//! l'état des mises à jour et les alertes du test montrés, voir `demo.rs`),
+//! `RETRO_EQ_DONNEES` (dossier de données),
 //! `RETRO_EQ_CONFIG_APO` (dossier `config` d'Equalizer APO, au lieu de le chercher),
 //! `RETRO_EQ_SCENARIO` (suite d'actions d'essai, voir `Pont::jouer_scenario`) et, hors
 //! Windows, `RETRO_EQ_IMPORT` (fichier que « Importer » lit, faute de boîte de dialogue).
@@ -69,6 +71,7 @@ fn ecran_depuis(nom: &str) -> Option<Ecran> {
         "reglages" => Ecran::Reglages,
         "diagnostic" => Ecran::Diagnostic,
         "a-propos" => Ecran::APropos,
+        "essai" => Ecran::Essai,
         _ => return None,
     })
 }
@@ -258,6 +261,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fenetre.global::<Appli>().set_rail(true);
     }
     if let Some(chemin) = capture {
+        if demo && argument(&arguments, "--ecran").as_deref() == Some("mini") {
+            return capturer_mini(chemin);
+        }
         let hauteur = argument(&arguments, "--hauteur")
             .and_then(|h| h.parse().ok())
             .unwrap_or(800);
@@ -281,6 +287,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Comme [`capturer`], pour la mini-fenêtre remplie avec les données de démonstration.
+fn capturer_mini(chemin: String) -> Result<(), Box<dyn std::error::Error>> {
+    let mini = MiniFenetre::new()?;
+    demo::remplir_mini(&mini);
+    mini.show()?;
+    let faible = mini.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {
+        if let Some(mini) = faible.upgrade() {
+            enregistrer_png(mini.window(), &chemin);
+        }
+        let _ = slint::quit_event_loop();
+    });
+    slint::run_event_loop()?;
+    Ok(())
+}
+
+/// Enregistre ce que montre `fenetre` dans un PNG ; un échec est seulement écrit.
+fn enregistrer_png(fenetre: &slint::Window, chemin: &str) {
+    let resultat = fenetre
+        .take_snapshot()
+        .map_err(|e| e.to_string())
+        .and_then(|pixels| {
+            image::save_buffer(
+                chemin,
+                pixels.as_bytes(),
+                pixels.width(),
+                pixels.height(),
+                image::ColorType::Rgba8,
+            )
+            .map_err(|e| e.to_string())
+        });
+    if let Err(erreur) = resultat {
+        eprintln!("capture impossible : {erreur}");
+    }
+}
+
 /// Affiche la fenêtre, enregistre ce qu'elle montre dans un PNG, puis quitte.
 /// Sert à comparer l'appli à la maquette sans écran.
 fn capturer(
@@ -297,23 +339,7 @@ fn capturer(
     let faible = fenetre.as_weak();
     slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {
         if let Some(fenetre) = faible.upgrade() {
-            let resultat = fenetre
-                .window()
-                .take_snapshot()
-                .map_err(|e| e.to_string())
-                .and_then(|pixels| {
-                    image::save_buffer(
-                        &chemin,
-                        pixels.as_bytes(),
-                        pixels.width(),
-                        pixels.height(),
-                        image::ColorType::Rgba8,
-                    )
-                    .map_err(|e| e.to_string())
-                });
-            if let Err(erreur) = resultat {
-                eprintln!("capture impossible : {erreur}");
-            }
+            enregistrer_png(fenetre.window(), &chemin);
         }
         let _ = slint::quit_event_loop();
     });

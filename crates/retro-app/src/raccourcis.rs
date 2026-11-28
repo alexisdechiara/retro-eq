@@ -350,6 +350,16 @@ impl Raccourcis {
         self.conflits.iter().map(|t| t.nom()).collect()
     }
 
+    /// Les touches de réponse (F6 à F10) qu'une autre appli garde pour elle **pendant un
+    /// test** : nous les avons demandées au système et il a refusé. Hors test, la liste est
+    /// vide : rien n'est réservé, donc rien n'est mort (ticket 30).
+    pub fn touches_de_test_mortes(&self) -> Vec<String> {
+        if !self.test_pris {
+            return Vec::new();
+        }
+        touches_de_test_parmi(&self.conflits)
+    }
+
     /// Pour chaque ligne du tableau des raccourcis : y a-t-il un conflit ?
     pub fn conflits_par_ligne(&self) -> [bool; 8] {
         let mut lignes = [false; 8];
@@ -360,9 +370,31 @@ impl Raccourcis {
     }
 }
 
+/// Les noms des touches de réponse présentes dans `conflits`, dans l'ordre F6 à F10 (l'ordre
+/// des conflits, lui, dépend de l'ordre des refus). Les raccourcis permanents sont ignorés.
+fn touches_de_test_parmi(conflits: &[Touche]) -> Vec<String> {
+    TOUCHES_DE_TEST
+        .iter()
+        .filter(|t| conflits.contains(t))
+        .map(|t| t.nom())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seules_les_touches_de_reponse_comptent_dans_l_ordre_f6_a_f10() {
+        let conflits = [
+            Touche::Annuler,
+            Touche::Demarrer,
+            Touche::A,
+            Touche::Profil(2),
+        ];
+        assert_eq!(touches_de_test_parmi(&conflits), vec!["F6", "F10"]);
+        assert!(touches_de_test_parmi(&[Touche::Egaliseur]).is_empty());
+    }
 
     #[test]
     fn un_appui_court_apres_la_question_est_une_reponse_au_relachement() {

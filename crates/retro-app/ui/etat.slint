@@ -1,7 +1,7 @@
 // Le contrat entre Rust et l'interface : Rust remplit ces propriétés, l'interface appelle ces fonctions.
 // Les écrans ne contiennent aucune logique métier.
 
-export enum Ecran { demarrage, accueil, tester, nouveau-test, duels, resultat, profils, egaliseur, visualiseur, reglages, diagnostic, a-propos }
+export enum Ecran { demarrage, accueil, tester, nouveau-test, duels, resultat, profils, egaliseur, visualiseur, reglages, diagnostic, a-propos, essai }
 export enum EtatTest { pret, ecoute, attente-reponse, pause, pause-appel, termine }
 export enum EtatControle { ok, attention, erreur, en-cours }
 // 0 = Indice, 1 = Probable, 2 = Sûr
@@ -67,8 +67,12 @@ export global Test {
     in-out property <string> autre-profil: "";
     in property <[string]> zones;
     in property <[string]> profils;
+    in property <int> reduction-bruit: -1;       // réduction de bruit du casque : -1 jamais répondu, 0 coupée, 1 activée (ticket 24)
+    callback choisir-reduction-bruit(bool);
     in property <bool> pause-conseillee: false;
     in property <bool> pause-sans-reponse: false; // la pause vient d'un délai de réponse dépassé
+    in property <bool> essai: false;              // le test en cours est le duel d'essai du premier lancement (ticket 25)
+    in property <string> touches-mortes: "";     // touches de réponse prises par une autre appli pendant ce test, « F8, F10 » (ticket 30)
     callback demarrer();
     callback pause();
     callback reprendre();
@@ -78,6 +82,14 @@ export global Test {
     callback repondre(int);                      // 1 A, 0 Pareil, 2 B
     callback plus-tard();
     callback annuler-reponse();
+}
+
+// Le duel d'essai du premier lancement (ticket 25). Pendant l'essai, l'état se lit dans `Test`.
+export global Essai {
+    in property <bool> en-cours: false;
+    in property <int> issue: 0;                  // 0 pas de bilan, 1 graves reconnues, 2 différence entendue sans les reconnaître, 3 aucune différence
+    in property <string> detail: "";             // « La version aux graves était B ; tu as répondu B. »
+    callback demarrer();                         // lancer (ou refaire) l'essai
 }
 
 export global Resultat {

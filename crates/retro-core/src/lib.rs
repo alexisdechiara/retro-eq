@@ -13,6 +13,7 @@ pub mod depot;
 pub mod deroulement;
 pub mod egaliseur;
 pub mod empreinte;
+pub mod essai;
 pub mod formats;
 pub mod hasard;
 pub mod journal;
@@ -32,6 +33,7 @@ pub use deroulement::{
 };
 pub use egaliseur::{courbe_10_bandes, FadersEtSupplementaires, BANDES_HZ, Q_BANDES};
 pub use empreinte::{empreinte, GoutsAppli, TendanceAppli};
+pub use essai::{duel_d_essai, BilanEssai, DuelDEssai, IssueEssai, GRAVES_EN_PLUS_DB};
 pub use hasard::{Hasard, HasardGraine, HasardReel};
 pub use journal::{Entree, Journal, LectureJournal, RaisonPause};
 pub use plan::{

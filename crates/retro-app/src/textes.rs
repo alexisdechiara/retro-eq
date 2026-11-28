@@ -1905,5 +1905,7 @@ pub fn detail_resultat_autoeq(banc: Option<&str>, type_casque: Option<&str>) -> 
 
 mod mises_a_jour;
 pub use mises_a_jour::*;
+mod debut;
+pub use debut::*;
 mod mesures;
 pub use mesures::*;

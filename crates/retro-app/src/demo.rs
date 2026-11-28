@@ -148,6 +148,8 @@ pub fn remplir(fenetre: &FenetrePrincipale, langue: Langue) {
         ligne_journal(1, Reponse::A, l),
     ]));
     test.set_modes(modeles_de_modes(l));
+    remplir_alertes_test(&test);
+    remplir_essai(fenetre, l);
 
     let resultat = fenetre.global::<Resultat>();
     resultat.set_disponible(true);
@@ -493,6 +495,84 @@ fn remplir_autoeq(fenetre: &FenetrePrincipale, l: Langue) {
         ]
     };
     autoeq.set_resultats(modele(resultats));
+}
+
+/// Les alertes de l'écran Duels et de la mini-fenêtre, choisies avec la variable
+/// `RETRO_EQ_DEMO_TEST` : `touches-mortes` (F8 prise par une autre appli, ticket 30),
+/// `pause` (40 minutes d'écoute, ticket 29), ou rien (par défaut, comme la maquette).
+fn remplir_alertes_test(test: &Test) {
+    match std::env::var("RETRO_EQ_DEMO_TEST")
+        .unwrap_or_default()
+        .as_str()
+    {
+        "touches-mortes" => test.set_touches_mortes("F8".into()),
+        "pause" => test.set_pause_conseillee(true),
+        _ => {}
+    }
+}
+
+/// L'écran du duel d'essai (ticket 25), choisi avec la variable `RETRO_EQ_DEMO_ESSAI` :
+/// en écoute (par défaut), `question`, `pret` (pas encore lancé), ou le bilan `reconnue`,
+/// `confondue`, `pareil`.
+fn remplir_essai(fenetre: &FenetrePrincipale, l: Langue) {
+    use retro_core::{BilanEssai, IssueEssai};
+    let essai = fenetre.global::<Essai>();
+    let bilan = |issue, cote_graves, reponse| {
+        textes::detail_essai(
+            &BilanEssai {
+                issue,
+                cote_graves,
+                reponse: Some(reponse),
+            },
+            l,
+        )
+    };
+    match std::env::var("RETRO_EQ_DEMO_ESSAI")
+        .unwrap_or_default()
+        .as_str()
+    {
+        "pret" => {}
+        "reconnue" => {
+            essai.set_issue(1);
+            essai.set_detail(bilan(IssueEssai::Reconnue, Cote::B, Reponse::B).into());
+        }
+        "confondue" => {
+            essai.set_issue(2);
+            essai.set_detail(bilan(IssueEssai::Confondue, Cote::B, Reponse::A).into());
+        }
+        "pareil" => {
+            essai.set_issue(3);
+            essai.set_detail(bilan(IssueEssai::Pareil, Cote::A, Reponse::Pareil).into());
+        }
+        autre => {
+            essai.set_en_cours(true);
+            let test = fenetre.global::<Test>();
+            test.set_essai(true);
+            if autre == "question" {
+                test.set_etat(EtatTest::AttenteReponse);
+                test.set_passages_a(3);
+                test.set_passages_b(3);
+            }
+        }
+    }
+}
+
+/// La mini-fenêtre, pour la capturer (`--ecran mini`) : le même duel que l'écran Duels.
+pub fn remplir_mini(mini: &MiniFenetre) {
+    let test = mini.global::<Test>();
+    test.set_etat(EtatTest::Ecoute);
+    test.set_duel(7);
+    test.set_total(12);
+    test.set_cote_actif(1);
+    test.set_compte_a_rebours("0:12".into());
+    remplir_alertes_test(&test);
+    // `RETRO_EQ_DEMO_ESSAI=question` : la question du duel d'essai (ticket 25).
+    if std::env::var("RETRO_EQ_DEMO_ESSAI").as_deref() == Ok("question") {
+        test.set_essai(true);
+        test.set_duel(1);
+        test.set_total(1);
+        test.set_etat(EtatTest::AttenteReponse);
+    }
 }
 
 /// La section « Mises à jour » de l'écran À propos. Le scénario se choisit avec la variable

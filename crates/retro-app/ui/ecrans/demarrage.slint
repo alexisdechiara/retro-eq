@@ -84,7 +84,8 @@ export component Demarrage inherits VerticalLayout {
         HorizontalLayout {
             spacing: 14px;
             alignment: start;
-            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.autoriser-moteur(); Appli.aller(Ecran.accueil); } }
+            // Après l'autotest, le duel d'essai (ticket 25) : il vérifie que le son change vraiment.
+            Bouton { texte: @tr("Continuer"); genre: GenreBouton.principal; active => { Appli.autoriser-moteur(); Appli.aller(Ecran.essai); } }
             Bouton {
                 texte: Diagnostic.en-cours ? @tr("Vérification en cours…") : @tr("Relancer l’autotest");
                 actif: !Diagnostic.en-cours;
