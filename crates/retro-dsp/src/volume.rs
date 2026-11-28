@@ -62,6 +62,44 @@ pub fn egaliser_volumes(
     (reference, variante)
 }
 
+/// En dessous de ce volume (dB), une mesure est du silence et ne compte pas : c'est la porte
+/// absolue de la mesure LUFS (ITU-R BS.1770). Un silence ne dit rien de l'égaliseur.
+pub const PORTE_SILENCE_DB: f64 = -70.0;
+
+/// Le volume perçu **mesuré** sur ce qui joue, cumulé mesure après mesure (ADR-0006 : la
+/// capture sert à afficher l'écart mesuré, pas à régler le volume).
+///
+/// La moyenne se fait sur les puissances, pas sur les dB, comme une mesure LUFS intégrée :
+/// une explosion pèse plus qu'un passage calme, ce qui ressemble à ce que l'oreille retient.
+/// `Copy` : deux nombres, qu'on peut recopier sans `clone()`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct VolumeIntegre {
+    somme_puissances: f64,
+    mesures: u32,
+}
+
+impl VolumeIntegre {
+    /// Ajoute une mesure de volume perçu (dB). Le silence (sous [`PORTE_SILENCE_DB`]) et les
+    /// valeurs non finies sont ignorés.
+    pub fn ajouter(&mut self, volume_db: f64) {
+        if !volume_db.is_finite() || volume_db < PORTE_SILENCE_DB {
+            return;
+        }
+        self.somme_puissances += 10f64.powf(volume_db / 10.0);
+        self.mesures += 1;
+    }
+
+    /// Nombre de mesures retenues.
+    pub fn mesures(&self) -> u32 {
+        self.mesures
+    }
+
+    /// Le volume moyen (dB), ou rien si aucune mesure n'a été retenue.
+    pub fn moyenne_db(&self) -> Option<f64> {
+        (self.mesures > 0).then(|| 10.0 * (self.somme_puissances / f64::from(self.mesures)).log10())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +197,37 @@ mod tests {
         // Les filtres ne sont pas touchés.
         assert_eq!(r.filtres, reference.filtres);
         assert_eq!(v.filtres, variante.filtres);
+    }
+
+    #[test]
+    fn un_volume_integre_vide_n_a_pas_de_moyenne() {
+        let v = VolumeIntegre::default();
+        assert_eq!(v.mesures(), 0);
+        assert_eq!(v.moyenne_db(), None);
+    }
+
+    #[test]
+    fn le_volume_integre_fait_la_moyenne_des_puissances() {
+        let mut v = VolumeIntegre::default();
+        v.ajouter(-20.0);
+        v.ajouter(-20.0);
+        assert!((v.moyenne_db().unwrap_or(f64::NAN) + 20.0).abs() < 1e-9);
+        v.ajouter(-30.0);
+        // (0,01 + 0,01 + 0,001) / 3 en puissance : la mesure forte pèse plus qu'en dB.
+        let attendu = 10.0 * (0.021f64 / 3.0).log10();
+        assert!((v.moyenne_db().unwrap_or(f64::NAN) - attendu).abs() < 1e-9);
+        assert_eq!(v.mesures(), 3);
+    }
+
+    #[test]
+    fn le_silence_et_les_valeurs_absurdes_ne_comptent_pas() {
+        let mut v = VolumeIntegre::default();
+        v.ajouter(-90.0);
+        v.ajouter(f64::NAN);
+        v.ajouter(f64::NEG_INFINITY);
+        assert_eq!(v.mesures(), 0);
+        v.ajouter(PORTE_SILENCE_DB + 1.0);
+        assert_eq!(v.mesures(), 1);
     }
 
     #[test]

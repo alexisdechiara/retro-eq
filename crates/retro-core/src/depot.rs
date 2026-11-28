@@ -37,6 +37,14 @@ pub enum ErreurDepot {
         #[source]
         source: serde_json::Error,
     },
+    /// Ce qui devait être écrit ne pourrait pas être relu (le plus souvent un nombre infini
+    /// ou NaN, que JSON écrit `null`) : rien n'est écrit, l'ancien fichier reste intact.
+    #[error("{} ne pourrait pas être relu, il n'est pas écrit : {source}", chemin.display())]
+    NonRelisible {
+        chemin: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
     /// Un identifiant sert de nom de fichier : lettres, chiffres, `-` et `_` seulement.
     #[error("identifiant invalide : {0:?}")]
     IdentifiantInvalide(String),
@@ -83,13 +91,32 @@ pub(crate) fn ecrire_atomique(chemin: &Path, octets: &[u8]) -> Result<(), Erreur
     Ok(())
 }
 
-fn ecrire_json<T: Serialize>(chemin: &Path, valeur: &T) -> Result<(), ErreurDepot> {
+fn ecrire_json<T: Serialize + DeserializeOwned>(
+    chemin: &Path,
+    valeur: &T,
+) -> Result<(), ErreurDepot> {
     let mut octets = serde_json::to_vec_pretty(valeur).map_err(|source| ErreurDepot::Json {
         chemin: chemin.to_path_buf(),
         source,
     })?;
+    verifier_relisible::<T>(chemin, &octets)?;
     octets.push(b'\n');
     ecrire_atomique(chemin, &octets)
+}
+
+/// Refuse d'écrire ce qui ne se relirait pas. serde_json écrit un nombre infini ou NaN
+/// `null` sans erreur ; à la relecture, `null` n'est pas un nombre et tout le fichier devient
+/// illisible (un profil perdrait toutes ses versions). On relit donc en mémoire avant d'écrire.
+pub(crate) fn verifier_relisible<T: DeserializeOwned>(
+    chemin: &Path,
+    octets: &[u8],
+) -> Result<(), ErreurDepot> {
+    serde_json::from_slice::<T>(octets)
+        .map(|_| ())
+        .map_err(|source| ErreurDepot::NonRelisible {
+            chemin: chemin.to_path_buf(),
+            source,
+        })
 }
 
 fn lire_json<T: DeserializeOwned>(chemin: &Path) -> Result<T, ErreurDepot> {
@@ -542,5 +569,56 @@ mod tests {
         let l = d.lire_journal("x").unwrap();
         assert_eq!(l.entrees.len(), 1);
         assert!(l.derniere_ligne_tronquee);
+    }
+
+    /// Une courbe qu'aucun fichier JSON ne peut garder : serde_json écrirait `null`.
+    fn courbe_non_finie(valeur: f64) -> Courbe {
+        Courbe {
+            preampli_db: valeur,
+            filtres: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn un_nombre_non_fini_n_est_pas_ecrit_et_l_ancien_profil_reste_lisible() {
+        for valeur in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            let t = tempdir().unwrap();
+            let d = Depot::ouvrir(t.path()).unwrap();
+            let p = profil("casque");
+            d.sauver_profil(&p).unwrap();
+            let mut abime = p.clone();
+            abime.ajouter_version(courbe_non_finie(valeur), Origine::Manuel, [2.0; 7], "d3");
+            assert!(
+                matches!(
+                    d.sauver_profil(&abime),
+                    Err(ErreurDepot::NonRelisible { .. })
+                ),
+                "{valeur}"
+            );
+            assert_eq!(d.charger_profil("casque").unwrap(), p);
+            assert_eq!(fichiers(&t.path().join("profils")), ["casque.json"]);
+        }
+    }
+
+    #[test]
+    fn une_entree_au_nombre_non_fini_n_est_pas_ajoutee_au_journal() {
+        let t = tempdir().unwrap();
+        let d = Depot::ouvrir(t.path()).unwrap();
+        let mut j = d.ouvrir_journal("x").unwrap();
+        let mut entree = debut("x");
+        if let Entree::TestDemarre {
+            courbe_reference, ..
+        } = &mut entree
+        {
+            *courbe_reference = courbe_non_finie(f64::NAN);
+        }
+        assert!(matches!(
+            j.ajouter(&entree),
+            Err(ErreurDepot::NonRelisible { .. })
+        ));
+        j.ajouter(&debut("x")).unwrap();
+        let l = d.lire_journal("x").unwrap();
+        assert_eq!(l.entrees, vec![debut("x")]);
+        assert!(!l.derniere_ligne_tronquee);
     }
 }

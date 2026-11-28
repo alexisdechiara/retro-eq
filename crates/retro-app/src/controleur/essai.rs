@@ -88,6 +88,7 @@ impl Controleur {
                 reference,
                 mode: essai.mode,
                 autre: None,
+                autre_version: None,
             });
             Ok(None)
         });

@@ -335,7 +335,8 @@ impl PremierPlan for PremierPlanWindows {
         let mut pid = 0u32;
         // SAFETY: `pid` vit pendant l'appel.
         unsafe { GetWindowThreadProcessId(fenetre, Some(&mut pid)) };
-        nom_processus(pid)
+        // Retro EQ lui-même n'est pas une activité : on ne le note pas (ticket 28).
+        crate::appli_a_noter(pid, std::process::id(), nom_processus)
     }
 }
 

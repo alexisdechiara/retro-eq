@@ -31,8 +31,9 @@ use crate::textes;
 use retro_core::autoeq_base::ErreurBase;
 use retro_core::formats::{self, ErreurFormat, Format};
 use retro_core::{
-    duel_verification, plan_avec_historique, ContexteReprise, Cote, Depot, Deroulement, Effet,
-    Entree, ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
+    duel_verification, duels_clos_du_journal, duels_pour_empreinte, empreinte,
+    plan_avec_historique, ContexteReprise, Cote, Depot, Deroulement, DuelClos, Effet, Entree,
+    ErreurDepot, ErreurProfil, ErreurReprise, EtatMoteurSauve, EtatTest, Evenement,
     FadersEtSupplementaires, HasardGraine, HasardReel, HistoriquePlan, Journal, Langue, Mode,
     Navigation, Origine, ParametresTest, Profil, RaisonPause, ReglagesAppli, ReglagesTest,
     ReglagesVariantes, Reponse, ResultatTest, Version, Zone,
@@ -81,10 +82,10 @@ pub enum ErreurControleur {
     ModeIndisponible,
     #[error("Choisis l’autre profil à comparer.")]
     AutreProfilManquant,
+    #[error("Choisis une autre version que la version active à comparer.")]
+    VersionAComparerInvalide,
     #[error("Format de fichier non reconnu.")]
     FormatInconnu,
-    #[error("Un fichier Wavelet ne peut pas être importé : c’est un format d’export seulement.")]
-    ImportWavelet,
     #[error("Pas de résultat de test pour l’instant.")]
     AucunResultat,
     #[error("Impossible de reprendre le test interrompu : {0}")]
@@ -206,6 +207,9 @@ struct TestEnCours {
     mode: Mode,
     /// L'autre profil (identifiant, nom) en « profil contre profil ».
     autre: Option<(String, String)>,
+    /// L'autre version du même profil, quand le test « profil contre profil » compare deux
+    /// versions d'un profil (ticket 27).
+    autre_version: Option<u32>,
 }
 
 /// Le résultat du dernier test fini, avec de quoi l'activer ou revenir en arrière.
@@ -217,6 +221,10 @@ struct DernierResultat {
     /// La version ajoutée au profil par ce test (aucune en « profil contre profil »).
     version_nouvelle: Option<u32>,
     autre: Option<(String, String)>,
+    /// L'autre version du même profil, pour une comparaison de versions (ticket 27).
+    autre_version: Option<u32>,
+    /// Les duels du test, relus pour l'écart de volume mesuré (ticket 26).
+    duels: Vec<DuelClos>,
 }
 
 /// Voir la documentation du module.
@@ -248,6 +256,12 @@ pub struct Controleur {
     /// pas rester active parce que le fichier d'Equalizer APO était verrouillé un instant.
     reference_a_remettre: Option<(Courbe, u64)>,
     choix: ChoixTest,
+    /// La version à opposer à la version active au prochain `demarrer_test`, demandée
+    /// depuis Mes profils (ticket 27). Prise (et effacée) au démarrage du test.
+    version_a_comparer: Option<u32>,
+    /// La dernière appli vue au premier plan, test ou pas : donnée au test dès sa création
+    /// pour que le premier passage soit noté lui aussi (ticket 28).
+    premier_plan: Option<String>,
     plein_ecran: bool,
     annonce: Option<Annonce>,
     bips: u32,
@@ -348,6 +362,8 @@ impl Controleur {
             generation_spectre: 0,
             reference_a_remettre: None,
             choix,
+            version_a_comparer: None,
+            premier_plan: None,
             plein_ecran: false,
             annonce,
             bips: 0,
@@ -472,6 +488,10 @@ impl Controleur {
             t,
         )?;
         let autre = self.retrouver_autre_profil(mode, profil_id);
+        let autre_version = match autre {
+            None => self.retrouver_autre_version(mode, profil_id, *version_reference),
+            Some(_) => None,
+        };
         self.test = Some(TestEnCours {
             deroulement,
             journal: Some(self.depot.ouvrir_journal(test_id)?),
@@ -481,7 +501,9 @@ impl Controleur {
             reference,
             mode: mode.clone(),
             autre,
+            autre_version,
         });
+        self.donner_premier_plan_au_test();
         Ok(effets)
     }
 
@@ -495,6 +517,39 @@ impl Controleur {
                 .find(|p| p.id() != profil_id && &p.version_active().courbe == autre)
                 .map(|p| (p.id().to_string(), p.nom().to_string())),
             _ => None,
+        }
+    }
+
+    /// Une comparaison de deux versions d'un même profil (ticket 27) passe par le mode
+    /// « profil contre profil », dont le journal ne garde que la courbe de l'autre côté :
+    /// on retrouve la version du profil qui a cette courbe. Cherché seulement quand aucun
+    /// autre profil n'a cette courbe : si un autre profil sonne exactement pareil, le
+    /// confondre ne change rien à ce qu'on entend en l'activant.
+    fn retrouver_autre_version(
+        &self,
+        mode: &Mode,
+        profil_id: &str,
+        version_reference: u32,
+    ) -> Option<u32> {
+        let Mode::ProfilContreProfil { autre, .. } = mode else {
+            return None;
+        };
+        let profil = self.profils.iter().find(|p| p.id() == profil_id)?;
+        profil
+            .versions()
+            .iter()
+            .rev()
+            .find(|v| v.numero != version_reference && &v.courbe == autre)
+            .map(|v| v.numero)
+    }
+
+    /// Donne au test qui vient d'être créé la dernière appli vue au premier plan : sans
+    /// cela, le premier passage n'en noterait aucune (elle n'est relevée qu'une fois par
+    /// seconde, et seulement quand elle change).
+    fn donner_premier_plan_au_test(&mut self) {
+        if let (Some(appli), Some(test)) = (self.premier_plan.clone(), self.test.as_mut()) {
+            // Aucun effet attendu : le déroulement note l'appli, rien d'autre.
+            let _ = test.deroulement.traiter(Evenement::PremierPlan(appli), 0);
         }
     }
 
@@ -568,6 +623,11 @@ impl Controleur {
             if sur_zones && version_nouvelle.is_none() {
                 continue;
             }
+            let autre = self.retrouver_autre_profil(mode, &actif);
+            let autre_version = match autre {
+                None => self.retrouver_autre_version(mode, &actif, *version_reference),
+                Some(_) => None,
+            };
             dernier = Some((
                 fin_ms,
                 DernierResultat {
@@ -576,7 +636,11 @@ impl Controleur {
                     courbe_reference: courbe_reference.clone(),
                     version_reference: *version_reference,
                     version_nouvelle,
-                    autre: self.retrouver_autre_profil(mode, &actif),
+                    autre,
+                    autre_version,
+                    // Un journal d'avant le ticket 26 n'a pas d'écart : les duels sont là,
+                    // sans mesure, et l'écran le dit.
+                    duels: duels_clos_du_journal(&lecture.entrees).unwrap_or_default(),
                 },
             ));
         }
@@ -1108,15 +1172,19 @@ impl Controleur {
                 Format::EqualizerApo => (formats::equalizer_apo::lire(&texte)?, "equalizer_apo"),
                 Format::AutoEq => (formats::autoeq::lire(&texte, &nom_fichier)?, "autoeq"),
                 Format::Peace => (formats::peace::lire(&texte)?, "peace"),
-                Format::Wavelet => return Err(ErreurControleur::ImportWavelet),
+                Format::Wavelet => (formats::wavelet::lire(&texte)?, "wavelet"),
             };
+            let ecart = import.ecart_max_db;
             let nom = import.nom.clone().unwrap_or_else(|| {
                 chemin
                     .file_stem()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| textes::profil_importe(l).to_string())
             });
-            let (id, annonce) = c.creer_profil_importe(import, nom, nom_format, t)?;
+            let (id, mut annonce) = c.creer_profil_importe(import, nom, nom_format, t)?;
+            if let Some(e) = ecart {
+                annonce = format!("{annonce} {}", textes::annonce_ecart_import(e, l));
+            }
             nouveau = Some(id);
             Ok(Some(annonce))
         });
@@ -1398,6 +1466,9 @@ impl Controleur {
     /// Lance un test avec les choix mémorisés. Rend vrai si un test tourne après l'appel
     /// (le pont affiche alors l'écran Duels).
     pub fn demarrer_test(&mut self, t: u64) -> bool {
+        // Une comparaison de versions demandée depuis Mes profils ne vaut que pour ce
+        // démarrage-ci : on la prend tout de suite, qu'il réussisse ou non.
+        let version_a_comparer = self.version_a_comparer.take();
         if self.test_en_cours() {
             // « Commencer » sur un test prêt ou repris : on le lance, on n'en crée pas un second.
             match self.etat_test() {
@@ -1417,7 +1488,13 @@ impl Controleur {
             if c.brouillon.is_some() {
                 return Err(ErreurControleur::BrouillonEnCours);
             }
-            let (mode, autre) = c.mode_choisi()?;
+            let (mode, autre, autre_version) = match version_a_comparer {
+                Some(numero) => (c.mode_version(numero)?, None, Some(numero)),
+                None => {
+                    let (mode, autre) = c.mode_choisi()?;
+                    (mode, autre, None)
+                }
+            };
             let profil = c.profil_actif()?;
             let (profil_id, reference) = (profil.id().to_string(), profil.version_active().clone());
             c.retenir_reduction_bruit(&profil_id)?;
@@ -1456,13 +1533,44 @@ impl Controleur {
                 reference,
                 mode,
                 autre,
+                autre_version,
             });
             Ok(None)
         });
+        self.donner_premier_plan_au_test();
         if self.etat_test() == Some(EtatTest::Pret) {
             self.envoyer(Evenement::Demarrer, t);
         }
         self.test_en_cours()
+    }
+
+    /// Le mode qui oppose la version active du profil actif à sa version `numero` : le test
+    /// « profil contre profil », avec la courbe de cette version de l'autre côté (ticket 27).
+    /// A et B y sont tirés au hasard comme dans tout test : la comparaison reste à l'aveugle.
+    fn mode_version(&self, numero: u32) -> Issue<Mode> {
+        let profil = self.profil_actif()?;
+        if numero == profil.numero_actif() {
+            return Err(ErreurControleur::VersionAComparerInvalide);
+        }
+        let version = profil
+            .version(numero)
+            .ok_or(ErreurControleur::VersionAComparerInvalide)?;
+        let duels = if self.choix.precis { 12 } else { 6 };
+        Ok(Mode::ProfilContreProfil {
+            autre: version.courbe.clone(),
+            duels,
+        })
+    }
+
+    /// « Comparer à l'aveugle » (Mes profils) : lance un test entre la version active du
+    /// profil actif et sa version `numero`. Rend vrai si un test tourne après l'appel.
+    pub fn comparer_version(&mut self, numero: u32, t: u64) -> bool {
+        if self.test_en_cours() {
+            self.signaler(ErreurControleur::TestEnCours);
+            return false;
+        }
+        self.version_a_comparer = Some(numero);
+        self.demarrer_test(t)
     }
 
     /// Ctrl+Alt+Entrée : reprend le test en pause, ou en démarre un.
@@ -1573,6 +1681,8 @@ impl Controleur {
         let (profil_id, test_id) = (test.profil_id.clone(), test.test_id.clone());
         let reference = test.reference.clone();
         let autre = test.autre.clone();
+        let autre_version = test.autre_version;
+        let duels = test.deroulement.duels_clos();
         let sur_zones = !matches!(test.mode, Mode::ProfilContreProfil { .. });
         let date = self.date(t);
         let mut version_nouvelle = None;
@@ -1610,6 +1720,8 @@ impl Controleur {
             version_reference: reference.numero,
             version_nouvelle,
             autre,
+            autre_version,
+            duels,
         });
     }
 
@@ -1701,9 +1813,17 @@ impl Controleur {
         }
     }
 
-    /// L'appli au premier plan a changé (elle est notée à chaque passage).
+    /// L'appli au premier plan a changé (elle est notée à chaque passage). À signaler test
+    /// ou pas : la dernière connue est donnée à chaque nouveau test (ticket 28).
     pub fn signaler_premier_plan(&mut self, appli: Option<String>, t: u64) {
+        self.premier_plan = appli.clone().filter(|a| !a.is_empty());
         self.envoyer(Evenement::PremierPlan(appli.unwrap_or_default()), t);
+    }
+
+    /// Le volume perçu mesuré sur ce qui joue (dB, pondéré K), une fois par seconde
+    /// pendant un test : il donne l'écart de volume mesuré de chaque duel (ticket 26).
+    pub fn signaler_volume_mesure(&mut self, volume_db: f64, t: u64) {
+        self.envoyer(Evenement::VolumeMesure(volume_db), t);
     }
 
     /// Un jeu occupe-t-il l'écran en plein écran exclusif ? Dans ce cas la mini-fenêtre ne
@@ -1738,6 +1858,14 @@ impl Controleur {
             return self.signaler(ErreurControleur::AucunResultat);
         };
         let profil_id = dernier.profil_id.clone();
+        if let Some(numero) = dernier.autre_version {
+            // Comparaison de versions : l'autre version devient l'active.
+            self.activer_version(&profil_id, numero);
+            if self.actif.as_deref() != Some(&profil_id) {
+                self.activer_profil(&profil_id);
+            }
+            return;
+        }
         match (dernier.version_nouvelle, dernier.autre.clone()) {
             (Some(numero), _) => {
                 self.activer_version(&profil_id, numero);
@@ -1756,7 +1884,7 @@ impl Controleur {
             return self.signaler(ErreurControleur::AucunResultat);
         };
         let (profil_id, numero) = (dernier.profil_id.clone(), dernier.version_reference);
-        if dernier.version_nouvelle.is_some() {
+        if dernier.version_nouvelle.is_some() || dernier.autre_version.is_some() {
             self.activer_version(&profil_id, numero);
         }
         if self.actif.as_deref() != Some(&profil_id) {
@@ -1968,6 +2096,25 @@ impl Controleur {
         let r = &dernier.resultat;
         let est_actif = self.actif.as_deref() == Some(profil.id());
         let (titre, resume, courbe_nouvelle, active) = match (&r.autre_profil, &dernier.autre) {
+            // Deux versions du même profil (ticket 27).
+            (Some(bilan), None) if dernier.autre_version.is_some() => {
+                let numero = dernier.autre_version.unwrap_or_default();
+                let courbe = profil
+                    .version(numero)
+                    .map(|v| v.courbe.clone())
+                    .unwrap_or_else(|| dernier.courbe_reference.clone());
+                (
+                    textes::titre_version_contre_version(
+                        profil.nom(),
+                        dernier.version_reference,
+                        numero,
+                        l,
+                    ),
+                    textes::resume_autre_version(bilan, numero, l),
+                    courbe,
+                    est_actif && profil.numero_actif() == numero,
+                )
+            }
             (Some(bilan), autre) => {
                 let (autre_id, autre_nom) = autre
                     .clone()
@@ -2029,6 +2176,20 @@ impl Controleur {
                 })
                 .collect(),
             preampli_db: courbe_nouvelle.preampli_db,
+            volume: textes::volume_mesure(&dernier.duels, l),
+            ecarts_volume: dernier
+                .duels
+                .iter()
+                .filter(|d| d.ecart_signale())
+                .map(|d| {
+                    let (titre, ecart, detail) = textes::ecart_volume(d, l);
+                    VueEcartVolume {
+                        titre,
+                        ecart,
+                        detail,
+                    }
+                })
+                .collect(),
             courbe_reference: dernier.courbe_reference.clone(),
             courbe_nouvelle,
             active,
@@ -2037,6 +2198,37 @@ impl Controleur {
                     .as_ref()
                     .is_some_and(|b| b.preference == retro_core::Preference::Variante),
         })
+    }
+
+    /// L'Empreinte d'un profil (ticket 28) : les réponses de tous ses tests terminés,
+    /// regroupées par appli au premier plan. Relue dans les journaux à chaque appel.
+    pub fn vue_empreinte(&self, profil_id: &str) -> Vec<VueGoutAppli> {
+        let l = self.reglages.langue;
+        let mut duels = Vec::new();
+        for id in self.ids_journaux() {
+            let Ok(lecture) = self.depot.lire_journal(&id) else {
+                continue;
+            };
+            let du_profil = matches!(
+                lecture.entrees.first(),
+                Some(Entree::TestDemarre { profil_id: p, .. }) if p == profil_id
+            );
+            if du_profil {
+                duels.extend(duels_pour_empreinte(&lecture.entrees));
+            }
+        }
+        empreinte(&duels)
+            .iter()
+            .map(|g| VueGoutAppli {
+                nom: g.appli.clone(),
+                duels: g.duels,
+                tendances: textes::tendances_appli(g, l),
+                confiance: g
+                    .tendances
+                    .first()
+                    .map_or(0, |t| textes::niveau_confiance(t.confiance)),
+            })
+            .collect()
     }
 
     pub fn vue_reglages(&self) -> VueReglages {

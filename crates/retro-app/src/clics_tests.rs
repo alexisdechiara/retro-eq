@@ -9,7 +9,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::{
-    Appli, AutoEq, Ecran, FenetrePrincipale, LigneAutoEq, LigneMode, LigneProfil, Profils, Test,
+    Appli, AutoEq, Ecran, FenetrePrincipale, LigneAutoEq, LigneMode, LigneProfil, LigneVersion,
+    Profils, Test,
 };
 
 slint::slint! {
@@ -365,6 +366,38 @@ fn un_clic_sur_une_cassette_de_profil_la_choisit() {
     Appli::get(&f).set_ecran(Ecran::Profils);
     clique(&f, "Deux");
     assert_eq!(*choisis.borrow(), vec!["p2".to_string()]);
+}
+
+#[test]
+fn comparer_a_l_aveugle_une_version_part_au_premier_clic() {
+    let f = fenetre_principale();
+    // Fenêtre haute : la liste des versions est sous les cassettes.
+    f.window().set_size(slint::LogicalSize::new(1280., 2400.));
+    let demandes = Rc::new(std::cell::RefCell::new(Vec::<(String, i32)>::new()));
+    let d = demandes.clone();
+    let profils = Profils::get(&f);
+    profils.on_comparer_version(move |id, numero| d.borrow_mut().push((id.to_string(), numero)));
+    profils.set_liste(ModelRc::new(VecModel::from(vec![LigneProfil {
+        id: "p1".into(),
+        nom: "Un".into(),
+        actif: true,
+        versions: 2,
+        ..Default::default()
+    }])));
+    profils.set_choisi("p1".into());
+    let version = |numero: i32, active: bool| LigneVersion {
+        numero,
+        active,
+        ..Default::default()
+    };
+    profils.set_versions(ModelRc::new(VecModel::from(vec![
+        version(2, true),
+        version(1, false),
+    ])));
+    Appli::get(&f).set_ecran(Ecran::Profils);
+    // Une seule version n'est pas active : un seul bouton « Comparer à l'aveugle ».
+    clique(&f, "Comparer à l’aveugle");
+    assert_eq!(*demandes.borrow(), vec![("p1".to_string(), 1)]);
 }
 
 #[test]

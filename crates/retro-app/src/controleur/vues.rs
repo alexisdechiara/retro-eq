@@ -204,6 +204,33 @@ pub struct VueResultat {
     /// préférée au duel de vérification. L'activation reste possible, sans être mise en avant.
     pub recommandee: bool,
     pub preampli_db: f64,
+    /// Le bilan de l'écart de volume mesuré entre les deux côtés des duels (ticket 26).
+    pub volume: String,
+    /// Les duels dont l'écart mesuré dépasse le seuil, dans l'ordre du test.
+    pub ecarts_volume: Vec<VueEcartVolume>,
+}
+
+/// Un duel signalé pour son écart de volume mesuré.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VueEcartVolume {
+    /// « Duel 4 · graves en plus ».
+    pub titre: String,
+    /// L'écart, signé : « +2,6 dB ».
+    pub ecart: String,
+    /// Ce que cet écart veut dire, en une phrase.
+    pub detail: String,
+}
+
+/// Une appli de l'Empreinte d'un profil (ticket 28).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VueGoutAppli {
+    pub nom: String,
+    /// Duels sur une zone répondus dans cette appli, tous tests confondus.
+    pub duels: u32,
+    /// « Plus de graves (2 sur 2) · Moins d’air (3 sur 4) », ou « rien ne se dégage ».
+    pub tendances: String,
+    /// La confiance de la tendance la plus nette (0 = Indice, 1 = Probable, 2 = Sûr).
+    pub confiance: i32,
 }
 
 /// La page Réglages.

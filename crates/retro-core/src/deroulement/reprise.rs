@@ -58,6 +58,34 @@ impl Deroulement {
         contexte: ContexteReprise,
         maintenant_ms: u64,
     ) -> Result<(Deroulement, Vec<Effet>), ErreurReprise> {
+        let (mut d, entame) = Self::rejouer(journal, contexte, false)?;
+        d.applis_duel.clear();
+        // La référence va être remise : si le duel avait commencé, il sera retiré.
+        d.a_retirer = entame && d.duel_courant().is_some();
+        d.phase = Phase::Pause {
+            raison: RaisonPause::Manuelle,
+            depuis_ms: maintenant_ms,
+        };
+        let mut effets = Vec::new();
+        d.remettre_reference(&mut effets);
+        effets.push(Effet::Journaliser(Entree::Pause {
+            raison: RaisonPause::Manuelle,
+            horodatage_ms: maintenant_ms,
+        }));
+        Ok((d, effets))
+    }
+
+    /// Relit le journal entrée par entrée et rend le déroulement qu'il décrit, avec un
+    /// drapeau : le duel courant avait-il commencé à jouer depuis son dernier tirage ?
+    ///
+    /// `clos_accepte` : un test terminé ou abandonné s'arrête à son entrée finale au lieu
+    /// d'être refusé. Sert à relire les duels d'un test fini (Empreinte, écran Résultat)
+    /// avec exactement les mêmes règles que la reprise.
+    pub(super) fn rejouer(
+        journal: &[Entree],
+        contexte: ContexteReprise,
+        clos_accepte: bool,
+    ) -> Result<(Deroulement, bool), ErreurReprise> {
         let (premiere, suite) = journal.split_first().ok_or(ErreurReprise::JournalVide)?;
         let Entree::TestDemarre {
             test_id,
@@ -106,7 +134,10 @@ impl Deroulement {
             match entree {
                 Entree::TestDemarre { .. } => return Err(incoherent("second démarrage")),
                 Entree::TestTermine { .. } | Entree::TestAbandonne { .. } => {
-                    return Err(ErreurReprise::TestClos)
+                    if clos_accepte {
+                        break;
+                    }
+                    return Err(ErreurReprise::TestClos);
                 }
                 Entree::DuelDemarre { .. } | Entree::DuelRecommence { .. } => {
                     d.applis_duel.clear();
@@ -131,8 +162,21 @@ impl Deroulement {
                     }
                     d.applis.push(d.appli_majoritaire());
                     d.issues.push(Some(*reponse));
+                    d.ecarts.push(None);
                     d.applis_duel.clear();
                     entame = false;
+                }
+                Entree::EcartVolumeMesure { duel, ecart_db, .. } => {
+                    // Toujours écrit juste après la réponse de ce duel : c'est le dernier clos.
+                    let dernier = d.issues.len().checked_sub(1);
+                    match d.ecarts.last_mut() {
+                        Some(place) if dernier == Some(*duel as usize) => *place = Some(*ecart_db),
+                        _ => {
+                            return Err(incoherent(
+                                "écart de volume d'un duel qui n'est pas le dernier répondu",
+                            ))
+                        }
+                    }
                 }
                 Entree::DuelPasse { duel, .. } => {
                     if !est_courant(duel) || d.duel_courant().is_none() {
@@ -140,6 +184,7 @@ impl Deroulement {
                     }
                     d.applis.push(d.appli_majoritaire());
                     d.issues.push(None);
+                    d.ecarts.push(None);
                     d.applis_duel.clear();
                     entame = false;
                 }
@@ -181,20 +226,6 @@ impl Deroulement {
                 Entree::Pause { .. } | Entree::Reprise { .. } => {}
             }
         }
-
-        d.applis_duel.clear();
-        // La référence va être remise : si le duel avait commencé, il sera retiré.
-        d.a_retirer = entame && d.duel_courant().is_some();
-        d.phase = Phase::Pause {
-            raison: RaisonPause::Manuelle,
-            depuis_ms: maintenant_ms,
-        };
-        let mut effets = Vec::new();
-        d.remettre_reference(&mut effets);
-        effets.push(Effet::Journaliser(Entree::Pause {
-            raison: RaisonPause::Manuelle,
-            horodatage_ms: maintenant_ms,
-        }));
-        Ok((d, effets))
+        Ok((d, entame))
     }
 }

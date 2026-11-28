@@ -369,11 +369,13 @@ pub fn calculer_resultat(
 
     // 4. Vérification et confiance du test.
     let verification_preference = verification.map(|(duel, rep)| duel.preference(rep));
-    let confiance = if let Some(p) = verification_preference {
-        // La vérification est un seul duel : « préférée 1 fois sur 1 » ne dépasse jamais Indice.
-        let victoires = u32::from(p == Preference::Variante);
-        let total = u32::from(p != Preference::Aucune);
-        Confiance::depuis_victoires(victoires, total)
+    // La vérification n'est qu'un duel : seule, elle ne dépasserait jamais Indice. Si elle
+    // donnait la confiance du test, confirmer la nouvelle version la ferait baisser par
+    // rapport à passer la vérification. Gagnée, elle laisse donc la confiance des zones ;
+    // perdue ou « Pareil », le test n'a rien établi : Indice (ADR-0005, note du 28/11/2026).
+    let verification_confirme = verification_preference.is_none_or(|p| p == Preference::Variante);
+    let confiance = if !verification_confirme {
+        Confiance::Indice
     } else if let Some(plus_basse) = confiances_changees.iter().copied().min() {
         plus_basse
     } else {
@@ -383,8 +385,7 @@ pub fn calculer_resultat(
             .as_ref()
             .map_or(Confiance::Indice, |b| b.confiance)
     };
-    let recommandee = zones.iter().any(ResultatZone::est_changee)
-        && verification_preference != Some(Preference::Reference);
+    let recommandee = zones.iter().any(ResultatZone::est_changee) && verification_confirme;
 
     let par_appli = par_appli
         .into_iter()
@@ -954,18 +955,21 @@ mod tests {
 
     #[test]
     fn la_verification_donne_la_confiance_du_test_et_dit_si_la_version_est_recommandee() {
-        // Cinq victoires : la zone est Sûr, mais la vérification (1 sur 1) fait Indice.
+        // Cinq victoires : la zone est Sûr. Une vérification en faveur de la nouvelle version
+        // laisse la confiance du test à celle de la zone la plus basse (comme si elle avait
+        // été passée) ; contre elle, ou « Pareil », elle donne Indice et rien n'est recommandé.
         let p: Vec<_> = (0..5)
             .map(|i| duel_zone(Zone::Graves, Sens::Plus, i % 2 == 0))
             .collect();
         let rep = tous_pour_variante(&p);
         let v = version([4.0; 7]);
-        for (ref_est_a, reponse, attendu, recommandee) in [
-            (true, Reponse::B, Preference::Variante, true),
-            (true, Reponse::A, Preference::Reference, false),
-            (false, Reponse::A, Preference::Variante, true),
-            (false, Reponse::B, Preference::Reference, false),
-            (false, Reponse::Pareil, Preference::Aucune, true),
+        use Confiance::{Indice, Sur};
+        for (ref_est_a, reponse, attendu, confiance, recommandee) in [
+            (true, Reponse::B, Preference::Variante, Sur, true),
+            (true, Reponse::A, Preference::Reference, Indice, false),
+            (false, Reponse::A, Preference::Variante, Sur, true),
+            (false, Reponse::B, Preference::Reference, Indice, false),
+            (false, Reponse::Pareil, Preference::Aucune, Indice, false),
         ] {
             let d = duel(Sujet::Verification, ref_est_a);
             let r = calculer_resultat(
@@ -979,7 +983,7 @@ mod tests {
             );
             assert_eq!(r.verification, Some(reponse));
             assert_eq!(r.verification_preference, Some(attendu));
-            assert_eq!(r.confiance, Confiance::Indice);
+            assert_eq!(r.confiance, confiance, "{reponse:?}");
             assert_eq!(zone_de(&r, Zone::Graves).confiance, Confiance::Sur);
             assert_eq!(r.recommandee, recommandee, "{reponse:?}");
             // La nouvelle version est calculée dans tous les cas.
@@ -988,6 +992,44 @@ mod tests {
         // Sans vérification (duel passé) : recommandée dès qu'il y a un changement.
         let r = calcul(&Courbe::default(), [4.0; 7], &p, &rep);
         assert!(r.recommandee);
+        assert_eq!(r.confiance, Confiance::Sur);
+    }
+
+    #[test]
+    fn confirmer_la_nouvelle_version_ne_donne_jamais_moins_de_confiance_que_passer_la_verification()
+    {
+        // De 2 à 5 victoires dans une zone, avec ou sans une seconde zone moins sûre.
+        for victoires in 2..=5 {
+            for seconde_zone in [false, true] {
+                let mut p: Vec<_> = (0..victoires)
+                    .map(|i| duel_zone(Zone::Graves, Sens::Plus, i % 2 == 0))
+                    .collect();
+                if seconde_zone {
+                    p.extend(paire(Zone::Aigus, Sens::Moins));
+                }
+                let rep = tous_pour_variante(&p);
+                let passee = calcul(&Courbe::default(), [4.0; 7], &p, &rep);
+                for ref_est_a in [true, false] {
+                    let d = duel(Sujet::Verification, ref_est_a);
+                    let confirmee = calculer_resultat(
+                        &Courbe::default(),
+                        &version([4.0; 7]),
+                        &ReglagesVariantes::default(),
+                        &p,
+                        &rep,
+                        Some((&d, pour_variante(&d).unwrap())),
+                        &vec![None; p.len()],
+                    );
+                    assert!(
+                        confirmee.confiance >= passee.confiance,
+                        "{victoires} victoires, seconde zone {seconde_zone} : confirmée {:?}, passée {:?}",
+                        confirmee.confiance,
+                        passee.confiance
+                    );
+                    assert!(confirmee.recommandee);
+                }
+            }
+        }
     }
 
     #[test]
