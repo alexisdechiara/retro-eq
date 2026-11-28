@@ -102,6 +102,8 @@ pub enum ErreurControleur {
     BaseAutoEq(#[from] ErreurBase),
     #[error("Ce résultat n’est plus dans la base : refais la recherche.")]
     ResultatAutoEqInconnu,
+    #[error("Le téléchargement AutoEQ s’est arrêté sur une erreur inattendue.")]
+    AutoEqInterrompu,
 }
 
 /// Ce que l'appli faisait d'un fichier quand une erreur est survenue.

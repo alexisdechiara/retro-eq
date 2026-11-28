@@ -59,6 +59,8 @@ pub struct VueAutoEq {
 enum Reponse {
     Index(Result<Vec<u8>, ErreurReseau>),
     Casque(EntreeBase, Result<Vec<u8>, ErreurReseau>),
+    /// Le fil de travail a paniqué (un bogue) avant de répondre.
+    Panne,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -245,7 +247,17 @@ impl Controleur {
         self.autoeq.tache = Some(tache);
         let lance = std::thread::Builder::new()
             .name("autoeq".into())
-            .spawn(move || travail(telechargeur, envoi));
+            .spawn(move || {
+                // Un bogue dans le fil ne doit pas laisser le panneau occupé pour toujours :
+                // la panique est rattrapée et dite au contrôleur, qui libère la tâche.
+                let secours = envoi.clone();
+                let issue = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    travail(telechargeur, envoi)
+                }));
+                if issue.is_err() {
+                    let _ = secours.send(Reponse::Panne);
+                }
+            });
         if let Err(e) = lance {
             self.autoeq.tache = None;
             let erreur = ErreurReseau::Connexion(e.to_string());
@@ -274,6 +286,10 @@ impl Controleur {
             }
             Reponse::Casque(_, Err(e)) => {
                 self.autoeq_echec(ErreurControleur::CasqueAutoEqReseau(e));
+                None
+            }
+            Reponse::Panne => {
+                self.autoeq_echec(ErreurControleur::AutoEqInterrompu);
                 None
             }
         }
@@ -491,6 +507,49 @@ Filter 3: ON HSC Fc 10000 Hz Gain -6.9 dB Q 0.70
         c.autoeq_attendre(T0);
         c.prendre_annonce();
         c
+    }
+
+    /// Un client avec un bogue : il panique au lieu de répondre.
+    struct ClientQuiPanique;
+
+    impl ClientHttp for ClientQuiPanique {
+        fn obtenir(&self, _: &str, _: &[(&str, &str)], _: u64) -> Result<ReponseHttp, ErreurHttp> {
+            panic!("bogue du client HTTP");
+        }
+    }
+
+    /// Relève comme le pont, à chaque image, jusqu'à ce que le panneau soit libre.
+    fn relever_jusqu_a_libre(c: &mut Controleur) {
+        let debut = std::time::Instant::now();
+        while c.autoeq_occupe() {
+            assert!(
+                debut.elapsed() < std::time::Duration::from_secs(5),
+                "le panneau reste occupé"
+            );
+            c.autoeq_relever(T0);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn un_fil_de_telechargement_qui_panique_libere_le_panneau_et_le_dit() {
+        let banc = Banc::nouveau();
+        let mut c = banc.ouvrir();
+        c.regler_telechargeur(Arc::new(ClientQuiPanique));
+        c.autoeq_ouvrir();
+        c.autoeq_mettre_a_jour();
+
+        relever_jusqu_a_libre(&mut c);
+
+        let vue = c.vue_autoeq();
+        assert_eq!(vue.etat, EtatBaseAutoEq::Absente);
+        assert!(!vue.erreur.is_empty());
+        assert!(c.prendre_annonce().unwrap().erreur);
+        // Et on peut réessayer.
+        c.regler_telechargeur(banc.faux.clone());
+        c.autoeq_mettre_a_jour();
+        relever_jusqu_a_libre(&mut c);
+        assert_eq!(c.vue_autoeq().etat, EtatBaseAutoEq::Prete);
     }
 
     #[test]

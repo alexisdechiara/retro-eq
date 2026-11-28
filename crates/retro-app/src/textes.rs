@@ -1295,6 +1295,12 @@ pub fn erreur(erreur: &ErreurControleur, l: Langue) -> String {
             "This result is no longer in the database: search again.",
         )
         .to_string(),
+        ErreurControleur::AutoEqInterrompu => choisir(
+            l,
+            "Le téléchargement AutoEQ s’est arrêté sur une erreur inattendue. Réessaie.",
+            "The AutoEQ download stopped on an unexpected error. Try again.",
+        )
+        .to_string(),
     }
 }
 
